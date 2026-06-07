@@ -116,6 +116,34 @@ check("tts mute survives refresh", (await page.locator(".tts-toggle").textConten
 await page.click(".tts-toggle");
 check("tts unmute restores label", (await page.locator(".tts-toggle").textContent())?.includes("TTS on"));
 
+await page.route(`${API_URL}/tts/synthesize`, async (route) => {
+  await new Promise((resolve) => setTimeout(resolve, 1800));
+  await route.continue();
+});
+
+await page.fill("#chat-input", "race delay check");
+await page.click("button[type='submit']");
+await page.waitForFunction(
+  () => document.querySelector(".state-label")?.textContent?.trim() === "thinking",
+  undefined,
+  { timeout: 5000 },
+);
+await page.waitForTimeout(700);
+check(
+  "avatar stays thinking during delayed tts synthesis",
+  (await page.locator(".state-label").textContent())?.trim() === "thinking",
+);
+await page.waitForFunction(
+  () => document.querySelector(".state-label")?.textContent?.trim() === "talking",
+  undefined,
+  { timeout: 8000 },
+);
+check(
+  "avatar reaches talking once delayed tts starts",
+  (await page.locator(".state-label").textContent())?.trim() === "talking",
+);
+await page.unroute(`${API_URL}/tts/synthesize`);
+
 const beforeCount = await page.locator(".message").count();
 await page.fill("#chat-input", "browser verification message");
 await page.click("button[type='submit']");
@@ -170,12 +198,33 @@ const refuseResults = await Promise.allSettled([speakingDuringTts, talkingDuring
 check("refuse short reply triggers tts speaking label", refuseResults[0].status === "fulfilled");
 check("avatar enters talking during tts", refuseResults[1].status === "fulfilled");
 
+await page.fill("#chat-input", "round one overlap");
+await page.click("button[type='submit']");
 await page.waitForFunction(
-  () => document.querySelector(".state-label")?.textContent?.trim() === "idle",
+  () => document.querySelector(".state-label")?.textContent?.trim() === "talking",
   undefined,
   { timeout: 8000 },
 );
-check("avatar returns idle after tts", (await page.locator(".state-label").textContent())?.trim() === "idle");
+
+await page.fill("#chat-input", "round two overlap");
+await page.click("button[type='submit']");
+await page.waitForFunction(
+  () => document.querySelector(".state-label")?.textContent?.trim() === "thinking",
+  undefined,
+  { timeout: 8000 },
+);
+
+await page.waitForFunction(
+  () => document.querySelector(".state-label")?.textContent?.trim() === "idle",
+  undefined,
+  { timeout: 12000 },
+);
+const overlapFinalState = (await page.locator(".state-label").textContent())?.trim();
+check(
+  "avatar not pulled idle by stale tts while newer round active",
+  overlapFinalState === "idle",
+  overlapFinalState ?? "unknown",
+);
 
 const pttBefore = await page.locator(".message").count();
 const pttButton = page.locator(".ptt-button");

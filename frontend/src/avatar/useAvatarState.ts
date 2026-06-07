@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AvatarState } from "./types";
-import { avatarStateDuration, avatarTiming, talkingDuration } from "./timing";
+import { avatarStateDuration, avatarTiming } from "./timing";
+
+export type ChatFetchResult = {
+  replyText: string;
+  avatarState?: AvatarState;
+  meta?: Record<string, unknown>;
+};
+
+export type ChatReplyHandoff = {
+  deferIdleFallback?: boolean;
+};
 
 export function useAvatarState(initialState: AvatarState = "idle") {
   const [avatarState, setAvatarState] = useState<AvatarState>(initialState);
@@ -27,16 +37,11 @@ export function useAvatarState(initialState: AvatarState = "idle") {
     [clearTimers],
   );
 
-  const runChatReplySequence = useCallback(
-    (replyText: string, onTalkingStart?: () => void) => {
+  const scheduleReturnToIdle = useCallback(
+    (state: AvatarState, replyText: string) => {
       clearTimers();
-      setAvatarState("thinking");
-
-      schedule(() => {
-        onTalkingStart?.();
-        setAvatarState("talking");
-        schedule(() => setAvatarState("idle"), talkingDuration(replyText));
-      }, avatarTiming.thinkingMs);
+      setAvatarState(state);
+      schedule(() => setAvatarState("idle"), avatarStateDuration(state, replyText));
     },
     [clearTimers, schedule],
   );
@@ -49,23 +54,18 @@ export function useAvatarState(initialState: AvatarState = "idle") {
 
   const runChatFetchSequence = useCallback(
     async (
-      fetchReply: () => Promise<{
-        replyText: string;
-        avatarState?: AvatarState;
-        meta?: Record<string, unknown>;
-      }>,
-      onReplyReady?: (result: {
-        replyText: string;
-        avatarState?: AvatarState;
-        meta?: Record<string, unknown>;
-      }) => void | Promise<void>,
+      fetchReply: () => Promise<ChatFetchResult>,
+      onReplyReady?: (result: ChatFetchResult) => void | Promise<void | ChatReplyHandoff>,
     ) => {
       clearTimers();
       setAvatarState("thinking");
 
       try {
         const result = await fetchReply();
-        await onReplyReady?.(result);
+        const handoff = await onReplyReady?.(result);
+        if (handoff?.deferIdleFallback) {
+          return;
+        }
         const activeState = result.avatarState ?? "talking";
         setAvatarState(activeState);
         schedule(
@@ -90,9 +90,9 @@ export function useAvatarState(initialState: AvatarState = "idle") {
   return {
     avatarState,
     setManualState,
-    runChatReplySequence,
     runChatFetchSequence,
     runEmptySubmitSequence,
+    scheduleReturnToIdle,
     cancelScheduledReturn,
   };
 }

@@ -41,8 +41,14 @@ function parseAvatarState(value: string): AvatarState {
 }
 
 function App() {
-  const { avatarState, setManualState, runChatFetchSequence, runEmptySubmitSequence, cancelScheduledReturn } =
-    useAvatarState("idle");
+  const {
+    avatarState,
+    setManualState,
+    runChatFetchSequence,
+    runEmptySubmitSequence,
+    scheduleReturnToIdle,
+    cancelScheduledReturn,
+  } = useAvatarState("idle");
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [historyStatus, setHistoryStatus] = useState<"loading" | "ready" | "offline">("loading");
@@ -54,6 +60,13 @@ function App() {
   });
   const messageListRef = useRef<HTMLDivElement>(null);
   const nextMessageIdRef = useRef(1);
+  const chatEpochRef = useRef(0);
+  const ttsEpochRef = useRef(0);
+  const ttsEnabledRef = useRef(false);
+  const ttsMutedRef = useRef(false);
+  const speakReplyRef = useRef<
+    (input: { text: string; decision?: string; avatarState?: string }) => Promise<boolean>
+  >(async () => false);
 
   const statusText = useMemo(() => stateLines[avatarState], [avatarState]);
 
@@ -143,6 +156,8 @@ function App() {
   }, [messages]);
 
   async function submitToBackend(userText: string, appendUserBubble: boolean) {
+    const turnEpoch = chatEpochRef.current + 1;
+    chatEpochRef.current = turnEpoch;
     const userMessageId = appendUserBubble ? allocateMessageId() : null;
 
     if (appendUserBubble && userMessageId !== null) {
@@ -172,7 +187,7 @@ function App() {
             },
           };
         },
-        (result) => {
+        async (result) => {
           if (!result.replyText.trim()) {
             return;
           }
@@ -187,12 +202,28 @@ function App() {
             },
           ]);
 
-          void speakReply({
+          const shouldAttemptTts =
+            ttsEnabledRef.current && !ttsMutedRef.current && Boolean(result.replyText.trim());
+          if (!shouldAttemptTts) {
+            return;
+          }
+
+          // speakReply returns false when TTS is disabled/muted or already
+          // speaking from a prior turn. In every "did not speak" case we must
+          // still hand the avatar back to idle ourselves, or it gets stuck in
+          // the `thinking` state set at the start of this turn.
+          const spoke = await speakReplyRef.current({
             text: result.replyText,
             decision:
               typeof result.meta?.decision === "string" ? result.meta.decision : undefined,
             avatarState: result.avatarState,
           });
+
+          if (!spoke && turnEpoch === chatEpochRef.current) {
+            scheduleReturnToIdle(result.avatarState ?? "talking", result.replyText);
+          }
+
+          return { deferIdleFallback: true };
         },
       );
     } catch (error) {
@@ -236,13 +267,22 @@ function App() {
     speakReply,
   } = useTextToSpeech({
     onSpeakingStart: () => {
+      ttsEpochRef.current = chatEpochRef.current;
       cancelScheduledReturn();
       setManualState("talking");
     },
     onSpeakingEnd: () => {
+      if (ttsEpochRef.current !== chatEpochRef.current) {
+        return;
+      }
+
       setManualState("idle");
     },
   });
+
+  ttsEnabledRef.current = ttsEnabled;
+  ttsMutedRef.current = ttsMuted;
+  speakReplyRef.current = speakReply;
 
   const {
     enabled: pushToTalkEnabled,

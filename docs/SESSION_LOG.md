@@ -779,3 +779,77 @@
 - Do not wire cloud STT/TTS unless budget flags and keys are configured and the user asks.
 - Do not change provider abstraction, memory schema, behavior contract, or file permission policy without doc updates and review.
 - Do not let Claude Code and Cursor edit the same module at the same time.
+
+## 2026-06-08 - Session 16
+
+本次完成：
+
+- Fixed **avatar / TTS state race** (frontend-only slice after checkpoint `dad8cbd`):
+  - `runChatFetchSequence` now accepts `{ deferIdleFallback }` from `onReplyReady`; when TTS owns the turn, skip idle fallback timers.
+  - `App.tsx` awaits TTS handoff via `speakReplyRef`, uses `chatEpochRef` / `ttsEpochRef` so stale `onSpeakingEnd` does not overwrite a newer round's `thinking`.
+  - Added `scheduleReturnToIdle` for non-TTS or skipped-TTS fallback; removed unused `runChatReplySequence`.
+- Extended `scripts/ui_verify.mjs` with delayed-synthesis and overlapping-round checks for the race regressions.
+
+下次接着做：
+
+- Run full `node scripts/ui_verify.mjs` with Playwright browsers if user approves install.
+- Continue small slices from `docs/HANDOFF.md` (CORS, cloud STT/TTS wiring, maintenance passes).
+
+已知问题：
+
+- Backend CORS currently allows only `5173`; running Vite on another port can make API/STT/TTS UI appear offline until port matches or CORS is updated.
+- Mock TTS still returns silent WAV timed to text length, not real speech.
+- If a new chat round completes while prior TTS is still playing, the new reply may skip TTS (`speaking` guard) and stay on `thinking` until the next interaction.
+- Vite 5.x / esbuild dev-server audit remains open; mitigated by localhost-only dev binding.
+- FastAPI TestClient `httpx` -> `httpx2` deprecation warning remains; no functional impact today.
+
+相关文件：
+
+- `frontend/src/avatar/useAvatarState.ts`
+- `frontend/src/App.tsx`
+- `scripts/ui_verify.mjs`
+- `docs/SESSION_LOG.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed; 54 backend tests passed; frontend `tsc --noEmit` passed; 1 TestClient deprecation warning unchanged.
+- `npm run build:frontend`: passed; Vite 5.4.21 production build completed.
+- `node scripts/ui_verify.mjs`: not run here (needs local dev servers + Playwright browsers).
+
+不要改动的边界：
+
+- Did not start Phase 11 hardware work.
+- Did not wire cloud STT/TTS adapters.
+- Did not change provider abstraction, memory schema, behavior contract, or file permission policy.
+
+## 2026-06-08 - Session 17
+
+本次完成：
+
+- Tightened overlap regression in `scripts/ui_verify.mjs`: after round-two submit, wait up to 12s for avatar `idle` instead of accepting `thinking`/`talking` at 2.5s (guards against stuck-thinking regression after Claude's App.tsx overlap fix).
+- Removed redundant post-overlap idle wait/check that duplicated the new assertion.
+
+下次接着做：
+
+- Investigate intermittent `refuse short reply triggers tts speaking label` flake in `ui_verify.mjs` if it recurs.
+- Continue small slices from `docs/HANDOFF.md`.
+
+已知问题：
+
+- `refuse short reply triggers tts speaking label` failed once in the 36-check run (talking-state check passed; Speaking label timing may be flaky).
+- Backend CORS currently allows only `5173`; running Vite on another port can make API/STT/TTS UI appear offline until port matches or CORS is updated.
+
+相关文件：
+
+- `scripts/ui_verify.mjs`
+- `docs/SESSION_LOG.md`
+
+测试结果：
+
+- `node scripts/ui_verify.mjs` (API `18000`, frontend `5173`): **35 passed, 1 failed**.
+- Overlap regression: **PASS** — `avatar not pulled idle by stale tts while newer round active | idle`.
+- Failed: `refuse short reply triggers tts speaking label` (unrelated to overlap change).
+
+不要改动的边界：
+
+- Only edited `scripts/ui_verify.mjs` and `docs/SESSION_LOG.md`; no commit.
