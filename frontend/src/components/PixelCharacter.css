@@ -1,0 +1,127 @@
+.stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 280px;
+  overflow: hidden;
+  border: 2px solid #4f463b;
+  border-radius: 6px;
+  background:
+    linear-gradient(#2b2b2d 2px, transparent 2px),
+    linear-gradient(90deg, #2b2b2d 2px, transparent 2px),
+    #1a1a1c;
+  background-size: 24px 24px;
+  image-rendering: pixelated;
+}
+
+.stage[data-state="idle"]::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: inset 0 0 0 2px rgba(240, 194, 113, 0.22);
+  content: "";
+  animation: pixel-box-flicker 8s steps(4) infinite;
+}
+
+.pixel-person {
+  position: relative;
+  width: 176px;
+  height: 208px;
+  transform: translateY(4px);
+}
+
+.antenna,
+.head,
+.body,
+.arm,
+.worry-mark {
+  position: absolute;
+  border: 4px solid #1a1715;
+  image-rendering: pixelated;
+}
+
+.antenna {
+  top: 0;
+  left: 82px;
+  width: 14px;
+  height: 44px;
+  background: #c9b76b;
+}
+
+.antenna::after {
+  position: absolute;
+  top: -18px;
+  left: -7px;
+  width: 22px;
+  height: 22px;
+  background: #dd5b44;
+  border: 4px solid #1a1715;
+  content: "";
+}
+
+.head {
+  top: 34px;
+  left: 32px;
+  width: 112px;
+  height: 96px;
+  background: #f0c271;
+}
+
+.body {
+  top: 126px;
+  left: 48px;
+  width: 80px;
+  height: 78px;
+  background: #44a48a;
+}
+
+.eye {
+  position: absolute;
+  top: 34px;
+  width: 14px;
+  height: 18px;
+  background: #171719;
+}
+
+.eye-left {
+  left: 28px;
+}
+
+.eye-right {
+  right: 28px;
+}
+
+.mouth {
+  position: absolute;
+  left: 42px;
+  bottom: 24px;
+  width: 28px;
+  height: 8px;
+  background: #171719;
+}
+
+.arm {
+  top: 138px;
+  width: 32px;
+  height: 54px;
+  background: #dd5b44;
+}
+
+.arm-left {
+  left: 14px;
+}
+
+.arm-right {
+  right: 14px;
+}
+
+.worry-mark {
+  top: 18px;
+  right: -10px;
+  width: 14px;
+  height: 22px;
+  border-radius: 0;
+  background: #6ec4e8;
+  border-color: #1a1715;
+}

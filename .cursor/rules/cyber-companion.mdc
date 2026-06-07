@@ -15,8 +15,10 @@ Read these files before meaningful edits:
 - `docs/PROJECT_BRIEF.md`
 - `docs/SESSION_PROTOCOL.md`
 - `docs/MVP_ROADMAP.md`
+- `docs/CURSOR_PHASE_PLAYBOOK.md`
 - `docs/TODO.md`
 - `docs/SESSION_LOG.md`
+- `docs/HANDOFF.md`
 - `docs/OPEN_SOURCE_REUSE.md`
 
 ## Cursor Role
@@ -27,6 +29,7 @@ Cursor is best used for:
 - CSS and animation timing.
 - Small frontend components.
 - Focused refactors after the architecture is already defined.
+- Most feature implementation, if it follows `docs/CURSOR_PHASE_PLAYBOOK.md`.
 
 Avoid changing these without explicit user approval and doc updates:
 
@@ -46,3 +49,15 @@ Use mature open-source dependencies or examples when they speed up development. 
 - Support idle, happy, sad, angry, sleepy, thinking, talking, worried, annoyed, and muted/silent states.
 - Do not turn the UI into a marketing landing page.
 - Prioritize the actual companion screen as the first view.
+
+## Phase Execution
+
+For each new Cursor chat, pick one phase or one phase slice from `docs/CURSOR_PHASE_PLAYBOOK.md`.
+
+At the end of the chat:
+
+- Run the relevant checks.
+- Update `docs/TODO.md`.
+- Append to `docs/SESSION_LOG.md`.
+- Record reused/adapted open-source sources in `docs/OPEN_SOURCE_REUSE.md`.
+- Do not silently start the next phase.

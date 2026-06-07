@@ -3,6 +3,9 @@
   "daily_llm_turn_limit": 200,
   "max_input_tokens_per_turn": 4000,
   "max_output_tokens_per_turn": 300,
+  "max_raw_turns": 4,
+  "max_memories_per_turn": 6,
+  "summary_batch_size": 6,
   "allow_reasoning_model": false,
   "allow_cloud_stt": false,
   "allow_cloud_tts": false

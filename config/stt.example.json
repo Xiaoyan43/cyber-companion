@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "default_provider": "mock",
+  "providers": {
+    "mock": {
+      "enabled": true,
+      "model": "mock-stt"
+    },
+    "openai_whisper": {
+      "enabled": false,
+      "placeholder": true,
+      "model": "whisper-1",
+      "api_key_env": "OPENAI_API_KEY"
+    }
+  }
+}

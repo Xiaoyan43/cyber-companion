@@ -1,25 +1,20 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
-
-const avatarStates = [
-  "idle",
-  "happy",
-  "sad",
-  "angry",
-  "sleepy",
-  "thinking",
-  "talking",
-  "worried",
-  "annoyed",
-  "silent",
-] as const;
-
-type AvatarState = (typeof avatarStates)[number];
-
-type ChatMessage = {
-  id: number;
-  speaker: "boxi" | "user";
-  text: string;
-};
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { requestChatComplete } from "./api/chat";
+import { fetchStoredMessages } from "./api/messages";
+import { avatarStates, stateLines, type AvatarState } from "./avatar/types";
+import { useAvatarState } from "./avatar/useAvatarState";
+import {
+  completionToTurnSummary,
+  formatMessageMeta,
+  formatUsd,
+  restoreLastTurnFromMessages,
+  storedMessageToChatMessage,
+  type ChatMessage,
+  type TurnSummary,
+} from "./chat/types";
+import { PixelCharacter } from "./components/PixelCharacter";
+import { usePushToTalk } from "./voice/usePushToTalk";
+import { useTextToSpeech } from "./voice/useTextToSpeech";
 
 type ApiHealth = {
   status: "checking" | "ok" | "offline";
@@ -34,43 +29,44 @@ type HealthResponse = {
 };
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+const showAvatarDebug =
+  import.meta.env.DEV || import.meta.env.VITE_SHOW_AVATAR_DEBUG === "1";
 
-const stateLines: Record<AvatarState, string> = {
-  idle: "你终于打开我了。盒子里空气一般，但还能忍。",
-  happy: "今天勉强算不错。别太骄傲。",
-  sad: "我在盒子里发霉，你在外面拖延。挺公平。",
-  angry: "别乱点，我脸都被你戳歪了。",
-  sleepy: "困。你要是没事，我先待机三秒。",
-  thinking: "我在想。别催，脑子不是微波炉。",
-  talking: "行吧，我说两句。",
-  worried: "这事听起来不妙，先别硬冲。",
-  annoyed: "嗯，又来了。说吧。",
-  silent: "……",
-};
+function parseAvatarState(value: string): AvatarState {
+  if ((avatarStates as readonly string[]).includes(value)) {
+    return value as AvatarState;
+  }
 
-const initialMessages: ChatMessage[] = [
-  {
-    id: 1,
-    speaker: "boxi",
-    text: "本地壳子先搭好了。现在我还不会调用大模型，别急着把人生交给我。",
-  },
-];
+  return "talking";
+}
 
 function App() {
-  const [avatarState, setAvatarState] = useState<AvatarState>("idle");
+  const { avatarState, setManualState, runChatFetchSequence, runEmptySubmitSequence, cancelScheduledReturn } =
+    useAvatarState("idle");
   const [draft, setDraft] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [historyStatus, setHistoryStatus] = useState<"loading" | "ready" | "offline">("loading");
+  const [isSending, setIsSending] = useState(false);
+  const [lastTurn, setLastTurn] = useState<TurnSummary | null>(null);
   const [apiHealth, setApiHealth] = useState<ApiHealth>({
     status: "checking",
     detail: "checking local API",
   });
+  const messageListRef = useRef<HTMLDivElement>(null);
+  const nextMessageIdRef = useRef(1);
 
   const statusText = useMemo(() => stateLines[avatarState], [avatarState]);
+
+  const allocateMessageId = () => {
+    const id = nextMessageIdRef.current;
+    nextMessageIdRef.current += 1;
+    return id;
+  };
 
   useEffect(() => {
     let active = true;
 
-    async function checkApiHealth() {
+    async function bootstrap() {
       try {
         const response = await fetch(`${apiBaseUrl}/health`);
 
@@ -98,37 +94,211 @@ function App() {
           status: "offline",
           detail: error instanceof Error ? error.message : "unreachable",
         });
+        setHistoryStatus("offline");
+        return;
+      }
+
+      try {
+        const stored = await fetchStoredMessages();
+        if (!active) {
+          return;
+        }
+
+        const restored = stored
+          .map(storedMessageToChatMessage)
+          .filter((message): message is ChatMessage => message !== null);
+
+        setMessages(restored);
+        nextMessageIdRef.current =
+          restored.reduce((maxId, message) => Math.max(maxId, message.id), 0) + 1;
+        const restoredLastTurn = restoreLastTurnFromMessages(restored);
+        if (restoredLastTurn) {
+          setLastTurn(restoredLastTurn);
+        }
+        setHistoryStatus("ready");
+      } catch {
+        if (!active) {
+          return;
+        }
+
+        setHistoryStatus("offline");
       }
     }
 
-    void checkApiHealth();
+    void bootstrap();
 
     return () => {
       active = false;
     };
   }, []);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const text = draft.trim();
+  useEffect(() => {
+    const messageList = messageListRef.current;
 
-    if (!text) {
-      setAvatarState("annoyed");
+    if (!messageList) {
       return;
     }
 
-    const nextId = messages.length + 1;
-    setMessages((current) => [
-      ...current,
-      { id: nextId, speaker: "user", text },
-      {
-        id: nextId + 1,
-        speaker: "boxi",
-        text: "收到。现在这是前端 shell，真正的 provider 和记忆层还没接上。你先别幻想我已经全知全能。",
-      },
-    ]);
+    messageList.scrollTop = messageList.scrollHeight;
+  }, [messages]);
+
+  async function submitToBackend(userText: string, appendUserBubble: boolean) {
+    const userMessageId = appendUserBubble ? allocateMessageId() : null;
+
+    if (appendUserBubble && userMessageId !== null) {
+      setMessages((current) => [
+        ...current,
+        { id: userMessageId, speaker: "user", text: userText },
+      ]);
+    }
+
+    setIsSending(true);
+
+    try {
+      await runChatFetchSequence(
+        async () => {
+          const completion = await requestChatComplete(userText);
+          setLastTurn(completionToTurnSummary(completion));
+          return {
+            replyText: completion.content,
+            avatarState: parseAvatarState(completion.avatar_state),
+            meta: {
+              provider: completion.provider,
+              model: completion.model,
+              mock: completion.mock,
+              decision: completion.decision,
+              usage: completion.usage,
+              cost: completion.cost,
+            },
+          };
+        },
+        (result) => {
+          if (!result.replyText.trim()) {
+            return;
+          }
+
+          setMessages((current) => [
+            ...current,
+            {
+              id: allocateMessageId(),
+              speaker: "boxi",
+              text: result.replyText,
+              meta: result.meta,
+            },
+          ]);
+
+          void speakReply({
+            text: result.replyText,
+            decision:
+              typeof result.meta?.decision === "string" ? result.meta.decision : undefined,
+            avatarState: result.avatarState,
+          });
+        },
+      );
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "unknown error";
+      const fallback =
+        apiHealth.status === "offline"
+          ? "本地 API 没连上。我在盒子里喊了，外面装没听见。"
+          : `provider 调用失败了：${detail}`;
+
+      setMessages((current) => [
+        ...current,
+        {
+          id: allocateMessageId(),
+          speaker: "boxi",
+          text: fallback,
+        },
+      ]);
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  const submitFromVoice = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || isSending) {
+        return;
+      }
+
+      setDraft("");
+      await submitToBackend(trimmed, true);
+    },
+    [isSending],
+  );
+
+  const {
+    enabled: ttsEnabled,
+    muted: ttsMuted,
+    speaking: ttsSpeaking,
+    toggleMuted: toggleTtsMuted,
+    speakReply,
+  } = useTextToSpeech({
+    onSpeakingStart: () => {
+      cancelScheduledReturn();
+      setManualState("talking");
+    },
+    onSpeakingEnd: () => {
+      setManualState("idle");
+    },
+  });
+
+  const {
+    enabled: pushToTalkEnabled,
+    state: pushToTalkState,
+    errorMessage: pushToTalkError,
+    handlePointerDown: handlePttPointerDown,
+    handlePointerUp: handlePttPointerUp,
+    handlePointerLeave: handlePttPointerLeave,
+    handlePointerCancel: handlePttPointerCancel,
+    handleMouseDown: handlePttMouseDown,
+    handleMouseUp: handlePttMouseUp,
+    handleMouseLeave: handlePttMouseLeave,
+  } = usePushToTalk({
+    onTranscript: submitFromVoice,
+  });
+
+  const voiceStatusText = useMemo(() => {
+    if (pushToTalkState === "recording") {
+      return "Recording… release to transcribe";
+    }
+
+    if (pushToTalkState === "transcribing") {
+      return "Transcribing voice input…";
+    }
+
+    if (pushToTalkError) {
+      return pushToTalkError;
+    }
+
+    if (pushToTalkEnabled) {
+      return "Hold the mic button to talk. Audio only uploads after you release.";
+    }
+
+    return null;
+  }, [pushToTalkEnabled, pushToTalkError, pushToTalkState]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const text = draft.trim();
+
+    if (isSending) {
+      return;
+    }
+
+    if (!text) {
+      if (apiHealth.status === "offline") {
+        runEmptySubmitSequence();
+        return;
+      }
+
+      await submitToBackend("", false);
+      return;
+    }
+
     setDraft("");
-    setAvatarState("talking");
+    await submitToBackend(text, true);
   }
 
   return (
@@ -140,59 +310,89 @@ function App() {
           <span className="state-label">{avatarState}</span>
         </div>
 
-        <div className="stage" data-state={avatarState}>
-          <div className="pixel-person" aria-label={`Boxi is ${avatarState}`}>
-            <div className="antenna" />
-            <div className="head">
-              <div className="eye eye-left" />
-              <div className="eye eye-right" />
-              <div className="mouth" />
-            </div>
-            <div className="body" />
-            <div className="arm arm-left" />
-            <div className="arm arm-right" />
-          </div>
-        </div>
+        <PixelCharacter state={avatarState} />
 
         <p className="status-line">{statusText}</p>
 
-        <div className="state-controls" aria-label="Avatar state controls">
-          {avatarStates.map((state) => (
-            <button
-              key={state}
-              className={state === avatarState ? "state-button active" : "state-button"}
-              type="button"
-              onClick={() => setAvatarState(state)}
-            >
-              {state}
-            </button>
-          ))}
-        </div>
+        {showAvatarDebug ? (
+          <details className="state-debug" open>
+            <summary>Avatar debug</summary>
+            <div className="state-controls" aria-label="Avatar state controls">
+              {avatarStates.map((state) => (
+                <button
+                  key={state}
+                  className={state === avatarState ? "state-button active" : "state-button"}
+                  type="button"
+                  onClick={() => setManualState(state as AvatarState)}
+                >
+                  {state}
+                </button>
+              ))}
+            </div>
+          </details>
+        ) : null}
       </section>
 
       <section className="chat-panel" aria-label="Chat">
         <div className="chat-header">
           <div>
             <h1>Cyber Companion</h1>
-            <p>Text MVP shell</p>
+            <p>Text MVP</p>
           </div>
           <div className={`api-status ${apiHealth.status}`} aria-live="polite">
             <span>API</span>
             <strong>{apiHealth.status}</strong>
             <small>{apiHealth.version ? `v${apiHealth.version}` : apiHealth.detail}</small>
           </div>
+          {ttsEnabled ? (
+            <button
+              type="button"
+              className={ttsMuted ? "tts-toggle muted" : "tts-toggle"}
+              aria-pressed={ttsMuted}
+              onClick={toggleTtsMuted}
+            >
+              {ttsMuted ? "TTS off" : ttsSpeaking ? "Speaking" : "TTS on"}
+            </button>
+          ) : null}
         </div>
 
-        <div className="message-list">
-          {messages.map((message) => (
-            <article key={message.id} className={`message ${message.speaker}`}>
-              <span className="speaker">{message.speaker === "boxi" ? "Boxi" : "You"}</span>
-              <p>{message.text}</p>
-            </article>
-          ))}
+        {lastTurn ? (
+          <div className="turn-meta" aria-live="polite">
+            <span>
+              Last turn: {lastTurn.provider}/{lastTurn.model}
+            </span>
+            <span>
+              {lastTurn.usage.total_tokens} tok · {formatUsd(lastTurn.cost.total_usd)}
+            </span>
+            <span>
+              {lastTurn.decision}
+              {lastTurn.mock ? " · mock" : ""}
+              {!lastTurn.shouldCallLlm ? " · local" : ""}
+            </span>
+          </div>
+        ) : null}
+
+        <div className="message-list" ref={messageListRef}>
+          {historyStatus === "loading" ? (
+            <p className="chat-empty">Loading chat history...</p>
+          ) : null}
+          {historyStatus !== "loading" && messages.length === 0 ? (
+            <p className="chat-empty">还没有聊天记录。可以先扔一句话进来。</p>
+          ) : null}
+          {messages.map((message) => {
+            const metaLine = message.meta ? formatMessageMeta(message.meta) : null;
+
+            return (
+              <article key={message.id} className={`message ${message.speaker}`}>
+                <span className="speaker">{message.speaker === "boxi" ? "Boxi" : "You"}</span>
+                <p>{message.text}</p>
+                {metaLine ? <p className="message-meta">{metaLine}</p> : null}
+              </article>
+            );
+          })}
         </div>
 
-        <form className="chat-form" onSubmit={handleSubmit}>
+        <form className={`chat-form${pushToTalkEnabled ? " with-ptt" : ""}`} onSubmit={handleSubmit}>
           <label className="sr-only" htmlFor="chat-input">
             Message
           </label>
@@ -201,9 +401,47 @@ function App() {
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder="Type something..."
+            disabled={isSending || pushToTalkState === "transcribing"}
           />
-          <button type="submit">Send</button>
+          {pushToTalkEnabled ? (
+            <button
+              type="button"
+              className={
+                pushToTalkState === "recording" ? "ptt-button recording" : "ptt-button"
+              }
+              aria-pressed={pushToTalkState === "recording"}
+              aria-label="Hold to talk"
+              disabled={isSending || pushToTalkState === "transcribing"}
+              onPointerDown={handlePttPointerDown}
+              onPointerUp={handlePttPointerUp}
+              onPointerLeave={handlePttPointerLeave}
+              onPointerCancel={handlePttPointerCancel}
+              onMouseDown={handlePttMouseDown}
+              onMouseUp={handlePttMouseUp}
+              onMouseLeave={handlePttMouseLeave}
+            >
+              {pushToTalkState === "recording"
+                ? "Rec"
+                : pushToTalkState === "transcribing"
+                  ? "..."
+                  : "Hold"}
+            </button>
+          ) : null}
+          <button type="submit" disabled={isSending || pushToTalkState === "transcribing"}>
+            {isSending ? "..." : "Send"}
+          </button>
         </form>
+
+        {voiceStatusText ? (
+          <p
+            className={`voice-status${pushToTalkState === "recording" ? " recording" : ""}${
+              pushToTalkError ? " error" : ""
+            }`}
+            aria-live="polite"
+          >
+            {voiceStatusText}
+          </p>
+        ) : null}
       </section>
     </main>
   );

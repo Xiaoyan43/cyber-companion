@@ -1,6 +1,10 @@
 {
   "default_provider": "deepseek",
   "providers": {
+    "mock": {
+      "enabled": true,
+      "model": "mock-boxi"
+    },
     "deepseek": {
       "enabled": true,
       "base_url": "https://api.deepseek.com",
@@ -11,12 +15,14 @@
       "enabled": false,
       "base_url": "https://api.openai.com/v1",
       "model": "gpt-5.4-nano",
-      "api_key_env": "OPENAI_API_KEY"
+      "api_key_env": "OPENAI_API_KEY",
+      "placeholder": true
     },
     "local": {
       "enabled": false,
       "base_url": "http://localhost:11434",
-      "model": "local-model"
+      "model": "local-model",
+      "placeholder": true
     }
   }
 }

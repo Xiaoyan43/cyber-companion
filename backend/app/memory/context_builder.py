@@ -1,0 +1,144 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from backend.app.behavior.local_responses import behavior_tone_instruction
+from backend.app.behavior.types import BehaviorDecision
+from backend.app.memory.budget import BudgetConfig
+from backend.app.memory.database import ConversationSummaryRecord, MemoryRecord, MessageRecord, MoodStateRecord
+from backend.app.memory.persona import load_persona_system_prompt
+from backend.app.memory.retrieval import rank_memories, tokenize
+from backend.app.memory.store import MemoryStore
+from backend.app.providers.cost import estimate_token_count
+from backend.app.providers.types import ChatMessage
+
+
+@dataclass(frozen=True)
+class BuiltContext:
+    messages: list[ChatMessage]
+    estimated_input_tokens: int
+    included_memory_ids: list[int]
+    included_message_ids: list[int]
+    summary_used: str | None
+    truncated: bool
+    total_stored_messages: int
+
+
+def _format_mood_block(mood: MoodStateRecord) -> str:
+    return (
+        "[Current mood]\n"
+        f"mood={mood.mood}, energy={mood.energy:.2f}, annoyance={mood.annoyance:.2f}, "
+        f"boredom={mood.boredom:.2f}, worry={mood.worry:.2f}, trust={mood.trust:.2f}, "
+        f"loneliness={mood.loneliness:.2f}"
+    )
+
+
+def _format_memories_block(memories: list[MemoryRecord]) -> str:
+    if not memories:
+        return "[Relevant memories]\n(none selected)"
+
+    lines = ["[Relevant memories]"]
+    for memory in memories:
+        tag_text = ", ".join(memory.tags) if memory.tags else "no-tags"
+        lines.append(f"- ({memory.type}) [{tag_text}] {memory.content}")
+    return "\n".join(lines)
+
+
+def _format_summary_block(summary: ConversationSummaryRecord | None) -> str | None:
+    if summary is None:
+        return None
+    keywords = ", ".join(summary.keywords) if summary.keywords else "none"
+    return f"[Recent conversation summary]\n{summary.summary}\nKeywords: {keywords}"
+
+
+def _pack_sections(
+    sections: list[str],
+    *,
+    max_input_tokens: int,
+) -> tuple[list[str], bool]:
+    selected: list[str] = []
+    truncated = False
+    used_tokens = 0
+
+    for section in sections:
+        section_tokens = estimate_token_count(section)
+        if used_tokens + section_tokens > max_input_tokens:
+            truncated = True
+            break
+        selected.append(section)
+        used_tokens += section_tokens
+
+    return selected, truncated
+
+
+def build_provider_context(
+    store: MemoryStore,
+    *,
+    user_input: str,
+    budget: BudgetConfig | None = None,
+    behavior: BehaviorDecision | None = None,
+) -> BuiltContext:
+    config = budget or BudgetConfig()
+    all_messages = store.list_messages(limit=10_000)
+    mood = store.get_mood_state()
+    latest_summary = store.get_latest_conversation_summary()
+    ranked_memories = rank_memories(store.list_memories(limit=200), user_input)
+
+    selected_memories: list[MemoryRecord] = []
+    for memory in ranked_memories:
+        if len(selected_memories) >= config.max_memories_per_turn:
+            break
+        selected_memories.append(memory)
+
+    recent_raw = all_messages[-config.max_raw_turns :] if config.max_raw_turns > 0 else []
+
+    system_sections = [load_persona_system_prompt(), _format_mood_block(mood)]
+    if behavior is not None:
+        tone_instruction = behavior_tone_instruction(behavior.decision, behavior.tone_mode)
+        if tone_instruction:
+            system_sections.append(tone_instruction)
+    summary_block = _format_summary_block(latest_summary)
+    if summary_block:
+        system_sections.append(summary_block)
+    system_sections.append(_format_memories_block(selected_memories))
+
+    reserved_tokens = estimate_token_count(user_input) + sum(
+        estimate_token_count(f"{message.role}: {message.content}") for message in recent_raw
+    )
+    memory_budget = max(256, config.max_input_tokens_per_turn - reserved_tokens)
+    packed_sections, truncated = _pack_sections(system_sections, max_input_tokens=memory_budget)
+
+    provider_messages: list[ChatMessage] = [
+        ChatMessage(role="system", content="\n\n".join(packed_sections))
+    ]
+
+    included_message_ids: list[int] = []
+    for message in recent_raw:
+        role = "assistant" if message.role == "assistant" else "user"
+        if role not in {"user", "assistant"}:
+            continue
+        provider_messages.append(ChatMessage(role=role, content=message.content))
+        included_message_ids.append(message.id)
+
+    provider_messages.append(ChatMessage(role="user", content=user_input))
+
+    estimated_input_tokens = sum(
+        estimate_token_count(message.content) for message in provider_messages
+    )
+
+    return BuiltContext(
+        messages=provider_messages,
+        estimated_input_tokens=estimated_input_tokens,
+        included_memory_ids=[memory.id for memory in selected_memories],
+        included_message_ids=included_message_ids,
+        summary_used=latest_summary.summary if latest_summary else None,
+        truncated=truncated,
+        total_stored_messages=len(all_messages),
+    )
+
+
+def extract_latest_user_input(messages: list[ChatMessage]) -> str:
+    for message in reversed(messages):
+        if message.role == "user":
+            return message.content
+    raise ValueError("At least one user message is required.")

@@ -25,6 +25,7 @@ Read these files in order:
 5. `docs/TODO.md`
 6. `docs/SESSION_LOG.md`
 7. `docs/OPEN_SOURCE_REUSE.md`
+8. `docs/CURSOR_PHASE_PLAYBOOK.md`
 
 When opening a new AI coding session, the user can say `推进`. The agent should then read the files above and continue from the next unfinished task.
 

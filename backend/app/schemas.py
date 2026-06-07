@@ -1,7 +1,282 @@
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 
 class HealthResponse(BaseModel):
     status: str
     service: str
     version: str
+
+
+class ChatMessageSchema(BaseModel):
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+
+class ChatCompleteRequest(BaseModel):
+    messages: list[ChatMessageSchema] = Field(min_length=1)
+    provider: str | None = None
+    max_output_tokens: int = Field(default=300, ge=1, le=4000)
+
+
+class TokenUsageSchema(BaseModel):
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+
+
+class CostEstimateSchema(BaseModel):
+    input_usd: float
+    output_usd: float
+    total_usd: float
+    pricing_source: str
+
+
+class ChatCompleteResponse(BaseModel):
+    provider: str
+    model: str
+    content: str
+    usage: TokenUsageSchema
+    cost: CostEstimateSchema
+    mock: bool = False
+    avatar_state: str = "talking"
+    decision: str = "reply"
+    should_call_llm: bool = True
+
+
+class BehaviorDecisionSchema(BaseModel):
+    decision: str
+    avatar_state: str
+    should_call_llm: bool
+    reason: str
+    local_response: str | None = None
+    tone_mode: str = "normal"
+
+
+class BehaviorEvaluateRequest(BaseModel):
+    user_input: str = ""
+    event_type: Literal["user_message", "proactive_check"] = "user_message"
+
+
+class ProviderStatusSchema(BaseModel):
+    name: str
+    enabled: bool
+    model: str
+    configured: bool
+    api_key_present: bool
+    placeholder: bool = False
+
+
+class ProvidersStatusResponse(BaseModel):
+    default_provider: str
+    force_mock: bool
+    providers: list[ProviderStatusSchema]
+
+
+class ErrorResponse(BaseModel):
+    error: str
+    provider: str | None = None
+
+
+class StoredMessageSchema(BaseModel):
+    id: int
+    created_at: str
+    role: str
+    content: str
+    source: str
+    metadata: dict
+
+
+class MessageListResponse(BaseModel):
+    messages: list[StoredMessageSchema]
+
+
+class MemoryCreateRequest(BaseModel):
+    type: str
+    content: str
+    tags: list[str] = Field(default_factory=list)
+    importance: float = Field(default=0.5, ge=0.0, le=1.0)
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    expires_at: str | None = None
+    source_message_id: int | None = None
+    metadata: dict = Field(default_factory=dict)
+
+
+class MemoryUpdateRequest(BaseModel):
+    content: str | None = None
+    tags: list[str] | None = None
+    importance: float | None = Field(default=None, ge=0.0, le=1.0)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    expires_at: str | None = None
+    metadata: dict | None = None
+
+
+class MemorySchema(BaseModel):
+    id: int
+    created_at: str
+    updated_at: str
+    type: str
+    content: str
+    tags: list[str]
+    importance: float
+    confidence: float
+    expires_at: str | None
+    source_message_id: int | None
+    metadata: dict
+
+
+class MemoryListResponse(BaseModel):
+    memories: list[MemorySchema]
+
+
+class MoodStateSchema(BaseModel):
+    updated_at: str
+    mood: str
+    energy: float
+    annoyance: float
+    boredom: float
+    worry: float
+    trust: float
+    loneliness: float
+    metadata: dict
+
+
+class MoodStateUpdateRequest(BaseModel):
+    mood: str | None = None
+    energy: float | None = Field(default=None, ge=0.0, le=1.0)
+    annoyance: float | None = Field(default=None, ge=0.0, le=1.0)
+    boredom: float | None = Field(default=None, ge=0.0, le=1.0)
+    worry: float | None = Field(default=None, ge=0.0, le=1.0)
+    trust: float | None = Field(default=None, ge=0.0, le=1.0)
+    loneliness: float | None = Field(default=None, ge=0.0, le=1.0)
+    metadata: dict | None = None
+
+
+class ContextPreviewResponse(BaseModel):
+    estimated_input_tokens: int
+    included_memory_ids: list[int]
+    included_message_ids: list[int]
+    summary_used: str | None
+    truncated: bool
+    total_stored_messages: int
+    message_count_sent: int
+    messages: list[ChatMessageSchema]
+
+
+class AllowedFolderSchema(BaseModel):
+    path: str
+    read: bool
+    write: bool
+    resolved_path: str
+
+
+class FilePermissionsStatusResponse(BaseModel):
+    allowed_folders: list[AllowedFolderSchema]
+    deny_shell_execution: bool
+    log_file_access: bool
+
+
+class FileAccessCheckRequest(BaseModel):
+    path: str
+    operation: Literal["read", "write"] = "read"
+
+
+class FileAccessCheckResponse(BaseModel):
+    allowed: bool
+    operation: str
+    requested_path: str
+    resolved_path: str
+    reason: str
+    matched_folder: str | None = None
+
+
+class FileAccessLogSchema(BaseModel):
+    id: int
+    created_at: str
+    operation: str
+    requested_path: str
+    resolved_path: str
+    allowed: bool
+    reason: str
+
+
+class FileAccessLogListResponse(BaseModel):
+    logs: list[FileAccessLogSchema]
+
+
+class STTProviderStatusSchema(BaseModel):
+    name: str
+    enabled: bool
+    model: str
+    configured: bool
+    api_key_present: bool
+    placeholder: bool = False
+    cloud: bool = False
+
+
+class STTStatusResponse(BaseModel):
+    enabled: bool
+    default_provider: str
+    force_mock: bool
+    allow_cloud_stt: bool
+    providers: list[STTProviderStatusSchema]
+
+
+class STTTranscribeResponse(BaseModel):
+    provider: str
+    model: str
+    text: str
+    mock: bool = False
+    language: str | None = None
+
+
+class TTSProviderStatusSchema(BaseModel):
+    name: str
+    enabled: bool
+    model: str
+    configured: bool
+    api_key_present: bool
+    placeholder: bool = False
+    cloud: bool = False
+
+
+class TTSStatusResponse(BaseModel):
+    enabled: bool
+    default_provider: str
+    force_mock: bool
+    allow_cloud_tts: bool
+    max_speech_chars: int
+    speak_decisions: list[str]
+    providers: list[TTSProviderStatusSchema]
+
+
+class TTSEvaluateRequest(BaseModel):
+    text: str
+    decision: str | None = None
+    avatar_state: str | None = None
+    force: bool = False
+
+
+class TTSEvaluateResponse(BaseModel):
+    should_speak: bool
+    reason: str
+
+
+class TTSSynthesizeRequest(BaseModel):
+    text: str
+    decision: str | None = None
+    avatar_state: str | None = None
+    force: bool = False
+    provider: str | None = None
+
+
+class TTSSynthesizeResponse(BaseModel):
+    spoken: bool
+    reason: str
+    provider: str | None = None
+    model: str | None = None
+    mime_type: str | None = None
+    audio_base64: str | None = None
+    duration_ms: int | None = None
+    mock: bool = False

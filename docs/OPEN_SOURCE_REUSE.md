@@ -110,13 +110,77 @@ Before using an open-source candidate, check:
 Add candidates here as they are evaluated.
 
 ```text
-Name:
-URL:
-License:
-Reuse level:
-Purpose:
-Decision:
-Notes:
+Name: PixiJS
+URL: https://pixijs.com/
+License: MIT
+Reuse level: Level 1 - Learn Only
+Purpose: Canvas/WebGL sprite animation for pixel characters.
+Decision: Rejected for MVP.
+Notes: Powerful but would push the UI toward canvas rendering and a heavier runtime. Current CSS/DOM pixel art fits the trapped-in-box MVP and keeps bundle size small.
+
+Name: react-spring
+URL: https://www.react-spring.dev/
+License: MIT
+Reuse level: Level 2 - Dependency candidate
+Purpose: State-driven motion for avatar transitions.
+Decision: Rejected for MVP.
+Notes: CSS `steps()` keyframes are enough for low-res pixel motion. Avoid adding animation runtime before behavior engine drives states.
+
+Name: CSS pixel-art tutorials / sprite-state patterns
+URL: n/a
+License: n/a
+Reuse level: Level 1 - Learn Only
+Purpose: Separate base renderer layout from per-state animation rules.
+Decision: Adopted as design pattern only.
+Notes: Implemented as `PixelCharacter` + `stateAnimations.css` without copying external source.
+
+Name: react-use / custom timer hooks
+URL: https://github.com/streamich/react-use
+License: Unlicense
+Reuse level: Level 2 - Dependency candidate
+Purpose: Timeout/state sequence helpers for avatar chat timing.
+Decision: Rejected for MVP.
+Notes: Small local `useAvatarState` hook with `setTimeout` cleanup is enough and avoids another dependency.
+
+Name: OpenAI Python SDK / DeepSeek official SDK
+URL: https://github.com/openai/openai-python
+License: Apache-2.0
+Reuse level: Level 2 - Dependency candidate
+Purpose: Provider HTTP clients for chat completions.
+Decision: Rejected for MVP first pass.
+Notes: DeepSeek uses OpenAI-compatible HTTP; a small `httpx` adapter keeps dependencies minimal and makes mock testing easy.
+
+Name: SQLAlchemy
+URL: https://www.sqlalchemy.org/
+License: MIT
+Reuse level: Level 2 - Dependency candidate
+Purpose: SQLite ORM and migrations for memory storage.
+Decision: Rejected for MVP first pass.
+Notes: Python stdlib `sqlite3` matches the current schema size and keeps the memory layer easy to inspect and replace.
+
+Name: Chroma / vector DB retrieval
+URL: https://www.trychroma.com/
+License: Apache-2.0
+Reuse level: Level 2 - Dependency candidate
+Purpose: Semantic memory retrieval for long-term context selection.
+Decision: Rejected for MVP first pass.
+Notes: Phase 5 uses deterministic keyword/type/importance scoring first, per playbook guidance to avoid embeddings before simple retrieval works.
+
+Name: python-sandbox-path / path-validation libraries
+URL: n/a (category search)
+License: varies
+Reuse level: Level 2 - Dependency candidate
+Purpose: Safe path allowlist checks with symlink escape protection.
+Decision: Rejected for MVP first pass.
+Notes: Python stdlib `pathlib` + `os.path.realpath` with lexical pre-check is enough for Phase 7 and keeps the gateway easy to audit/replace.
+
+Name: OpenAI Whisper API / cloud STT SDK
+URL: https://platform.openai.com/docs/guides/speech-to-text
+License: n/a (service/API)
+Reuse level: Level 2 - Dependency candidate
+Purpose: Cloud speech-to-text for push-to-talk input.
+Decision: Deferred placeholder only.
+Notes: Phase 9 adds mock/local-first STT routing and config gates (`allow_cloud_stt`, `config/stt.json`). Cloud Whisper adapter remains a placeholder until explicitly wired.
 ```
 
 ## Accepted Dependencies And Adapted Sources
@@ -186,7 +250,37 @@ Name: HTTPX
 URL: https://www.python-httpx.org/
 License: BSD-3-Clause
 Version/commit: >=0.27.0
-Used for: FastAPI TestClient test dependency.
-Local files: backend/requirements-dev.txt
+Used for: DeepSeek provider adapter HTTP client and FastAPI TestClient test dependency.
+Local files: backend/requirements.txt, backend/app/providers/deepseek.py, backend/requirements-dev.txt
+Notes: Dependency only. No source copied. Used for production provider calls, not just tests.
+
+Name: python-multipart
+URL: https://github.com/Kludex/python-multipart
+License: Apache-2.0
+Version/commit: >=0.0.9
+Used for: FastAPI `/stt/transcribe` audio upload handling.
+Local files: backend/requirements.txt, backend/app/main.py
 Notes: Dependency only. No source copied.
+
+Name: Web Audio API (browser built-in)
+URL: https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API
+License: N/A (browser platform API)
+Used for: Playing mock/base64 TTS audio returned by `/tts/synthesize`.
+Local files: frontend/src/voice/useTextToSpeech.ts
+Notes: No dependency added. Mock backend TTS generates silent WAV locally in Python for duration sync.
+
+Name: Python struct (stdlib)
+URL: https://docs.python.org/3/library/struct.html
+License: PSF
+Used for: Generating minimal silent WAV bytes in mock TTS provider.
+Local files: backend/app/tts/wav_utils.py
+Notes: Stdlib only. No source copied.
+
+Name: Playwright
+URL: https://playwright.dev/
+License: Apache-2.0
+Version/commit: ^1.49.1
+Used for: scripts/ui_verify.mjs browser smoke verification.
+Local files: package.json, package-lock.json, scripts/ui_verify.mjs
+Notes: devDependency only; no source copied.
 ```

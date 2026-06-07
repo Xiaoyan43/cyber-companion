@@ -14,6 +14,7 @@ Start every development session by reading:
 4. `docs/TODO.md`
 5. `docs/SESSION_LOG.md`
 6. `docs/OPEN_SOURCE_REUSE.md`
+7. `docs/CURSOR_PHASE_PLAYBOOK.md` when Cursor is expected to own most implementation
 
 Then select the next unfinished task from `docs/TODO.md` or the next milestone in `docs/MVP_ROADMAP.md`. Work on one coherent feature per session unless the user explicitly asks for a broader pass.
 

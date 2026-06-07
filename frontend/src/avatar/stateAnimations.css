@@ -1,0 +1,298 @@
+/* Face shapes */
+
+.stage[data-state="happy"] .mouth {
+  height: 16px;
+  border-bottom: 8px solid #171719;
+  background: transparent;
+}
+
+.stage[data-state="sad"] .mouth,
+.stage[data-state="worried"] .mouth {
+  bottom: 18px;
+  height: 16px;
+  border-top: 8px solid #171719;
+  background: transparent;
+}
+
+.stage[data-state="angry"] .eye,
+.stage[data-state="annoyed"] .eye {
+  top: 38px;
+  height: 10px;
+}
+
+.stage[data-state="sleepy"] .eye,
+.stage[data-state="silent"] .eye {
+  top: 40px;
+  height: 6px;
+}
+
+.stage[data-state="worried"] .eye {
+  height: 20px;
+}
+
+/* Body motion by state */
+
+.stage[data-state="idle"] .pixel-person {
+  animation: pixel-idle-trapped 8s steps(8) infinite;
+}
+
+.stage[data-state="idle"] .arm-left {
+  animation: pixel-idle-arm-left 8s steps(8) infinite;
+}
+
+.stage[data-state="idle"] .arm-right {
+  animation: pixel-idle-arm-right 8s steps(8) infinite;
+}
+
+.stage[data-state="happy"] .pixel-person {
+  animation: pixel-happy-bounce 700ms steps(3) infinite;
+}
+
+.stage[data-state="sad"] .pixel-person {
+  animation: pixel-sad-droop 2.8s steps(3) infinite;
+}
+
+.stage[data-state="angry"] .pixel-person {
+  filter: saturate(1.35);
+  animation: pixel-angry-shake 420ms steps(3) infinite;
+}
+
+.stage[data-state="sleepy"] .pixel-person {
+  animation: pixel-sleepy-drift 3.2s steps(4) infinite;
+}
+
+.stage[data-state="sleepy"] .eye {
+  animation: pixel-sleepy-blink 3.2s steps(2) infinite;
+}
+
+.stage[data-state="thinking"] .pixel-person {
+  animation: pixel-bob 900ms steps(2) infinite;
+}
+
+.stage[data-state="talking"] .pixel-person {
+  animation: pixel-bob 900ms steps(2) infinite;
+}
+
+.stage[data-state="talking"] .mouth {
+  animation: pixel-talk-mouth 280ms steps(2) infinite;
+}
+
+.stage[data-state="worried"] .pixel-person {
+  animation: pixel-worried-tremble 520ms steps(3) infinite;
+}
+
+.stage[data-state="annoyed"] .pixel-person {
+  animation: pixel-annoyed-tap 1.1s steps(3) infinite;
+}
+
+.stage[data-state="annoyed"] .arm-right {
+  animation: pixel-annoyed-arm 1.1s steps(3) infinite;
+}
+
+.stage[data-state="silent"] .pixel-person {
+  filter: saturate(0.72) brightness(0.92);
+}
+
+.stage[data-state="silent"] .antenna::after {
+  background: #8a6f66;
+}
+
+@keyframes pixel-box-flicker {
+  0%,
+  18%,
+  100% {
+    opacity: 0;
+  }
+
+  20%,
+  24% {
+    opacity: 1;
+  }
+}
+
+@keyframes pixel-idle-trapped {
+  0%,
+  100% {
+    transform: translate(0, 4px);
+  }
+
+  8% {
+    transform: translate(-5px, 2px) rotate(-2deg);
+  }
+
+  16% {
+    transform: translate(5px, 2px) rotate(2deg);
+  }
+
+  24% {
+    transform: translate(0, 0);
+  }
+
+  50% {
+    transform: translate(0, 6px);
+  }
+
+  62% {
+    transform: translate(0, -2px);
+  }
+
+  74% {
+    transform: translate(-2px, 2px);
+  }
+
+  86% {
+    transform: translate(2px, 2px);
+  }
+}
+
+@keyframes pixel-idle-arm-left {
+  0%,
+  100%,
+  24%,
+  50%,
+  74%,
+  86% {
+    transform: translateY(0);
+  }
+
+  8% {
+    transform: translate(-4px, -6px) rotate(-8deg);
+  }
+}
+
+@keyframes pixel-idle-arm-right {
+  0%,
+  100%,
+  24%,
+  50%,
+  74%,
+  86% {
+    transform: translateY(0);
+  }
+
+  16% {
+    transform: translate(4px, -6px) rotate(8deg);
+  }
+}
+
+@keyframes pixel-happy-bounce {
+  0%,
+  100% {
+    transform: translateY(4px);
+  }
+
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes pixel-sad-droop {
+  0%,
+  100% {
+    transform: translateY(4px);
+  }
+
+  50% {
+    transform: translateY(10px) rotate(1deg);
+  }
+}
+
+@keyframes pixel-angry-shake {
+  0%,
+  100% {
+    transform: translate(0, 4px) rotate(-1deg);
+  }
+
+  33% {
+    transform: translate(-3px, 2px) rotate(1deg);
+  }
+
+  66% {
+    transform: translate(3px, 6px) rotate(-2deg);
+  }
+}
+
+@keyframes pixel-sleepy-drift {
+  0%,
+  100% {
+    transform: translateY(4px);
+  }
+
+  50% {
+    transform: translateY(8px);
+  }
+}
+
+@keyframes pixel-sleepy-blink {
+  0%,
+  78%,
+  100% {
+    height: 6px;
+  }
+
+  82%,
+  88% {
+    height: 2px;
+  }
+}
+
+@keyframes pixel-bob {
+  0%,
+  100% {
+    transform: translateY(4px);
+  }
+
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes pixel-talk-mouth {
+  0%,
+  100% {
+    height: 10px;
+  }
+
+  50% {
+    height: 18px;
+  }
+}
+
+@keyframes pixel-worried-tremble {
+  0%,
+  100% {
+    transform: translate(0, 4px);
+  }
+
+  33% {
+    transform: translate(-1px, 6px);
+  }
+
+  66% {
+    transform: translate(1px, 2px);
+  }
+}
+
+@keyframes pixel-annoyed-tap {
+  0%,
+  70%,
+  100% {
+    transform: translateY(4px);
+  }
+
+  80% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes pixel-annoyed-arm {
+  0%,
+  70%,
+  100% {
+    transform: translateY(0);
+  }
+
+  80% {
+    transform: translateY(-10px);
+  }
+}

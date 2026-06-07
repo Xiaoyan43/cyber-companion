@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "default_provider": "mock",
+  "max_speech_chars": 120,
+  "speak_decisions": ["proactive", "interrupt", "refuse", "reply"],
+  "providers": {
+    "mock": {
+      "enabled": true,
+      "model": "mock-tts"
+    },
+    "openai_tts": {
+      "enabled": false,
+      "placeholder": true,
+      "model": "tts-1",
+      "voice": "alloy",
+      "api_key_env": "OPENAI_API_KEY"
+    }
+  }
+}

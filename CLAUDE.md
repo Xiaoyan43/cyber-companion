@@ -12,6 +12,7 @@ Before doing any work, read:
 4. `docs/MVP_ROADMAP.md`
 5. `docs/TODO.md`
 6. `docs/SESSION_LOG.md`
+7. `docs/HANDOFF.md`
 
 ## Allowed Work
 
@@ -44,4 +45,3 @@ Suggested next actions:
 ```
 
 Convert accepted review items into `docs/TODO.md` before implementation.
-

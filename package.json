@@ -15,5 +15,8 @@
     "check:backend": "python3 -m compileall backend",
     "check:frontend": "npm run check --workspace frontend",
     "build:frontend": "npm run build --workspace frontend"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.1"
   }
 }

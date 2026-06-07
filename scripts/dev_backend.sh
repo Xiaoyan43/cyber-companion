@@ -4,6 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+if [ -f ".env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source ".env"
+  set +a
+fi
+
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 HOST="${CYBER_COMPANION_API_HOST:-127.0.0.1}"
 PORT="${CYBER_COMPANION_API_PORT:-8000}"
