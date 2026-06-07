@@ -1,0 +1,12 @@
+{
+  "allowed_folders": [
+    {
+      "path": "./sandbox",
+      "read": true,
+      "write": true
+    }
+  ],
+  "deny_shell_execution": true,
+  "log_file_access": true
+}
+

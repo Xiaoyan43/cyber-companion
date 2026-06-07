@@ -1,0 +1,48 @@
+---
+description: AI desktop companion project rules
+alwaysApply: true
+---
+
+# Cursor Rules
+
+This project builds a low-cost AI desktop companion: a pixel-style "person trapped in a box" with memory, personality, chat, later voice, and eventual hardware support.
+
+## Read Before Editing
+
+Read these files before meaningful edits:
+
+- `AGENTS.md`
+- `docs/PROJECT_BRIEF.md`
+- `docs/SESSION_PROTOCOL.md`
+- `docs/MVP_ROADMAP.md`
+- `docs/TODO.md`
+- `docs/SESSION_LOG.md`
+- `docs/OPEN_SOURCE_REUSE.md`
+
+## Cursor Role
+
+Cursor is best used for:
+
+- Pixel UI polish.
+- CSS and animation timing.
+- Small frontend components.
+- Focused refactors after the architecture is already defined.
+
+Avoid changing these without explicit user approval and doc updates:
+
+- Provider abstraction.
+- SQLite memory schema.
+- Behavior engine decision contract.
+- File permission policy.
+- Cost and token budget policy.
+
+## Open Source
+
+Use mature open-source dependencies or examples when they speed up development. This is a private personal-use project, so license checks are mainly for awareness and future cleanup. Prefer MIT, Apache-2.0, BSD, and ISC when choices are otherwise similar. Record reused or adapted sources in `docs/OPEN_SOURCE_REUSE.md`, especially if the source is restrictive, unclear, copied, or adapted.
+
+## UI Direction
+
+- The character should feel like a small trapped person, not a normal chatbot avatar.
+- Support idle, happy, sad, angry, sleepy, thinking, talking, worried, annoyed, and muted/silent states.
+- Do not turn the UI into a marketing landing page.
+- Prioritize the actual companion screen as the first view.

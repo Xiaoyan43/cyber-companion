@@ -1,0 +1,23 @@
+{
+  "default_provider": "deepseek",
+  "providers": {
+    "deepseek": {
+      "enabled": true,
+      "base_url": "https://api.deepseek.com",
+      "model": "deepseek-chat",
+      "api_key_env": "DEEPSEEK_API_KEY"
+    },
+    "openai": {
+      "enabled": false,
+      "base_url": "https://api.openai.com/v1",
+      "model": "gpt-5.4-nano",
+      "api_key_env": "OPENAI_API_KEY"
+    },
+    "local": {
+      "enabled": false,
+      "base_url": "http://localhost:11434",
+      "model": "local-model"
+    }
+  }
+}
+

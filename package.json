@@ -1,0 +1,19 @@
+{
+  "name": "cyber-companion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "bash scripts/dev.sh",
+    "dev:backend": "bash scripts/dev_backend.sh",
+    "dev:frontend": "npm run dev --workspace frontend",
+    "health": "bash scripts/health.sh",
+    "check": "bash scripts/check.sh",
+    "check:backend": "python3 -m compileall backend",
+    "check:frontend": "npm run check --workspace frontend",
+    "build:frontend": "npm run build --workspace frontend"
+  }
+}

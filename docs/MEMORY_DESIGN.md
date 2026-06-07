@@ -1,0 +1,149 @@
+# Memory Design
+
+## Goals
+
+The memory system should make the character feel persistent without wasting tokens or storing unnecessary private data.
+
+It should:
+
+- Store stable user background and job-search details.
+- Track recent events, projects, reminders, and emotional state.
+- Store relationship and behavior preferences.
+- Retrieve relevant memory per turn.
+- Use summaries instead of full chat history.
+- Support future deletion/export.
+
+## Memory Types
+
+```text
+stable_profile
+recent_event
+emotion_state
+project
+job_progress
+reminder
+relationship_state
+behavior_preference
+conversation_summary
+```
+
+## Suggested Tables
+
+### messages
+
+Stores raw local conversation messages.
+
+Fields:
+
+- `id`
+- `created_at`
+- `role`
+- `content`
+- `source`
+- `metadata_json`
+
+### conversation_summaries
+
+Stores compact summaries of older conversation ranges.
+
+Fields:
+
+- `id`
+- `created_at`
+- `range_start_message_id`
+- `range_end_message_id`
+- `summary`
+- `keywords_json`
+
+### memories
+
+General long-term memory table.
+
+Fields:
+
+- `id`
+- `created_at`
+- `updated_at`
+- `type`
+- `content`
+- `tags_json`
+- `importance`
+- `confidence`
+- `expires_at`
+- `source_message_id`
+- `metadata_json`
+
+### mood_state
+
+Current internal state.
+
+Fields:
+
+- `id`
+- `updated_at`
+- `mood`
+- `energy`
+- `annoyance`
+- `boredom`
+- `worry`
+- `trust`
+- `loneliness`
+- `metadata_json`
+
+### reminders
+
+Fields:
+
+- `id`
+- `created_at`
+- `due_at`
+- `title`
+- `details`
+- `status`
+- `source_message_id`
+
+### file_access_log
+
+Fields:
+
+- `id`
+- `created_at`
+- `operation`
+- `requested_path`
+- `resolved_path`
+- `allowed`
+- `reason`
+
+## Retrieval Policy
+
+Each LLM call should include:
+
+1. System/persona prompt.
+2. Current behavior decision.
+3. Relevant long-term memories.
+4. Current mood/relationship state.
+5. Recent conversation summary.
+6. Last few raw turns only.
+7. Current user input or event.
+
+Do not include the full transcript unless the user explicitly asks for it and token budget allows.
+
+## Memory Write Policy
+
+Write memory when information is:
+
+- stable
+- repeated
+- user-confirmed
+- useful for future behavior
+- tied to job progress, projects, reminders, or preferences
+
+Avoid writing:
+
+- one-off jokes
+- raw sensitive data that can be summarized
+- low-confidence guesses
+- transient emotion unless useful
+
+Every memory write should include `importance` and `confidence`.
+
