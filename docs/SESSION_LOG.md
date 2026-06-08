@@ -1499,3 +1499,36 @@
 
 - STT provider interface unchanged; no TTS/chat/memory/behavior/provider changes.
 - `CYBER_COMPANION_STT_MODE=mock` must keep forcing mock STT.
+
+## 2026-06-08 - Session 26 (TTS stage-direction stripping)
+
+本次完成：
+
+- `speechText.ts`: strip stage directions `（…）`, `(…)`, `【…】` before TTS; preserve quoted spans; normalize spaces/punctuation; empty when only stage directions remain.
+- `textChunksForSpeech` / `textForSpeech` share the same prepare path so chunking applies to stripped dialogue only (display text unchanged).
+- Added `speechText.test.ts` + vitest in frontend workspace.
+
+下次接着做：
+
+- Manual check: long Boxi reply with parenthetical actions should speak dialogue only; chat bubble still shows full text.
+
+已知问题：
+
+- Half-width `(...)` stripping may remove legitimate English parentheticals in rare mixed-language replies.
+
+相关文件：
+
+- `frontend/src/voice/speechText.ts`
+- `frontend/src/voice/speechText.test.ts`
+- `frontend/vitest.config.ts`
+- `frontend/package.json`
+
+测试结果：
+
+- `npm run test --workspace frontend`: passed (10 tests).
+- `npm run check:frontend`: passed.
+- `npm run build:frontend`: passed.
+
+不要改动的边界：
+
+- Frontend speech-text prep only; no chat display, backend, or TTS router changes.
