@@ -322,6 +322,13 @@ Used for: Float32 audio array passed to faster-whisper `transcribe`.
 Local files: backend/app/stt/faster_whisper.py, backend/requirements.txt
 Notes: Dependency only (also pulled by faster-whisper). No source copied.
 
+Name: Volcano Engine / Doubao Speech API (openspeech.bytedance.com)
+URL: https://www.volcengine.com/docs/6561/1257584
+License: Proprietary (cloud service; personal-use experiment)
+Used for: Optional cloud TTS via `DoubaoTTSProvider` (`backend/app/tts/doubao.py`). HTTP POST `https://openspeech.bytedance.com/api/v1/tts`, `Authorization: Bearer;{token}` per official docs.
+Local files: backend/app/tts/doubao.py, config/tts.example.json, `.env` (`DOUBAO_TTS_*`)
+Notes: Cloud adapter only; `cloud=True` behind `allow_cloud_tts` budget gate. Credentials from Volcano console. Default TTS remains local (`mac_say`); switch via `config/tts.json` + env. Real audio verified manually.
+
 Name: Playwright
 URL: https://playwright.dev/
 License: Apache-2.0

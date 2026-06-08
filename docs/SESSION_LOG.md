@@ -1532,3 +1532,41 @@
 不要改动的边界：
 
 - Frontend speech-text prep only; no chat display, backend, or TTS router changes.
+
+## 2026-06-08 - Session 27 (Doubao cloud TTS adapter)
+
+本次完成：
+
+- Added `DoubaoTTSProvider` (`backend/app/tts/doubao.py`): `cloud=True`, Volcano Engine HTTP TTS v1 (`POST https://openspeech.bytedance.com/api/v1/tts`, `Authorization: Bearer;{token}`), base64 audio decode, `TTSError` on auth/quota/network failures.
+- Env: `DOUBAO_TTS_APPID`, `DOUBAO_TTS_ACCESS_TOKEN`, `DOUBAO_TTS_CLUSTER`, `DOUBAO_TTS_VOICE_TYPE`; `is_configured()` requires all four.
+- Registered in `registry.py`; `config/tts.example.json` + `.env.example` doubao entry (default_provider unchanged — still `mac_say` in `config/tts.json`).
+- Tests: httpx-mocked request assembly, success path, auth failure, network error, cloud budget gate, registry/status contract.
+
+下次接着做：
+
+- User enables `doubao` in `config/tts.json` + sets `DOUBAO_TTS_*` + `allow_cloud_tts` for manual E2E.
+- Voice V3 polish per `docs/PHASE_VOICE_LOCAL.md` if desired.
+
+已知问题：
+
+- Doubao real audio not automated in CI; mac_say/mock remain default fallbacks.
+- v1 HTTP endpoint does not support some newer 2.0 voices (per Volcano docs — use v3 for those).
+
+相关文件：
+
+- `backend/app/tts/doubao.py`
+- `backend/app/tts/registry.py`
+- `config/tts.example.json`
+- `.env.example`
+- `backend/tests/test_tts.py`
+- `docs/OPEN_SOURCE_REUSE.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed — **120** backend tests; frontend `tsc --noEmit` passed.
+- `npm run build:frontend`: passed.
+
+不要改动的边界：
+
+- TTS provider interface unchanged; no STT/chat/memory/behavior changes.
+- `CYBER_COMPANION_TTS_MODE=mock` and local `mac_say` must keep working when doubao is unavailable.

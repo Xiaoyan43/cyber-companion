@@ -1,5 +1,6 @@
 from backend.app.tts.base import TextToSpeechProvider
 from backend.app.tts.config import TTSConfig, TTSProviderConfigEntry
+from backend.app.tts.doubao import DoubaoTTSProvider
 from backend.app.tts.mac_say import MacSayTTSProvider
 from backend.app.tts.mock import MockTTSProvider
 from backend.app.tts.openai_tts import OpenAITTSProvider
@@ -18,11 +19,14 @@ def build_tts_provider(entry: TTSProviderConfigEntry) -> TextToSpeechProvider:
     if entry.name == "openai_tts":
         return OpenAITTSProvider(
             model=entry.model,
-            voice=entry.voice or "alloy",
             api_key_env=entry.api_key_env or "OPENAI_API_KEY",
+            voice=entry.voice or "alloy",
             enabled=entry.enabled,
             placeholder=entry.placeholder,
         )
+
+    if entry.name == "doubao":
+        return DoubaoTTSProvider(enabled=entry.enabled)
 
     return MockTTSProvider(model=entry.model)
 
