@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  drainStreamingSpeechChunks,
-  flushStreamingSpeechRemainder,
   normalizeSpeechText,
   stripStageDirections,
   textChunksForSpeech,
@@ -60,45 +58,5 @@ describe("textChunksForSpeech", () => {
     expect(chunks.length).toBeGreaterThan(1);
     expect(chunks.join("")).toBe("第一句。第二句。");
     expect(chunks.join("")).not.toContain("歪头");
-  });
-});
-
-describe("drainStreamingSpeechChunks", () => {
-  it("splits on Chinese sentence boundaries and strips stage directions", () => {
-    const first = drainStreamingSpeechChunks("（歪头）第一句。第二", 120);
-
-    expect(first.chunks).toEqual(["第一句。"]);
-    expect(first.remainder).toBe("第二");
-
-    const second = drainStreamingSpeechChunks(first.remainder, 120);
-    expect(second.chunks).toEqual([]);
-    expect(second.remainder).toBe("第二");
-  });
-
-  it("splits on newline and western punctuation", () => {
-    const newline = drainStreamingSpeechChunks("Hello\nworld", 120);
-    expect(newline.chunks).toEqual(["Hello"]);
-    expect(newline.remainder).toBe("world");
-
-    const western = drainStreamingSpeechChunks("Hi. There", 120);
-    expect(western.chunks).toEqual(["Hi."]);
-    expect(western.remainder).toBe("There");
-  });
-
-  it("forces max-length splits when no boundary is present", () => {
-    const forced = drainStreamingSpeechChunks("a".repeat(25), 10);
-    expect(forced.chunks).toEqual(["a".repeat(10), "a".repeat(10)]);
-    expect(forced.remainder).toBe("a".repeat(5));
-  });
-});
-
-describe("flushStreamingSpeechRemainder", () => {
-  it("returns stripped remainder as one chunk when short enough", () => {
-    expect(flushStreamingSpeechRemainder("（动作）收尾句", 120)).toEqual(["收尾句"]);
-  });
-
-  it("chunks an oversized remainder", () => {
-    const chunks = flushStreamingSpeechRemainder("第一句。第二句。", 6);
-    expect(chunks.join("")).toBe("第一句。第二句。");
   });
 });

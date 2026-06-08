@@ -1857,3 +1857,38 @@
 不要改动的边界：
 
 - 未改后端与 `/tts/*` 契约；`/chat/complete` 兜底保留。
+
+## 2026-06-09 - Session 36 (Revert S3 sentence TTS queue → whole-reply speakReply)
+
+本次完成：
+
+- **回退句级 TTS 队列接线**（短回复句间停顿为负优化；保留 S2 文字流式 + 全文一次 `/tts/stream`）
+  - `App.tsx`: 流式 `onDelta` 仅渲染文字 + 首个 delta `talking`；不再 `beginStreamingReply` / `feedStreamingReplyDelta`；`onReplyReady` 统一 `speakReply(全文)`；新轮 `stopSpeaking(false)` 取消在途音频；保留 `ttsEpoch` / `deferIdleFallback` / `ttsActiveRef` 竞态契约。
+  - `useTextToSpeech.ts`: 移除句级队列 API；保留 `speakReply`（整段流式 + mock 兜底）、`stopSpeaking`（epoch 中止）。
+  - `speechText.ts`: 删除 `drainStreamingSpeechChunks` / `flushStreamingSpeechRemainder` 及对应测试。
+
+下次接着做：
+
+- 若需更早起播，再评估其他策略（非句级硬切）；结构化 JSON + 流式仍 out of scope。
+
+已知问题：
+
+- `ui_verify` PTT 段仍可能因 fake `MediaRecorder` blob STT 解码失败（与本次无关）；TTS 竞态/overlap/refuse 冒烟已通过。
+
+相关文件：
+
+- `frontend/src/App.tsx`
+- `frontend/src/voice/useTextToSpeech.ts`
+- `frontend/src/voice/speechText.ts`
+- `frontend/src/voice/speechText.test.ts`
+
+测试结果：
+
+- `npm run test --workspace frontend`: **18** passed。
+- `PYTHON_BIN=.venv/bin/python npm run check`: **138** backend + frontend `tsc` passed。
+- `npm run build:frontend`: passed。
+- `CYBER_VERIFY_URL=http://127.0.0.1:5173/ node scripts/ui_verify.mjs`: TTS 竞态/overlap/refuse **PASS**；PTT 超时 **FAIL**（mock STT）。
+
+不要改动的边界：
+
+- 未改后端；`/chat/complete` 与 `/tts/*` 契约不变。

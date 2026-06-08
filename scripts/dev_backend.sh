@@ -11,7 +11,8 @@ if [ -f ".env" ]; then
   set +a
 fi
 
-if [ -z "${PYTHON_BIN:-}" ] && [ -x "$ROOT_DIR/.venv/bin/python" ]; then
+# Always prefer project venv when present (shell PYTHON_BIN often lacks uvicorn).
+if [ -x "$ROOT_DIR/.venv/bin/python" ]; then
   PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
 else
   PYTHON_BIN="${PYTHON_BIN:-python3}"

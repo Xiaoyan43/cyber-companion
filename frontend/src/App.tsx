@@ -114,12 +114,7 @@ function App() {
   const speakReplyRef = useRef<
     (input: { text: string; decision?: string; avatarState?: string }) => Promise<boolean>
   >(async () => false);
-  const beginStreamingReplyRef = useRef<() => boolean>(() => false);
-  const feedStreamingReplyDeltaRef = useRef<(delta: string) => void>(() => {});
-  const finishStreamingReplyRef = useRef<
-    (input?: { decision?: string; avatarState?: string }) => Promise<boolean>
-  >(async () => false);
-  const cancelStreamingReplyRef = useRef<() => void>(() => {});
+  const stopSpeakingRef = useRef<(notifyEnd?: boolean) => void>(() => {});
   const markBehaviorActivityRef = useRef(() => {});
 
   const statusText = useMemo(() => stateLines[avatarState], [avatarState]);
@@ -255,7 +250,7 @@ function App() {
     const turnEpoch = chatEpochRef.current + 1;
     chatEpochRef.current = turnEpoch;
     ttsActiveRef.current = false;
-    cancelStreamingReplyRef.current();
+    stopSpeakingRef.current(false);
     const userMessageId = appendUserBubble ? allocateMessageId() : null;
 
     if (appendUserBubble && userMessageId !== null) {
@@ -281,7 +276,6 @@ function App() {
             ]);
 
             let sawFirstDelta = false;
-            let streamingTtsStarted = false;
 
             const streamResult = await requestChatStream(userText, {
               onDelta: (delta) => {
@@ -293,18 +287,6 @@ function App() {
                   sawFirstDelta = true;
                   cancelScheduledReturn();
                   setManualState("talking");
-                }
-
-                if (!streamingTtsStarted && ttsEnabledRef.current && !ttsMutedRef.current) {
-                  if (beginStreamingReplyRef.current()) {
-                    streamingTtsStarted = true;
-                    ttsEpochRef.current = streamEpoch;
-                    ttsActiveRef.current = true;
-                  }
-                }
-
-                if (streamingTtsStarted) {
-                  feedStreamingReplyDeltaRef.current(delta);
                 }
 
                 setMessages((current) => appendChatStreamDelta(current, boxiMessageId, delta));
@@ -342,7 +324,7 @@ function App() {
             return await tryStream();
           } catch (error) {
             ttsActiveRef.current = false;
-            cancelStreamingReplyRef.current();
+            stopSpeakingRef.current(false);
             setMessages((current) => current.filter((message) => message.id !== boxiMessageId));
 
             if (error instanceof DOMException && error.name === "AbortError") {
@@ -356,10 +338,6 @@ function App() {
         },
         async (result) => {
           if (turnEpoch !== chatEpochRef.current) {
-            if (result.streamed) {
-              ttsActiveRef.current = false;
-              cancelStreamingReplyRef.current();
-            }
             return;
           }
 
@@ -382,30 +360,21 @@ function App() {
           const shouldAttemptTts =
             ttsEnabledRef.current && !ttsMutedRef.current && Boolean(result.replyText.trim());
           if (!shouldAttemptTts) {
-            if (result.streamed) {
-              ttsActiveRef.current = false;
-              cancelStreamingReplyRef.current();
-            }
             return;
           }
 
           const decision =
             typeof result.meta?.decision === "string" ? result.meta.decision : undefined;
 
-          // speakReply / finishStreamingReply return false when TTS is disabled,
-          // muted, or skipped by policy. In every "did not speak" case we must
-          // still hand the avatar back to idle ourselves, or it gets stuck in
-          // the `thinking` state set at the start of this turn.
-          const spoke = result.streamed
-            ? await finishStreamingReplyRef.current({
-                decision,
-                avatarState: result.avatarState,
-              })
-            : await speakReplyRef.current({
-                text: result.replyText,
-                decision,
-                avatarState: result.avatarState,
-              });
+          // speakReply returns false when TTS is disabled, muted, or skipped by
+          // policy. In every "did not speak" case we must still hand the avatar
+          // back to idle ourselves, or it gets stuck in the `thinking` state set
+          // at the start of this turn.
+          const spoke = await speakReplyRef.current({
+            text: result.replyText,
+            decision,
+            avatarState: result.avatarState,
+          });
 
           if (!spoke) {
             ttsActiveRef.current = false;
@@ -460,10 +429,7 @@ function App() {
     lastError: ttsLastError,
     toggleMuted: toggleTtsMuted,
     speakReply,
-    beginStreamingReply,
-    feedStreamingReplyDelta,
-    finishStreamingReply,
-    cancelStreamingReply,
+    stopSpeaking,
   } = useTextToSpeech({
     onSpeakingStart: () => {
       ttsEpochRef.current = chatEpochRef.current;
@@ -484,10 +450,7 @@ function App() {
   ttsEnabledRef.current = ttsEnabled;
   ttsMutedRef.current = ttsMuted;
   speakReplyRef.current = speakReply;
-  beginStreamingReplyRef.current = beginStreamingReply;
-  feedStreamingReplyDeltaRef.current = feedStreamingReplyDelta;
-  finishStreamingReplyRef.current = finishStreamingReply;
-  cancelStreamingReplyRef.current = cancelStreamingReply;
+  stopSpeakingRef.current = stopSpeaking;
 
   const handleBehaviorDecision = useCallback(
     async (decision: BehaviorDecision) => {
