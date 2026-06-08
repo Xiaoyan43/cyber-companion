@@ -1,8 +1,15 @@
+from collections.abc import Iterator
+
 from backend.app.providers.base import ChatProvider
 from backend.app.providers.config import ProvidersConfig, load_providers_config
 from backend.app.providers.exceptions import ProviderConfigError, ProviderError
 from backend.app.providers.registry import build_providers
-from backend.app.providers.types import ChatCompletionRequest, ChatCompletionResult, ProviderStatus
+from backend.app.providers.types import (
+    ChatCompletionRequest,
+    ChatCompletionResult,
+    ProviderStatus,
+    StreamChunk,
+)
 
 
 class ProviderRouter:
@@ -40,6 +47,15 @@ class ProviderRouter:
     ) -> ChatCompletionResult:
         provider = self.get_provider(provider_name)
         return provider.complete(request)
+
+    def complete_stream(
+        self,
+        request: ChatCompletionRequest,
+        *,
+        provider_name: str | None = None,
+    ) -> Iterator[StreamChunk]:
+        provider = self.get_provider(provider_name)
+        yield from provider.complete_stream(request)
 
 
 _router: ProviderRouter | None = None

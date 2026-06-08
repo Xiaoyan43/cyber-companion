@@ -1731,3 +1731,45 @@
 不要改动的边界：
 
 - `ChatProvider` 接口未改；仅 DeepSeek HTTP 层性能优化。
+
+## 2026-06-09 - Session 33 (Streaming S1 — backend `/chat/stream`)
+
+本次完成：
+
+- **S1 — Backend streaming provider + `POST /chat/stream`**
+  - `ChatProvider.complete_stream()`：产出 `("delta", str)` 与末尾 `("usage", TokenUsage)`；默认实现整段 fallback。
+  - `DeepSeekProvider`：`stream=true` + `stream_options.include_usage`；逐块 yield content；末块取 usage，否则按累积文本估算；复用常驻 httpx client。
+  - `MockProvider`：两段 delta + usage，便于测 SSE 序列。
+  - `ProviderRouter.complete_stream()` 委托各 provider。
+  - `POST /chat/stream` → `text/event-stream`：前置与 `/chat/complete` 一致；LLM 路径边收边发 `delta` SSE，流结束后 parse、persist、M2、summary，再发 `done` meta；本地决策/预算拦截单 delta + done；中途错误发 `error` 且不半持久化。
+  - `/chat/complete` 未改，作兜底。
+  - 测试：`backend/tests/test_chat_stream.py`（SSE 序列、单次持久化、M2、预算拦截、流中断不持久化、DeepSeek stream mock）。
+
+下次接着做：
+
+- **S2** — 前端消费 `/chat/stream`，实时打字；TTS 仍等全文（见 `docs/PHASE_STREAMING.md`）。
+
+已知问题：
+
+- 结构化 JSON persona 输出与流式尚未对齐（PHASE_STREAMING out of scope）。
+- OpenAI/local placeholder 的 `complete_stream` 走基类整段 fallback，调用仍会抛 `ProviderNotConfiguredError`。
+
+相关文件：
+
+- `backend/app/providers/base.py`
+- `backend/app/providers/types.py`
+- `backend/app/providers/deepseek.py`
+- `backend/app/providers/mock.py`
+- `backend/app/providers/router.py`
+- `backend/app/main.py`
+- `backend/tests/test_chat_stream.py`
+- `docs/PHASE_STREAMING.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed — **138** backend tests; frontend `tsc --noEmit` passed.
+- `curl -N POST /chat/stream`（mock）：先 `delta` 再 `done`，meta 含 provider/usage/cost。
+
+不要改动的边界：
+
+- 未改前端（S2 再做）；未改 `/chat/complete` 行为；未改 behavior/memory/provider 语义。

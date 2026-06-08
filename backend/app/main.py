@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
 import base64
+import json
+from collections.abc import Iterator
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,7 +35,8 @@ from backend.app.tts.router import get_tts_router, reset_tts_router
 from backend.app.tts.types import SynthesisRequest
 from backend.app.providers.exceptions import ProviderError
 from backend.app.providers.router import get_provider_router, reset_provider_router
-from backend.app.providers.types import ChatCompletionRequest, ChatMessage
+from backend.app.providers.cost import estimate_cost
+from backend.app.providers.types import ChatCompletionRequest, ChatCompletionResult, ChatMessage
 from backend.app.schemas import (
     BehaviorDecisionSchema,
     BehaviorEvaluateRequest,
@@ -682,4 +685,273 @@ def chat_complete(request: ChatCompleteRequest) -> ChatCompleteResponse:
         avatar_state=avatar_state,
         decision=final_decision,
         should_call_llm=called_llm,
+    )
+
+
+def _sse_data(payload: dict[str, object]) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _chat_stream_done_meta(
+    result: ChatCompletionResult,
+    *,
+    avatar_state: str,
+    decision: str,
+    should_call_llm: bool,
+) -> dict[str, object]:
+    return {
+        "provider": result.provider,
+        "model": result.model,
+        "decision": decision,
+        "avatar_state": avatar_state,
+        "should_call_llm": should_call_llm,
+        "usage": {
+            "input_tokens": result.usage.input_tokens,
+            "output_tokens": result.usage.output_tokens,
+            "total_tokens": result.usage.total_tokens,
+        },
+        "cost": {
+            "input_usd": result.cost.input_usd,
+            "output_usd": result.cost.output_usd,
+            "total_usd": result.cost.total_usd,
+            "pricing_source": result.cost.pricing_source,
+        },
+    }
+
+
+def _finalize_streamed_turn(
+    store,
+    budget,
+    *,
+    user_input: str,
+    accumulated_text: str,
+    provider_name: str,
+    model: str,
+    usage,
+    mock: bool,
+    decision: str,
+    avatar_state: str,
+    should_call_llm: bool,
+) -> ChatCompletionResult:
+    cost = estimate_cost(model, usage)
+    result = ChatCompletionResult(
+        provider=provider_name,
+        model=model,
+        content=accumulated_text,
+        usage=usage,
+        cost=cost,
+        mock=mock,
+    )
+    parsed = parse_structured_assistant_response(result.content)
+    final_avatar_state = parsed.avatar_state or avatar_state
+    final_decision = parsed.decision or decision
+    final_content = parsed.content
+    result = ChatCompletionResult(
+        provider=result.provider,
+        model=result.model,
+        content=final_content,
+        usage=result.usage,
+        cost=result.cost,
+        mock=result.mock,
+    )
+    saved_ids = persist_chat_turn(
+        store,
+        [ChatMessageSchema(role="user", content=user_input)],
+        result,
+        decision=final_decision,
+        avatar_state=final_avatar_state,
+        should_call_llm=should_call_llm,
+    )
+    user_message_id = saved_ids[0] if user_input.strip() and saved_ids else None
+    maybe_write_memories_from_turn(
+        store,
+        user_input=user_input,
+        source_message_id=user_message_id,
+        budget=budget,
+    )
+    maybe_update_conversation_summary(store, budget=budget)
+    return ChatCompletionResult(
+        provider=result.provider,
+        model=result.model,
+        content=result.content,
+        usage=result.usage,
+        cost=result.cost,
+        mock=result.mock,
+    )
+
+
+@app.post(
+    "/chat/stream",
+    response_model=None,
+    responses={
+        400: {"model": ErrorResponse},
+        502: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+)
+def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
+    router = get_provider_router()
+    store = get_memory_store()
+    budget = load_budget_config()
+
+    try:
+        user_input = extract_latest_user_input(
+            [ChatMessage(role=message.role, content=message.content) for message in request.messages]
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail={"error": str(error)}) from error
+
+    decision = evaluate_behavior(
+        store,
+        BehaviorEvent(event_type="user_message", user_input=user_input),
+    )
+
+    def event_generator() -> Iterator[str]:
+        final_decision = decision.decision
+        called_llm = False
+        avatar_state = decision.avatar_state
+        result: ChatCompletionResult | None = None
+
+        try:
+            if decision.should_call_llm:
+                try:
+                    target_model = router.get_provider(request.provider).status().model
+                except ProviderError as error:
+                    yield _sse_data({"type": "error", "message": error.message})
+                    return
+
+                gate = evaluate_llm_budget_gate(store, budget, target_model=target_model)
+                if not gate.allowed:
+                    result = build_budget_block_completion(gate.block_line or "预算用完了，先省着点。")
+                    avatar_state = "annoyed"
+                    final_decision = "refuse"
+                    yield _sse_data({"type": "delta", "text": result.content})
+                    saved_ids = persist_chat_turn(
+                        store,
+                        [ChatMessageSchema(role="user", content=user_input)],
+                        result,
+                        decision=final_decision,
+                        avatar_state=avatar_state,
+                        should_call_llm=False,
+                    )
+                    user_message_id = saved_ids[0] if user_input.strip() and saved_ids else None
+                    maybe_write_memories_from_turn(
+                        store,
+                        user_input=user_input,
+                        source_message_id=user_message_id,
+                        budget=budget,
+                    )
+                    maybe_update_conversation_summary(store, budget=budget)
+                    yield _sse_data(
+                        {
+                            "type": "done",
+                            "meta": _chat_stream_done_meta(
+                                result,
+                                avatar_state=avatar_state,
+                                decision=final_decision,
+                                should_call_llm=False,
+                            ),
+                        },
+                    )
+                    return
+
+                built = build_provider_context(
+                    store,
+                    user_input=user_input,
+                    budget=budget,
+                    behavior=decision,
+                )
+                completion_request = ChatCompletionRequest(
+                    messages=built.messages,
+                    max_output_tokens=min(request.max_output_tokens, budget.max_output_tokens_per_turn),
+                )
+
+                provider = router.get_provider(request.provider)
+                provider_status = provider.status()
+                accumulated_parts: list[str] = []
+                stream_usage = None
+
+                for chunk_kind, chunk_value in router.complete_stream(
+                    completion_request,
+                    provider_name=request.provider,
+                ):
+                    if chunk_kind == "delta":
+                        accumulated_parts.append(chunk_value)
+                        yield _sse_data({"type": "delta", "text": chunk_value})
+                    elif chunk_kind == "usage":
+                        stream_usage = chunk_value
+
+                if stream_usage is None:
+                    yield _sse_data({"type": "error", "message": "Provider stream ended without usage."})
+                    return
+
+                accumulated_text = "".join(accumulated_parts)
+                result = _finalize_streamed_turn(
+                    store,
+                    budget,
+                    user_input=user_input,
+                    accumulated_text=accumulated_text,
+                    provider_name=provider_status.name,
+                    model=provider_status.model,
+                    usage=stream_usage,
+                    mock=provider_status.name == "mock",
+                    decision=decision.decision,
+                    avatar_state=(
+                        "talking" if decision.decision in {"reply", "interrupt"} else decision.avatar_state
+                    ),
+                    should_call_llm=True,
+                )
+                called_llm = True
+                parsed = parse_structured_assistant_response(accumulated_text)
+                final_decision = parsed.decision or decision.decision
+                avatar_state = parsed.avatar_state or (
+                    "talking" if decision.decision in {"reply", "interrupt"} else decision.avatar_state
+                )
+            else:
+                result = build_local_completion(decision, user_input=user_input)
+                avatar_state = decision.avatar_state
+                yield _sse_data({"type": "delta", "text": result.content})
+                saved_ids = persist_chat_turn(
+                    store,
+                    [ChatMessageSchema(role="user", content=user_input)],
+                    result,
+                    decision=final_decision,
+                    avatar_state=avatar_state,
+                    should_call_llm=False,
+                )
+                user_message_id = saved_ids[0] if user_input.strip() and saved_ids else None
+                maybe_write_memories_from_turn(
+                    store,
+                    user_input=user_input,
+                    source_message_id=user_message_id,
+                    budget=budget,
+                )
+                maybe_update_conversation_summary(store, budget=budget)
+
+            if result is None:
+                yield _sse_data({"type": "error", "message": "No completion result produced."})
+                return
+
+            yield _sse_data(
+                {
+                    "type": "done",
+                    "meta": _chat_stream_done_meta(
+                        result,
+                        avatar_state=avatar_state,
+                        decision=final_decision,
+                        should_call_llm=called_llm,
+                    ),
+                },
+            )
+        except ProviderError as error:
+            yield _sse_data({"type": "error", "message": error.message})
+            return
+        except Exception as error:
+            yield _sse_data({"type": "error", "message": str(error)})
+            return
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

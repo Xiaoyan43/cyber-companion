@@ -1,9 +1,12 @@
+from collections.abc import Iterator
+
 from backend.app.providers.base import ChatProvider
 from backend.app.providers.cost import estimate_cost, estimate_usage
 from backend.app.providers.types import (
     ChatCompletionRequest,
     ChatCompletionResult,
     ProviderStatus,
+    StreamChunk,
 )
 
 
@@ -33,6 +36,15 @@ class MockProvider(ChatProvider):
             cost=cost,
             mock=True,
         )
+
+    def complete_stream(self, request: ChatCompletionRequest) -> Iterator[StreamChunk]:
+        result = self.complete(request)
+        content = result.content
+        midpoint = max(1, len(content) // 2)
+        yield ("delta", content[:midpoint])
+        if midpoint < len(content):
+            yield ("delta", content[midpoint:])
+        yield ("usage", result.usage)
 
     def status(self) -> ProviderStatus:
         return ProviderStatus(

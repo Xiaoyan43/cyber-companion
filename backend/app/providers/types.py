@@ -41,6 +41,9 @@ class ChatCompletionResult:
     mock: bool = False
 
 
+StreamChunk = tuple[Literal["delta"], str] | tuple[Literal["usage"], TokenUsage]
+
+
 @dataclass(frozen=True)
 class ProviderStatus:
     name: str
