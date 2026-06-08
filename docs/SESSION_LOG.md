@@ -1667,3 +1667,38 @@
 不要改动的边界：
 
 - `TextToSpeechProvider` 抽象方法未改；STT/chat/memory/behavior 未碰。
+
+## 2026-06-09 - Session 31 (Frontend progressive TTS via /tts/stream)
+
+本次完成：
+
+- `useTextToSpeech.speakReply`：先 `textForSpeech` 清洗；`probeTtsStream` + `new Audio(streamUrl)` 渐进播放；204/探测失败不进 speaking、返回 `false`；播放失败回退 `/tts/synthesize` base64。
+- 保留竞态契约：`onSpeakingStart` 在 `play` 前、`onSpeakingEnd` 在 ended/error、`speakingRef` 守卫、返回 boolean；`AbortController` + `audio.pause()` 打断流。
+- `api/tts.ts`：`buildTtsStreamUrl`、`probeTtsStream`（GET 探测，不支持 HEAD）；`api/tts.test.ts` 编码与探测用例。
+- `scripts/ui_verify.mjs`：TTS 竞态/拒绝用例改拦 `**/tts/stream**`。
+
+下次接着做：
+
+- 本机 Doubao 流式 E2E 手动验首包延迟；可选去掉探测双请求（需后端 HEAD 或专用 evaluate）。
+
+已知问题：
+
+- 流式前先 GET 探测再 `Audio` 拉流，豆包会打两次请求；`ui_verify` 的 `cloud tts blocked by budget` 仍依赖 `allow_cloud_tts: false` 配置。
+
+相关文件：
+
+- `frontend/src/voice/useTextToSpeech.ts`
+- `frontend/src/api/tts.ts`
+- `frontend/src/api/tts.test.ts`
+- `scripts/ui_verify.mjs`
+
+测试结果：
+
+- `npm run check`: passed — **130** backend tests; frontend `tsc --noEmit` passed.
+- `npm run test --workspace frontend`: **14** passed.
+- `npm run build:frontend`: passed.
+- `ui_verify`（API `8000` + frontend `5174`）：竞态/流式延迟用例通过；需 `CYBER_COMPANION_TTS_MODE=mock` 时 budget 检查与旧脚本一致。
+
+不要改动的边界：
+
+- `App.tsx` epoch / `deferIdleFallback` 未改；`/tts/synthesize` 作兜底保留。

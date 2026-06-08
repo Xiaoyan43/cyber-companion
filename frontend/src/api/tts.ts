@@ -29,6 +29,47 @@ export type TTSSynthesizeResponse = {
   mock?: boolean;
 };
 
+export function getTtsApiBaseUrl(): string {
+  return apiBaseUrl;
+}
+
+export function buildTtsStreamUrl(payload: {
+  text: string;
+  decision?: string;
+  avatarState?: string;
+  force?: boolean;
+}): string {
+  const params = new URLSearchParams();
+  params.set("text", payload.text);
+  if (payload.decision) {
+    params.set("decision", payload.decision);
+  }
+  if (payload.avatarState) {
+    params.set("avatar_state", payload.avatarState);
+  }
+  if (payload.force) {
+    params.set("force", "true");
+  }
+  return `${apiBaseUrl}/tts/stream?${params.toString()}`;
+}
+
+export type TtsStreamProbeResult = "ok" | "skip" | "error";
+
+export async function probeTtsStream(
+  url: string,
+  signal?: AbortSignal,
+): Promise<TtsStreamProbeResult> {
+  const response = await fetch(url, { method: "GET", signal });
+  if (response.status === 204) {
+    return "skip";
+  }
+  if (!response.ok) {
+    return "error";
+  }
+  await response.body?.cancel();
+  return "ok";
+}
+
 export async function fetchTtsStatus(): Promise<TTSStatusResponse> {
   const response = await fetch(`${apiBaseUrl}/tts/status`);
 

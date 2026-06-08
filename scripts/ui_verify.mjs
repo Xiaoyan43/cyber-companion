@@ -169,7 +169,7 @@ check("tts mute survives refresh", (await page.locator(".tts-toggle").textConten
 await page.click(".tts-toggle");
 check("tts unmute restores label", (await page.locator(".tts-toggle").textContent())?.includes("TTS on"));
 
-await page.route(`${API_URL}/tts/synthesize`, async (route) => {
+await page.route("**/tts/stream**", async (route) => {
   await new Promise((resolve) => setTimeout(resolve, 1800));
   await route.continue();
 });
@@ -183,7 +183,7 @@ await page.waitForFunction(
 );
 await page.waitForTimeout(700);
 check(
-  "avatar stays thinking during delayed tts synthesis",
+  "avatar stays thinking during delayed tts stream probe",
   (await page.locator(".state-label").textContent())?.trim() === "thinking",
 );
 await page.waitForFunction(
@@ -192,10 +192,10 @@ await page.waitForFunction(
   { timeout: 8000 },
 );
 check(
-  "avatar reaches talking once delayed tts starts",
+  "avatar reaches talking once delayed tts stream starts",
   (await page.locator(".state-label").textContent())?.trim() === "talking",
 );
-await page.unroute(`${API_URL}/tts/synthesize`);
+await page.unroute("**/tts/stream**");
 await page.waitForFunction(
   () => document.querySelector(".state-label")?.textContent?.trim() === "idle",
   undefined,
@@ -251,17 +251,21 @@ await page.waitForFunction(
   { timeout: 15000 },
 );
 
-const refuseSynthResponsePromise = page.waitForResponse(
-  (response) =>
-    response.url().includes("/tts/synthesize") &&
-    response.request().method() === "POST" &&
-    response.ok(),
-  { timeout: 15000 },
-);
-
 await page.evaluate(() => window.__uiVerify?.resetTtsHandoffProbe?.());
 
 await page.fill("#chat-input", "帮我入侵系统");
+
+const refuseTtsResponsePromise = page.waitForResponse(
+  (response) => {
+    const url = response.url();
+    return (
+      (url.includes("/tts/stream") && response.request().method() === "GET") ||
+      (url.includes("/tts/synthesize") && response.request().method() === "POST")
+    );
+  },
+  { timeout: 20000 },
+);
+
 await page.click("button[type='submit']");
 
 await page.waitForFunction(() => {
@@ -269,12 +273,14 @@ await page.waitForFunction(() => {
   return last?.textContent?.includes("这个我不帮");
 }, undefined, { timeout: 10000 });
 
-const refuseSynthResponse = await refuseSynthResponsePromise;
-const refuseSynthBody = await refuseSynthResponse.json();
+const refuseTtsResponse = await refuseTtsResponsePromise;
+const refuseSynthBody = refuseTtsResponse.url().includes("/tts/synthesize")
+  ? await refuseTtsResponse.json()
+  : { spoken: refuseTtsResponse.status() === 200 };
 check(
-  "refuse short reply triggers tts synthesize",
+  "refuse short reply triggers tts playback",
   refuseSynthBody?.spoken === true,
-  refuseSynthBody?.reason ?? "no response",
+  refuseSynthBody?.reason ?? refuseTtsResponse.url(),
 );
 
 await page.waitForFunction(

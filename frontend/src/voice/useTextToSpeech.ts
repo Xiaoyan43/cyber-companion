@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchTtsStatus, synthesizeSpeech } from "../api/tts";
+import {
+  buildTtsStreamUrl,
+  fetchTtsStatus,
+  probeTtsStream,
+  synthesizeSpeech,
+} from "../api/tts";
 import { primeAudioPlayback } from "./audioUnlock";
 import { textForSpeech } from "./speechText";
 
@@ -33,6 +38,75 @@ function writeMutedPreference(muted: boolean) {
   }
 }
 
+function playAudioClip(
+  mimeType: string,
+  audioBase64: string,
+  audioRef: React.MutableRefObject<HTMLAudioElement | null>,
+  sessionId: number,
+  sessionRef: React.MutableRefObject<number>,
+): Promise<boolean> {
+  if (sessionId !== sessionRef.current) {
+    return Promise.resolve(false);
+  }
+
+  return new Promise((resolve) => {
+    primeAudioPlayback();
+    const audio = new Audio(`data:${mimeType};base64,${audioBase64}`);
+    audio.volume = 1;
+    audioRef.current = audio;
+
+    const finish = (played: boolean) => {
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+      }
+      resolve(played && sessionId === sessionRef.current);
+    };
+
+    audio.addEventListener("ended", () => finish(true), { once: true });
+    audio.addEventListener("error", () => finish(false), { once: true });
+    void audio.play().catch(() => finish(false));
+  });
+}
+
+function playStreamingAudio(
+  streamUrl: string,
+  audioRef: React.MutableRefObject<HTMLAudioElement | null>,
+  sessionId: number,
+  sessionRef: React.MutableRefObject<number>,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  if (sessionId !== sessionRef.current) {
+    return Promise.resolve(false);
+  }
+
+  return new Promise((resolve) => {
+    primeAudioPlayback();
+    const audio = new Audio(streamUrl);
+    audio.volume = 1;
+    audioRef.current = audio;
+
+    const finish = (played: boolean) => {
+      signal?.removeEventListener("abort", onAbort);
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+      }
+      resolve(played && sessionId === sessionRef.current);
+    };
+
+    const onAbort = () => {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+      finish(false);
+    };
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+    audio.addEventListener("ended", () => finish(true), { once: true });
+    audio.addEventListener("error", () => finish(false), { once: true });
+    void audio.play().catch(() => finish(false));
+  });
+}
+
 export function useTextToSpeech({
   onSpeakingStart,
   onSpeakingEnd,
@@ -46,10 +120,23 @@ export function useTextToSpeech({
   const [lastError, setLastError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const speakingRef = useRef(false);
+  const ttsInFlightRef = useRef(false);
+  const streamAbortRef = useRef<AbortController | null>(null);
+  const playbackSessionRef = useRef(0);
   const maxSpeechCharsRef = useRef(120);
   const onSpeakingStartRef = useRef(onSpeakingStart);
   const onSpeakingEndRef = useRef(onSpeakingEnd);
   const onErrorRef = useRef(onError);
+  const enabledRef = useRef(enabled);
+  const mutedRef = useRef(muted);
+
+  useEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
+
+  useEffect(() => {
+    mutedRef.current = muted;
+  }, [muted]);
 
   useEffect(() => {
     onSpeakingStartRef.current = onSpeakingStart;
@@ -99,14 +186,23 @@ export function useTextToSpeech({
     };
   }, []);
 
-  const stopSpeaking = useCallback((notifyEnd = false) => {
-    const wasSpeaking = speakingRef.current;
+  const clearCurrentAudio = useCallback(() => {
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+
     const audio = audioRef.current;
     if (audio) {
       audio.pause();
-      audio.currentTime = 0;
+      audio.removeAttribute("src");
+      audio.load();
       audioRef.current = null;
     }
+  }, []);
+
+  const stopSpeaking = useCallback((notifyEnd = false) => {
+    playbackSessionRef.current += 1;
+    const wasSpeaking = speakingRef.current;
+    clearCurrentAudio();
 
     speakingRef.current = false;
     setSpeaking(false);
@@ -114,13 +210,18 @@ export function useTextToSpeech({
     if (notifyEnd && wasSpeaking) {
       onSpeakingEndRef.current?.();
     }
-  }, []);
+  }, [clearCurrentAudio]);
 
   useEffect(
     () => () => {
+      playbackSessionRef.current += 1;
+      streamAbortRef.current?.abort();
+      streamAbortRef.current = null;
       const audio = audioRef.current;
       if (audio) {
         audio.pause();
+        audio.removeAttribute("src");
+        audio.load();
         audioRef.current = null;
       }
       speakingRef.current = false;
@@ -140,79 +241,145 @@ export function useTextToSpeech({
     });
   }, [stopSpeaking]);
 
-  const speakReply = useCallback(
-    async ({ text, decision, avatarState }: SpeakReplyInput) => {
-      const speechText = textForSpeech(text, maxSpeechCharsRef.current);
-      if (!enabled || muted || !speechText || speakingRef.current) {
+  const playBufferedFallback = useCallback(
+    async (
+      speechText: string,
+      decision: string | undefined,
+      avatarState: string | undefined,
+      sessionId: number,
+    ): Promise<boolean> => {
+      const result = await synthesizeSpeech({
+        text: speechText,
+        decision,
+        avatarState,
+      });
+
+      if (!enabledRef.current || mutedRef.current || sessionId !== playbackSessionRef.current) {
         return false;
       }
 
+      if (!result.spoken || !result.audio_base64 || !result.mime_type) {
+        const message = result.spoken
+          ? "TTS returned no audio."
+          : `TTS skipped: ${result.reason}`;
+        setLastError(message);
+        onErrorRef.current?.(message);
+        return false;
+      }
+
+      return playAudioClip(
+        result.mime_type,
+        result.audio_base64,
+        audioRef,
+        sessionId,
+        playbackSessionRef,
+      );
+    },
+    [],
+  );
+
+  const speakReply = useCallback(
+    async ({ text, decision, avatarState }: SpeakReplyInput) => {
+      const speechText = textForSpeech(text, maxSpeechCharsRef.current);
+      if (!enabledRef.current || mutedRef.current || !speechText) {
+        return false;
+      }
+
+      if (speakingRef.current || ttsInFlightRef.current) {
+        return false;
+      }
+
+      ttsInFlightRef.current = true;
       setLastError(null);
 
+      playbackSessionRef.current += 1;
+      const sessionId = playbackSessionRef.current;
+      const abortController = new AbortController();
+      streamAbortRef.current = abortController;
+
       try {
-        const result = await synthesizeSpeech({
+        clearCurrentAudio();
+
+        const streamUrl = buildTtsStreamUrl({
           text: speechText,
           decision,
           avatarState,
         });
 
-        if (!result.spoken || !result.audio_base64 || !result.mime_type) {
-          const message = result.spoken
-            ? "TTS returned no audio."
-            : `TTS skipped: ${result.reason}`;
+        let probeResult: Awaited<ReturnType<typeof probeTtsStream>>;
+        try {
+          probeResult = await probeTtsStream(streamUrl, abortController.signal);
+        } catch (error) {
+          if (abortController.signal.aborted || sessionId !== playbackSessionRef.current) {
+            return false;
+          }
+          const message = error instanceof Error ? error.message : "TTS stream probe failed.";
           setLastError(message);
           onErrorRef.current?.(message);
           return false;
         }
 
-        if (audioRef.current) {
-          stopSpeaking();
+        if (!enabledRef.current || mutedRef.current || sessionId !== playbackSessionRef.current) {
+          return false;
+        }
+
+        if (probeResult === "skip") {
+          return false;
+        }
+
+        if (probeResult === "error") {
+          const message = "TTS stream request failed.";
+          setLastError(message);
+          onErrorRef.current?.(message);
+          return false;
         }
 
         onSpeakingStartRef.current?.();
         speakingRef.current = true;
         setSpeaking(true);
 
-        primeAudioPlayback();
-        const audio = new Audio(`data:${result.mime_type};base64,${result.audio_base64}`);
-        audio.volume = 1;
-        audioRef.current = audio;
+        let played = await playStreamingAudio(
+          streamUrl,
+          audioRef,
+          sessionId,
+          playbackSessionRef,
+          abortController.signal,
+        );
 
-        const finish = (notifyEnd: boolean) => {
-          if (audioRef.current === audio) {
-            audioRef.current = null;
-          }
-          speakingRef.current = false;
-          setSpeaking(false);
-          if (notifyEnd) {
-            onSpeakingEndRef.current?.();
-          }
-        };
-
-        audio.addEventListener("ended", () => finish(true), { once: true });
-        audio.addEventListener("error", () => finish(true), { once: true });
-
-        try {
-          await audio.play();
-        } catch (error) {
-          finish(false);
-          const message = error instanceof Error ? error.message : "TTS playback failed.";
-          setLastError(message);
-          onErrorRef.current?.(message);
-          return false;
+        if (
+          !played &&
+          enabledRef.current &&
+          !mutedRef.current &&
+          sessionId === playbackSessionRef.current
+        ) {
+          clearCurrentAudio();
+          played = await playBufferedFallback(speechText, decision, avatarState, sessionId);
         }
 
-        return true;
+        if (sessionId === playbackSessionRef.current) {
+          speakingRef.current = false;
+          setSpeaking(false);
+          onSpeakingEndRef.current?.();
+        }
+
+        return played;
       } catch (error) {
         const message = error instanceof Error ? error.message : "TTS playback failed.";
         setLastError(message);
         onErrorRef.current?.(message);
-        speakingRef.current = false;
-        setSpeaking(false);
+        if (sessionId === playbackSessionRef.current) {
+          speakingRef.current = false;
+          setSpeaking(false);
+        }
         return false;
+      } finally {
+        if (streamAbortRef.current === abortController) {
+          streamAbortRef.current = null;
+        }
+        ttsInFlightRef.current = false;
       }
     },
-    [enabled, muted, stopSpeaking],
+    [clearCurrentAudio, playBufferedFallback],
   );
 
   return {
