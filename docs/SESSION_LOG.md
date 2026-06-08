@@ -1203,3 +1203,37 @@
 
 - Only edited `scripts/ui_verify.mjs` and `docs/SESSION_LOG.md`.
 - Did not touch backend/provider/memory/behavior/cost.
+
+## 2026-06-08 - Session 27
+
+本次完成：
+
+- **Low-mood avatar visual polish** (frontend-only, no state-machine changes):
+  - `idle` / `sleepy` / `annoyed`: one-shot enter keyframes (`pixel-enter-idle|sleepy|annoyed`) chained before loop animations for smoother cross-state handoff.
+  - Facial micro-expressions: idle periodic blink; sleepy droopy head + yawn mouth + dim stage; annoyed asymmetric squint, flat mouth, head tilt, counter-weight left arm.
+  - Stepped CSS transitions on eyes/mouth/head/body/stage filter so mood shifts read as pixel transitions, not hard swaps.
+
+下次接着做：
+
+- More trapped-in-box idle variety or other high-energy state polish (happy/angry/talking).
+- Pick next item from Claude review findings in `docs/TODO.md` (with owner tags).
+
+已知问题：
+
+- Mock TTS still returns silent WAV timed to text length, not real speech.
+
+相关文件：
+
+- `frontend/src/avatar/stateAnimations.css`
+- `frontend/src/components/PixelCharacter.css`
+- `docs/SESSION_LOG.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed; **79** backend tests passed; frontend `tsc --noEmit` passed.
+- `npm run build:frontend`: passed.
+
+不要改动的边界：
+
+- Only edited frontend CSS + `docs/SESSION_LOG.md`.
+- Did not change avatar state machine contract, backend, provider, memory, behavior, or cost.
