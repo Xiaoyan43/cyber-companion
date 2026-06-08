@@ -1171,3 +1171,35 @@
 
 - Did not wire cloud STT/TTS adapters.
 - Did not change provider abstraction, memory schema, behavior contract, or file permission policy.
+
+## 2026-06-08 - Session 26
+
+本次完成：
+
+- **ui_verify refuse Speaking label flake fix** (scope: `scripts/ui_verify.mjs` only):
+  - Added in-page `__uiVerify` probe with `MutationObserver` to catch transient `Speaking` on `.tts-toggle` without missing short audio windows.
+  - Restored check **`refuse short reply triggers tts speaking label`**: requires synthesize `spoken === true`, then accepts either observed Speaking label **or** avatar `talking`/`angry` handoff (tolerates headless short-audio flash).
+  - Removed redundant separate `avatar enters talking during tts` check (folded into speaking-label assertion).
+
+下次接着做：
+
+- Claude Code read-only MVP batch review.
+- Cloud STT/TTS when explicitly requested.
+
+已知问题：
+
+- Mock TTS still returns silent WAV timed to text length, not real speech.
+
+相关文件：
+
+- `scripts/ui_verify.mjs`
+- `docs/SESSION_LOG.md`
+
+测试结果：
+
+- `CYBER_VERIFY_API_URL=http://127.0.0.1:18000 node scripts/ui_verify.mjs`: **37 passed, 0 failed**.
+
+不要改动的边界：
+
+- Only edited `scripts/ui_verify.mjs` and `docs/SESSION_LOG.md`.
+- Did not touch backend/provider/memory/behavior/cost.

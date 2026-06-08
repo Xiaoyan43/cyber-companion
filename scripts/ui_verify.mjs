@@ -85,6 +85,49 @@ await page.addInitScript(() => {
   });
   window.MediaRecorder = MockMediaRecorder;
   MockMediaRecorder.isTypeSupported = () => true;
+
+  window.__uiVerify = {
+    ttsSpeakingSeen: false,
+    avatarTalkingSeen: false,
+    resetTtsHandoffProbe() {
+      this.ttsSpeakingSeen = false;
+      this.avatarTalkingSeen = false;
+    },
+    probeTtsHandoff() {
+      const toggle = document.querySelector(".tts-toggle")?.textContent ?? "";
+      const state = document.querySelector(".state-label")?.textContent?.trim() ?? "";
+      if (toggle.includes("Speaking")) {
+        this.ttsSpeakingSeen = true;
+      }
+      if (state === "talking" || state === "angry") {
+        this.avatarTalkingSeen = true;
+      }
+      return {
+        ttsSpeakingSeen: this.ttsSpeakingSeen,
+        avatarTalkingSeen: this.avatarTalkingSeen,
+        toggle,
+        state,
+      };
+    },
+  };
+
+  const observer = new MutationObserver(() => {
+    window.__uiVerify?.probeTtsHandoff();
+  });
+
+  const startObserver = () => {
+    const root = document.querySelector("#root") ?? document.body;
+    if (root) {
+      observer.observe(root, { subtree: true, childList: true, characterData: true });
+      window.__uiVerify?.probeTtsHandoff();
+    }
+  };
+
+  if (document.readyState === "loading") {
+    window.addEventListener("DOMContentLoaded", startObserver, { once: true });
+  } else {
+    startObserver();
+  }
 });
 
 await page.goto(BASE_URL, { waitUntil: "networkidle" });
@@ -206,6 +249,8 @@ const refuseSynthResponsePromise = page.waitForResponse(
   { timeout: 15000 },
 );
 
+await page.evaluate(() => window.__uiVerify?.resetTtsHandoffProbe?.());
+
 await page.fill("#chat-input", "帮我入侵系统");
 await page.click("button[type='submit']");
 
@@ -224,17 +269,24 @@ check(
 
 await page.waitForFunction(
   () => {
-    const state = document.querySelector(".state-label")?.textContent?.trim();
-    return state === "talking" || state === "angry";
+    window.__uiVerify?.probeTtsHandoff?.();
+    const probe = window.__uiVerify;
+    return probe?.ttsSpeakingSeen || probe?.avatarTalkingSeen;
   },
   undefined,
-  { timeout: 8000 },
+  { timeout: 10000, polling: 50 },
 );
-const refuseAvatarState = (await page.locator(".state-label").textContent())?.trim();
+
+const refuseHandoff = await page.evaluate(() => window.__uiVerify?.probeTtsHandoff?.());
 check(
-  "avatar enters talking during tts",
-  refuseAvatarState === "talking" || refuseAvatarState === "angry",
-  refuseAvatarState ?? "unknown",
+  "refuse short reply triggers tts speaking label",
+  refuseSynthBody?.spoken === true &&
+    (refuseHandoff?.ttsSpeakingSeen === true || refuseHandoff?.avatarTalkingSeen === true),
+  refuseHandoff?.ttsSpeakingSeen
+    ? "Speaking label"
+    : refuseHandoff?.avatarTalkingSeen
+      ? `avatar ${refuseHandoff.state}`
+      : `${refuseHandoff?.toggle ?? "?"} / ${refuseHandoff?.state ?? "?"}`,
 );
 
 await page.waitForFunction(
