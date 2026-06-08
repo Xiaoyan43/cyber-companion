@@ -6,7 +6,10 @@ from fastapi.testclient import TestClient
 from backend.app.main import app
 from backend.app.memory.budget import BudgetConfig
 from backend.app.memory.store import MemoryStore, reset_memory_store
-from backend.app.memory.write_policy import maybe_write_memories_from_turn
+from backend.app.memory.write_policy import (
+    extract_memory_candidates,
+    maybe_write_memories_from_turn,
+)
 from backend.app.providers.router import reset_provider_router
 
 
@@ -22,6 +25,10 @@ def reset_singletons() -> None:
 @pytest.fixture
 def store(tmp_path: Path) -> MemoryStore:
     return MemoryStore(db_path=tmp_path / "write-policy.db")
+
+
+def _profile_memories(store: MemoryStore):
+    return store.list_memories(type="stable_profile", limit=20)
 
 
 def test_explicit_remember_writes_reminder(store: MemoryStore) -> None:
@@ -54,6 +61,8 @@ def test_job_progress_requires_action_not_bare_keyword(store: MemoryStore) -> No
     )
     assert len(written) == 1
     assert written[0].type == "job_progress"
+    assert written[0].content == "投递: 两份后端简历"
+    assert "我今天" not in written[0].content
 
 
 def test_low_value_input_writes_nothing(store: MemoryStore) -> None:
@@ -63,7 +72,7 @@ def test_low_value_input_writes_nothing(store: MemoryStore) -> None:
 def test_similar_memory_updates_instead_of_duplicating(store: MemoryStore) -> None:
     store.create_memory(
         type="job_progress",
-        content="我今天投递了两份后端简历",
+        content="投递: 两份后端简历",
         tags=["job-search"],
         importance=0.6,
         confidence=0.65,
@@ -77,8 +86,55 @@ def test_similar_memory_updates_instead_of_duplicating(store: MemoryStore) -> No
 
     assert len(written) == 1
     assert store.list_memories(type="job_progress", limit=10) == [written[0]]
-    assert "周四面试" in written[0].content
+    assert written[0].content == "投递: 两份后端简历"
     assert written[0].confidence >= 0.65
+
+
+@pytest.mark.parametrize(
+    "user_input",
+    [
+        "我是说你别拖了",
+        "我是不是该改简历",
+        "i am tired",
+    ],
+)
+def test_profile_loose_triggers_do_not_write(store: MemoryStore, user_input: str) -> None:
+    maybe_write_memories_from_turn(store, user_input=user_input, source_message_id=None)
+    assert _profile_memories(store) == []
+
+
+def test_profile_explicit_name_still_writes(store: MemoryStore) -> None:
+    written = maybe_write_memories_from_turn(
+        store,
+        user_input="我叫张伟",
+        source_message_id=None,
+    )
+
+    assert len(written) == 1
+    assert written[0].type == "stable_profile"
+    assert "张伟" in written[0].content
+
+
+def test_preference_requires_imperative_anchor(store: MemoryStore) -> None:
+    assert extract_memory_candidates("我觉得你说话太冲了") == []
+
+    written = maybe_write_memories_from_turn(
+        store,
+        user_input="请说话简短一点",
+        source_message_id=None,
+    )
+    assert len(written) == 1
+    assert written[0].type == "behavior_preference"
+    assert "简短" in written[0].content
+
+
+def test_project_below_confidence_threshold_is_skipped(store: MemoryStore) -> None:
+    assert extract_memory_candidates("我在做一个赛博伴侣项目") == []
+    assert maybe_write_memories_from_turn(
+        store,
+        user_input="我在做一个赛博伴侣项目",
+        source_message_id=None,
+    ) == []
 
 
 def test_auto_memory_write_can_be_disabled(store: MemoryStore) -> None:

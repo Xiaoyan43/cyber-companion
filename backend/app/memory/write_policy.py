@@ -9,6 +9,9 @@ from backend.app.memory.database import MemoryRecord
 from backend.app.memory.retrieval import tokenize
 from backend.app.memory.store import MemoryStore
 
+# Writes below this confidence are dropped. Explicit user cues (remember, name,
+# imperative preference) sit at >= 0.75; inferred project cues stay at 0.55 so
+# they do not auto-persist without stronger signals.
 _MIN_WRITE_CONFIDENCE = 0.6
 
 _REMEMBER_PATTERN = re.compile(
@@ -16,7 +19,7 @@ _REMEMBER_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _PROFILE_PATTERN = re.compile(
-    r"(?:我(?:叫|是)|i am|my name is)\s*([^，。！？!?\n]{2,60})",
+    r"(?:我叫|我的名字是|my name is|i'm called)\s*([^，。！？!?\n]{2,60})",
     re.IGNORECASE,
 )
 _PROJECT_PATTERN = re.compile(
@@ -24,8 +27,11 @@ _PROJECT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _PREFERENCE_PATTERN = re.compile(
-    r"(?:说话[别]?[太]?|回复[别]?[太]?|prefer|别对我)\s*([^，。！？!?\n]{3,80})",
-    re.IGNORECASE,
+    r"(?:"
+    r"^(?:请|希望你?|别(?:再)?)"
+    r"|(?:^|[。！？!?\s])i prefer(?: to)?"
+    r")\s*([^，。！？!?\n]{3,80})",
+    re.IGNORECASE | re.MULTILINE,
 )
 _JOB_TOPIC_PATTERN = re.compile(
     r"(?:求职|简历|面试|投递|offer|resume|\bjob\b)",
@@ -33,6 +39,20 @@ _JOB_TOPIC_PATTERN = re.compile(
 )
 _JOB_ACTION_PATTERN = re.compile(
     r"(?:投递|面试|改简历|sent|applied|interview|offer|follow[- ]?up)",
+    re.IGNORECASE,
+)
+_JOB_ACTION_TOPIC_PATTERN = re.compile(
+    r"(?:投递|sent|applied)(?:了)?(?:\d+份)?\s*([^，。！？!?\n]{2,40})",
+    re.IGNORECASE,
+)
+_JOB_INTERVIEW_TOPIC_PATTERN = re.compile(
+    r"(?:(?:约了|安排|scheduled)?\s*)?"
+    r"((?:周[一二三四五六日天]|明天|后天|下周|today|tomorrow)[^，。！？!?\n]{0,12})?"
+    r"\s*面试",
+    re.IGNORECASE,
+)
+_JOB_REVISE_TOPIC_PATTERN = re.compile(
+    r"改\s*([^，。！？!?\n]{2,30}简历)",
     re.IGNORECASE,
 )
 
@@ -84,6 +104,57 @@ def _find_similar_memory(store: MemoryStore, memory_type: str, content: str):
     return None
 
 
+def _normalize_job_action(action: str) -> str:
+    lowered = action.lower()
+    mapping = {
+        "sent": "sent",
+        "applied": "applied",
+        "interview": "interview",
+        "offer": "offer",
+        "follow-up": "follow-up",
+        "follow up": "follow-up",
+        "改简历": "改简历",
+        "投递": "投递",
+        "面试": "面试",
+    }
+    return mapping.get(lowered, action)
+
+
+def _build_job_progress_fact(text: str) -> str | None:
+    action_match = _JOB_ACTION_PATTERN.search(text)
+    if action_match is None:
+        return None
+
+    action = _normalize_job_action(action_match.group(0))
+    action_lower = action.lower()
+
+    if action in {"投递", "sent", "applied"}:
+        topic_match = _JOB_ACTION_TOPIC_PATTERN.search(text)
+        if topic_match:
+            topic = _clip_content(topic_match.group(1).strip(), limit=40)
+            if topic:
+                return f"{action}: {topic}"
+
+    if action in {"面试", "interview"}:
+        topic_match = _JOB_INTERVIEW_TOPIC_PATTERN.search(text)
+        if topic_match:
+            when = (topic_match.group(1) or "").strip()
+            topic = _clip_content(when or "scheduled", limit=40)
+            return f"{action}: {topic}"
+
+    if action == "改简历":
+        topic_match = _JOB_REVISE_TOPIC_PATTERN.search(text)
+        if topic_match:
+            topic = _clip_content(topic_match.group(1).strip(), limit=40)
+            return f"{action}: {topic}"
+
+    topic_match = _JOB_TOPIC_PATTERN.search(text)
+    if topic_match:
+        return f"{action}: {topic_match.group(0)}"
+
+    return None
+
+
 def extract_memory_candidates(user_input: str) -> list[MemoryWriteCandidate]:
     stripped = user_input.strip()
     if not stripped or is_low_value_input(stripped):
@@ -130,7 +201,7 @@ def extract_memory_candidates(user_input: str) -> list[MemoryWriteCandidate]:
                     type="project",
                     content=f"Project: {detail}",
                     importance=0.7,
-                    confidence=0.7,
+                    confidence=0.55,
                     tags=("project",),
                 )
             )
@@ -149,20 +220,18 @@ def extract_memory_candidates(user_input: str) -> list[MemoryWriteCandidate]:
                 )
             )
 
-    if (
-        not has_explicit_remember
-        and _JOB_TOPIC_PATTERN.search(stripped)
-        and _JOB_ACTION_PATTERN.search(stripped)
-    ):
-        candidates.append(
-            MemoryWriteCandidate(
-                type="job_progress",
-                content=_clip_content(stripped),
-                importance=0.7,
-                confidence=0.65,
-                tags=("job-search",),
+    if not has_explicit_remember:
+        job_fact = _build_job_progress_fact(stripped)
+        if job_fact and _JOB_TOPIC_PATTERN.search(stripped):
+            candidates.append(
+                MemoryWriteCandidate(
+                    type="job_progress",
+                    content=job_fact,
+                    importance=0.7,
+                    confidence=0.65,
+                    tags=("job-search",),
+                )
             )
-        )
 
     return [
         candidate

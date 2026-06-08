@@ -1335,3 +1335,36 @@
 
 - Did not change memory schema, behavior decision contract, provider abstraction, or file permission policy.
 - No extra LLM call for memory extraction in this slice.
+
+## 2026-06-08 - Session 30
+
+本次完成：
+
+- **M2 trigger false-positive fixes** (`write_policy.py` only)
+  - Profile: dropped loose `我是` / `i am`; kept `我叫` / `我的名字是` / `my name is` / `i'm called`.
+  - Preference: imperative anchors only (`请` / `希望你` / sentence-start `别` / `i prefer`).
+  - Job progress: store condensed `action: topic` facts via `_build_job_progress_fact`.
+  - Confidence gate: inferred `project` at 0.55 (below `_MIN_WRITE_CONFIDENCE=0.6`) is filtered; explicit cues still pass.
+  - Tests: profile negatives (`我是说你别拖了`, `我是不是该改简历`, `i am tired`), `我叫张伟` positive, preference/project gates.
+
+下次接着做：
+
+- M2 follow-up or `scripts/ui_verify.mjs` per `docs/HANDOFF.md`.
+
+已知问题：
+
+- Rule-based writer may still miss paraphrased facts; LLM extraction not implemented.
+
+相关文件：
+
+- `backend/app/memory/write_policy.py`
+- `backend/tests/test_memory_write_policy.py`
+- `docs/SESSION_LOG.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed; **98** backend tests passed.
+
+不要改动的边界：
+
+- Only touched `write_policy.py`, its tests, and session log; no schema or other modules.
