@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 from backend.app.memory.budget import BudgetConfig, load_budget_config
 from backend.app.tts.base import TextToSpeechProvider
 from backend.app.tts.config import TTSConfig, load_tts_config
@@ -105,6 +107,36 @@ class TTSRouter:
         provider = self.get_provider(provider_name)
         result = provider.synthesize(request)
         return policy, result
+
+    def stream_synthesize(
+        self,
+        request: SynthesisRequest,
+        *,
+        provider_name: str | None = None,
+    ) -> tuple[SpeechPolicyDecision, Iterator[bytes] | None]:
+        if not request.text.strip():
+            raise TTSError("Text payload is empty.", status_code=400)
+
+        policy = self.evaluate_policy(
+            request.text,
+            decision=request.decision,
+            avatar_state=request.avatar_state,
+            force=request.force,
+        )
+        if not policy.should_speak:
+            return policy, None
+
+        provider = self.get_provider(provider_name)
+        synthesize_stream = getattr(provider, "synthesize_stream", None)
+        if synthesize_stream is not None:
+            return policy, synthesize_stream(request)
+
+        result = provider.synthesize(request)
+
+        def _fallback_chunks() -> Iterator[bytes]:
+            yield result.audio_bytes
+
+        return policy, _fallback_chunks()
 
 
 _router: TTSRouter | None = None

@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
 import base64
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from starlette.responses import Response
 
 from backend.app.behavior.completion import build_budget_block_completion, build_local_completion
 from backend.app.behavior.engine import evaluate_behavior
@@ -410,6 +412,48 @@ def tts_synthesize(request: TTSSynthesizeRequest) -> TTSSynthesizeResponse:
         audio_base64=base64.b64encode(result.audio_bytes).decode("ascii"),
         duration_ms=result.duration_ms,
         mock=result.mock,
+    )
+
+
+@app.get(
+    "/tts/stream",
+    response_model=None,
+    responses={
+        204: {"description": "Speech policy skipped playback."},
+        400: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+)
+def tts_stream(
+    text: str = Query(..., min_length=1),
+    decision: str | None = Query(default=None),
+    avatar_state: str | None = Query(default=None),
+    force: bool = Query(default=False),
+) -> StreamingResponse | Response:
+    router = get_tts_router()
+
+    try:
+        policy, chunks = router.stream_synthesize(
+            SynthesisRequest(
+                text=text,
+                decision=decision,
+                avatar_state=avatar_state,
+                force=force,
+            ),
+        )
+    except TTSError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail={"error": error.message, "provider": error.provider},
+        ) from error
+
+    if chunks is None:
+        return Response(status_code=204)
+
+    return StreamingResponse(
+        chunks,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-store"},
     )
 
 

@@ -183,6 +183,31 @@ class DoubaoTTSProvider(TextToSpeechProvider):
             mock=False,
         )
 
+    def synthesize_stream(self, request: SynthesisRequest) -> Iterator[bytes]:
+        creds = self._credentials()
+        if not creds:
+            raise TTSConfigError(
+                "Doubao TTS is selected but DOUBAO_TTS_API_KEY (or DOUBAO_TTS_ACCESS_TOKEN) "
+                "and DOUBAO_TTS_VOICE_TYPE must be configured."
+            )
+
+        text = request.text.strip()
+        if not text:
+            raise TTSError("Text payload is empty.", provider=self.name, status_code=400)
+
+        _validate_speaker_for_v3(creds["voice_type"])
+
+        payload = self._build_request_payload(text, creds)
+        headers = self._build_request_headers(creds)
+
+        try:
+            yield from self._iter_stream_synthesis(payload, headers)
+        except httpx.HTTPError as error:
+            raise TTSError(
+                f"Doubao TTS network error: {error}",
+                provider=self.name,
+            ) from error
+
     def _build_request_headers(self, creds: dict[str, str]) -> dict[str, str]:
         return {
             "X-Api-Key": creds["api_key"],
@@ -207,6 +232,13 @@ class DoubaoTTSProvider(TextToSpeechProvider):
         }
 
     def _stream_synthesis(self, payload: dict[str, Any], headers: dict[str, str]) -> bytes:
+        return b"".join(self._iter_stream_synthesis(payload, headers))
+
+    def _iter_stream_synthesis(
+        self,
+        payload: dict[str, Any],
+        headers: dict[str, str],
+    ) -> Iterator[bytes]:
         client = (
             self._http_client
             if self._http_client is not None
@@ -219,9 +251,9 @@ class DoubaoTTSProvider(TextToSpeechProvider):
             headers=headers,
             timeout=self._timeout_s,
         ) as response:
-            return self._read_streamed_audio(response)
+            yield from self._iter_streamed_audio_chunks(response)
 
-    def _read_streamed_audio(self, response: httpx.Response) -> bytes:
+    def _iter_streamed_audio_chunks(self, response: httpx.Response) -> Iterator[bytes]:
         if response.status_code in {401, 403}:
             raise TTSError(
                 "Doubao TTS authentication failed. Check DOUBAO_TTS_API_KEY.",
@@ -236,7 +268,7 @@ class DoubaoTTSProvider(TextToSpeechProvider):
                 status_code=502,
             )
 
-        audio_parts: list[bytes] = []
+        yielded = False
         for line in _iter_response_lines(response):
             chunk = _parse_stream_chunk(line)
             if chunk is None:
@@ -247,16 +279,18 @@ class DoubaoTTSProvider(TextToSpeechProvider):
                 data = chunk.get("data")
                 if isinstance(data, str) and data:
                     try:
-                        audio_parts.append(base64.b64decode(data, validate=True))
+                        decoded = base64.b64decode(data, validate=True)
                     except (ValueError, binascii.Error) as error:
                         raise TTSError(
                             "Doubao TTS returned invalid base64 audio.",
                             provider=self.name,
                         ) from error
+                    yielded = True
+                    yield decoded
                 continue
 
             if code == STREAM_DONE_CODE:
-                return b"".join(audio_parts)
+                return
 
             message = _response_message(chunk) or f"error code {code}"
             status_code = 503 if _looks_like_auth_or_quota_error(message) else 502
@@ -266,13 +300,11 @@ class DoubaoTTSProvider(TextToSpeechProvider):
                 status_code=status_code,
             )
 
-        if audio_parts:
-            return b"".join(audio_parts)
-
-        raise TTSError(
-            "Doubao TTS stream ended without audio data.",
-            provider=self.name,
-        )
+        if not yielded:
+            raise TTSError(
+                "Doubao TTS stream ended without audio data.",
+                provider=self.name,
+            )
 
 
 def resolve_resource_id(speaker: str, explicit: str | None = None) -> str:

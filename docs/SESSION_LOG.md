@@ -1635,3 +1635,35 @@
 不要改动的边界：
 
 - TTS provider 接口未改；仅 doubao HTTP 层性能优化。
+
+## 2026-06-09 - Session 30 (Doubao streaming TTS + /tts/stream)
+
+本次完成：
+
+- `DoubaoTTSProvider.synthesize_stream()`：复用 V3 HTTP 单向流式接口，mp3 边收边 `yield` 音频块；共享常驻 `httpx.Client`；鉴权/协议错误仍抛 `TTSError`。
+- `TTSRouter.stream_synthesize()`：先跑 policy，`should_speak=False` 返回 `(policy, None)`；无 `synthesize_stream` 的 provider 回退整段合成后单次 yield。
+- `GET /tts/stream`：query `text/decision/avatar_state/force`；policy skip → 204；该说 → `StreamingResponse(audio/mpeg)` + `Cache-Control: no-store`；`/tts/synthesize` 未动。
+- 测试：豆包多 chunk 流出、204 skip、mock 回退、空文本 400；`CYBER_COMPANION_TTS_MODE=mock` 仍强制 mock。
+
+下次接着做：
+
+- 前端 `useTextToSpeech` 可改用 `/tts/stream` 降低首包延迟；或提交未提交的分块播放改动。
+
+已知问题：
+
+- 回退 provider（mock/mac_say）流式端点仍标 `audio/mpeg`，实际字节可能是 wav。
+
+相关文件：
+
+- `backend/app/tts/doubao.py`
+- `backend/app/tts/router.py`
+- `backend/app/main.py`
+- `backend/tests/test_tts.py`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed — **130** backend tests; frontend `tsc --noEmit` passed.
+
+不要改动的边界：
+
+- `TextToSpeechProvider` 抽象方法未改；STT/chat/memory/behavior 未碰。

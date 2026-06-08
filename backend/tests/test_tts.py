@@ -139,6 +139,77 @@ def test_tts_synthesize_rejects_empty_text(client: TestClient) -> None:
     assert response.json()["detail"]["error"] == "Text payload is empty."
 
 
+def test_tts_stream_mock_fallback(client: TestClient) -> None:
+    response = client.get(
+        "/tts/stream",
+        params={
+            "text": "短句测试。",
+            "decision": "reply",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("audio/mpeg")
+    assert response.headers["cache-control"] == "no-store"
+    assert len(response.content) > 44
+
+
+def test_tts_stream_policy_skip_returns_204(client: TestClient) -> None:
+    response = client.get(
+        "/tts/stream",
+        params={
+            "text": "……",
+            "decision": "silent",
+            "avatar_state": "silent",
+        },
+    )
+
+    assert response.status_code == 204
+    assert response.content == b""
+
+
+def test_tts_stream_rejects_empty_text(client: TestClient) -> None:
+    response = client.get(
+        "/tts/stream",
+        params={"text": "   "},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["error"] == "Text payload is empty."
+
+
+def test_router_stream_synthesize_fallback_for_mock() -> None:
+    config = TTSConfig(
+        enabled=True,
+        default_provider="mock",
+        force_mock=True,
+        max_speech_chars=120,
+        speak_decisions=("reply",),
+        providers={
+            "mock": TTSProviderConfigEntry(
+                name="mock",
+                enabled=True,
+                model="mock-tts",
+            )
+        },
+    )
+    router = TTSRouter(
+        config,
+        {"mock": MockTTSProvider()},
+        BudgetConfig(allow_cloud_tts=True),
+    )
+
+    policy, chunks = router.stream_synthesize(
+        SynthesisRequest(text="你好", decision="reply"),
+    )
+
+    assert policy.should_speak is True
+    assert chunks is not None
+    audio_parts = list(chunks)
+    assert len(audio_parts) == 1
+    assert len(audio_parts[0]) > 44
+
+
 def test_cloud_provider_blocked_without_budget_flag() -> None:
     config = TTSConfig(
         enabled=True,
@@ -413,6 +484,25 @@ def test_reset_tts_router_closes_doubao_http_client() -> None:
     tts_router.reset_tts_router()
 
     assert client.is_closed
+
+
+def test_doubao_synthesize_stream_yields_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_doubao_env(monkeypatch)
+    audio1 = b"mp3-chunk-1"
+    audio2 = b"mp3-chunk-2"
+    captured: dict[str, object] = {}
+    lines = [
+        json.dumps({"code": 0, "message": "", "data": base64.b64encode(audio1).decode("ascii")}),
+        json.dumps({"code": 0, "message": "", "data": base64.b64encode(audio2).decode("ascii")}),
+        json.dumps({"code": 20_000_000, "message": "OK", "data": None}),
+    ]
+
+    provider = DoubaoTTSProvider(http_client=_fake_stream_client(lines, captured))  # type: ignore[arg-type]
+    chunks = list(provider.synthesize_stream(SynthesisRequest(text="流式测试。")))
+
+    assert chunks == [audio1, audio2]
+    assert captured["url"] == TTS_HTTP_ENDPOINT
+    assert captured["json"]["req_params"]["audio_params"]["format"] == "mp3"
 
 
 def test_doubao_synthesize_mocked_http(monkeypatch: pytest.MonkeyPatch) -> None:
