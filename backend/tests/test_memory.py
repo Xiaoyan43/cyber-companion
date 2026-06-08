@@ -153,3 +153,70 @@ def test_memory_api_rejects_unknown_type(client: TestClient) -> None:
 
     assert response.status_code == 400
     assert "Unsupported memory type" in response.json()["detail"]["error"]
+
+
+def _age_memory(store: MemoryStore, memory_id: int, updated_at: str) -> None:
+    from backend.app.memory.database import connect
+
+    with connect(store.db_path) as connection:
+        connection.execute(
+            "UPDATE memories SET updated_at = ? WHERE id = ?",
+            (updated_at, memory_id),
+        )
+
+
+def test_behavior_evaluate_persists_idle_tick_mutter(client: TestClient) -> None:
+    from backend.app.memory.store import get_memory_store
+
+    store = get_memory_store()
+    store.update_mood_state(boredom=0.52, loneliness=0.52)
+
+    response = client.post("/behavior/evaluate", json={"event_type": "idle_tick"})
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["decision"] == "mutter"
+    assert payload["saved_message_id"] is not None
+
+    messages = client.get("/memory/messages").json()["messages"]
+    assert len(messages) == 1
+    assert messages[0]["id"] == payload["saved_message_id"]
+    assert messages[0]["role"] == "assistant"
+    assert messages[0]["source"] == "behavior_tick"
+    assert messages[0]["metadata"]["decision"] == "mutter"
+    assert messages[0]["metadata"]["behavior_event"] == "idle_tick"
+
+
+def test_behavior_evaluate_persists_proactive_check(client: TestClient) -> None:
+    from backend.app.memory.store import get_memory_store
+
+    store = get_memory_store()
+    memory = store.create_memory(
+        type="job_progress",
+        content="Applied to two backend roles.",
+        tags=["job-search"],
+    )
+    _age_memory(store, memory.id, "2020-01-01T00:00:00+00:00")
+
+    response = client.post("/behavior/evaluate", json={"event_type": "proactive_check"})
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["decision"] == "proactive"
+    assert payload["saved_message_id"] is not None
+
+    messages = client.get("/memory/messages").json()["messages"]
+    assert len(messages) == 1
+    assert messages[0]["metadata"]["behavior_event"] == "proactive_check"
+
+
+def test_behavior_evaluate_observe_does_not_persist(client: TestClient) -> None:
+    response = client.post("/behavior/evaluate", json={"event_type": "idle_tick"})
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["decision"] == "observe"
+    assert payload["saved_message_id"] is None
+
+    messages = client.get("/memory/messages").json()["messages"]
+    assert messages == []

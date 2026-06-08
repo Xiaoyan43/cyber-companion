@@ -57,3 +57,19 @@ The MVP should log:
 - file access attempts
 - denied file access attempts
 
+## Dev Server Exposure
+
+This project is local-first. Frontend and backend dev servers must stay on localhost unless the user explicitly changes exposure for a controlled test.
+
+Defaults:
+
+- Vite dev/preview: `127.0.0.1:5173` (`frontend/vite.config.ts`, `npm run dev --workspace frontend`)
+- FastAPI/Uvicorn: `127.0.0.1:8000` (`scripts/dev_backend.sh`, overridable via `CYBER_COMPANION_API_HOST`)
+
+Rules:
+
+- Do not bind dev servers to `0.0.0.0` or a public interface without a dedicated security review.
+- CORS allowlist stays explicit (`backend/app/cors.py`); no wildcard origins.
+- Production builds (`npm run build:frontend`) serve static assets only; Vite/esbuild advisories apply to dev-server mode, not shipped `dist/`.
+- Run `npm audit` after frontend dependency changes. As of Session 23, Vite was upgraded to 6.4.x and Playwright to 1.60.x so dev audit is clean; re-check before exposing dev beyond localhost.
+

@@ -136,3 +136,36 @@ def test_score_memory_is_deterministic(store: MemoryStore) -> None:
     first = score_memory(memory, "job search progress")
     second = score_memory(memory, "job search progress")
     assert first == second
+
+
+def test_context_builder_excludes_behavior_tick_lines(store: MemoryStore) -> None:
+    budget = BudgetConfig(max_raw_turns=4, max_memories_per_turn=2)
+    store.create_message(role="user", content="real question one")
+    store.create_message(role="assistant", content="real answer one")
+    store.create_message(
+        role="assistant",
+        content="嗯。你到底要不要说正事。",
+        source="behavior_tick",
+    )
+
+    built = build_provider_context(store, user_input="real question two", budget=budget)
+
+    non_system_contents = [
+        message.content for message in built.messages if message.role != "system"
+    ]
+    assert "嗯。你到底要不要说正事。" not in non_system_contents
+    assert "real answer one" in non_system_contents
+
+
+def test_summary_policy_ignores_behavior_tick_lines(store: MemoryStore) -> None:
+    budget = BudgetConfig(max_raw_turns=2, summary_batch_size=4)
+    for index in range(10):
+        store.create_message(
+            role="assistant",
+            content=f"idle-mutter-{index}",
+            source="behavior_tick",
+        )
+
+    # Only behavior-tick lines exist, so there is no real conversation to recap.
+    assert maybe_update_conversation_summary(store, budget=budget) is False
+    assert store.get_latest_conversation_summary() is None

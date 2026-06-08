@@ -209,10 +209,10 @@ Notes: Dependency only. No source copied.
 Name: Vite
 URL: https://vite.dev/
 License: MIT
-Version/commit: ^5.4.0
+Version/commit: ^6.4.3
 Used for: Frontend dev server and build tooling.
 Local files: frontend/package.json, frontend/vite.config.ts
-Notes: Dependency only. No source copied. npm audit reports a moderate esbuild dev-server advisory for Vite 5.x; production dependency audit is clean, and major Vite upgrade is deferred.
+Notes: Dependency only. No source copied. Upgraded from 5.4.x in Session 23 to clear npm audit advisories (GHSA-4w7w-66w2-5vf9 path traversal, GHSA-67mh-4wv8-2f99 esbuild dev-server). Dev server remains localhost-only per docs/SECURITY_AND_PERMISSIONS.md.
 
 Name: TypeScript
 URL: https://www.typescriptlang.org/
@@ -250,9 +250,17 @@ Name: HTTPX
 URL: https://www.python-httpx.org/
 License: BSD-3-Clause
 Version/commit: >=0.27.0
-Used for: DeepSeek provider adapter HTTP client and FastAPI TestClient test dependency.
-Local files: backend/requirements.txt, backend/app/providers/deepseek.py, backend/requirements-dev.txt
-Notes: Dependency only. No source copied. Used for production provider calls, not just tests.
+Used for: DeepSeek provider adapter HTTP client.
+Local files: backend/requirements.txt, backend/app/providers/deepseek.py
+Notes: Dependency only. No source copied. Production provider calls only; tests use httpx2 via Starlette TestClient.
+
+Name: httpx2
+URL: https://github.com/pydantic/httpx2
+License: BSD-3-Clause
+Version/commit: >=2.0.0
+Used for: Starlette/FastAPI TestClient in backend pytest suite (Starlette 1.2+ prefers httpx2 over httpx).
+Local files: backend/requirements-dev.txt
+Notes: Dev/test dependency only. No source copied. Keeps pytest output free of TestClient deprecation warnings without changing production httpx usage.
 
 Name: python-multipart
 URL: https://github.com/Kludex/python-multipart
@@ -279,8 +287,8 @@ Notes: Stdlib only. No source copied.
 Name: Playwright
 URL: https://playwright.dev/
 License: Apache-2.0
-Version/commit: ^1.49.1
+Version/commit: ^1.60.0
 Used for: scripts/ui_verify.mjs browser smoke verification.
 Local files: package.json, package-lock.json, scripts/ui_verify.mjs
-Notes: devDependency only; no source copied.
+Notes: devDependency only; no source copied. Bumped in Session 23 to clear GHSA-7mvr-c777-76hp advisory.
 ```

@@ -63,6 +63,31 @@ Suggested internal state:
 
 These should change slowly. Do not reset emotions after every message.
 
+## Idle And Proactive Scheduling
+
+The companion feels alive by reacting to time, not only to user messages. Two
+local tick events drive this, and neither calls the LLM:
+
+- `idle_tick`: raises `boredom` (+0.05) and `loneliness` (+0.03), lowers
+  `energy` (-0.02). Past a threshold it surfaces a short `mutter` (annoyed) or
+  drops to a `sleepy`/low-energy `observe`. Otherwise it just updates state.
+- `proactive_check`: if job progress has gone stale, surfaces a `proactive`
+  nudge; otherwise `observe`.
+
+Guards so the box does not nag:
+
+- A 180s local-line cooldown (`mood.metadata.last_local_line_at`) blocks repeated
+  unsolicited lines.
+- The client polls idle every ~90s and proactive every ~300s, only after the
+  user has been quiet, pausing while a turn is sending or while TTS is speaking,
+  and skipping entirely when the tab is hidden.
+
+Idle/proactive lines are saved to history (`source="behavior_tick"`) but are not
+replayed into the provider context (see `docs/MEMORY_DESIGN.md`).
+
+Idle mood drift is currently upward-only (no time-based decay), so a long open
+session trends toward bored/annoyed; revisit decay when tuning feel.
+
 ## Example Tone
 
 Normal:

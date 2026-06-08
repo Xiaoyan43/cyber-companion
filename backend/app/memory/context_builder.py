@@ -90,7 +90,12 @@ def build_provider_context(
             break
         selected_memories.append(memory)
 
-    recent_raw = all_messages[-config.max_raw_turns :] if config.max_raw_turns > 0 else []
+    # Only real conversation turns (source="chat") may be replayed to the
+    # provider. Idle/proactive behavior-tick lines are persisted for history
+    # but must not be fed back as recent context, or they pollute the prompt
+    # and inflate token/summary cost.
+    conversation_messages = [message for message in all_messages if message.source == "chat"]
+    recent_raw = conversation_messages[-config.max_raw_turns :] if config.max_raw_turns > 0 else []
 
     system_sections = [load_persona_system_prompt(), _format_mood_block(mood)]
     if behavior is not None:

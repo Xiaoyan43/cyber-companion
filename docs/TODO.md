@@ -57,7 +57,7 @@
 - [x] Implement path permission gateway.
 - [x] Add file access log.
 - [x] Add symlink escape tests.
-- [ ] Review Vite/esbuild dev-server audit advisory before exposing dev server beyond localhost.
+- [x] Review Vite/esbuild dev-server audit advisory before exposing dev server beyond localhost.
 
 ### Text MVP
 
@@ -86,4 +86,4 @@
 
 ### Maintenance
 
-- [ ] Review FastAPI TestClient/httpx2 deprecation warning.
+- [x] Review FastAPI TestClient/httpx2 deprecation warning.

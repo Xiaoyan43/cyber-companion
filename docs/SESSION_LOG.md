@@ -853,3 +853,247 @@
 不要改动的边界：
 
 - Only edited `scripts/ui_verify.mjs` and `docs/SESSION_LOG.md`; no commit.
+
+## 2026-06-08 - Session 18
+
+本次完成：
+
+- Stabilized `scripts/ui_verify.mjs` refuse/TTS checks (Session 17 follow-up):
+  - Replaced flaky **Speaking** label wait with `/tts/synthesize` request + `spoken === true` response assertion.
+  - Added 50ms polling for transient `talking`/`angry` avatar during refuse handoff (headless playback can flash too fast for single `waitForFunction`).
+  - Inserted **idle settle** waits between chat steps (browser verification → long reply → refuse → overlap) to reduce cross-test TTS interference.
+  - Improved browser verification message wait to require both user + boxi bubbles before assertions.
+
+下次接着做：
+
+- Pick next slice from `docs/HANDOFF.md` (CORS expansion, manual verification note, maintenance passes).
+- Consider committing ui_verify hardening if user wants a checkpoint.
+
+已知问题：
+
+- Refuse path may show `angry` (not `talking`) when TTS handoff uses backend refuse avatar before/alongside speech; test accepts both.
+- Backend CORS currently allows only `5173`.
+
+相关文件：
+
+- `scripts/ui_verify.mjs`
+- `docs/SESSION_LOG.md`
+
+测试结果：
+
+- `node scripts/ui_verify.mjs` (API `18000`, frontend `5173`): **36 passed, 0 failed**.
+
+不要改动的边界：
+
+- Only edited `scripts/ui_verify.mjs` and `docs/SESSION_LOG.md`; no commit.
+
+## 2026-06-08 - Session 19
+
+本次完成：
+
+- **CORS expansion** (HANDOFF next slice): added `backend/app/cors.py` with explicit default dev origins for `5173` and `5174` on `127.0.0.1` / `localhost`; optional `CYBER_COMPANION_CORS_ORIGINS` comma list merges in extra origins and rejects wildcards.
+- Wired `load_cors_origins()` into `backend/app/main.py`; documented env in `.env.example`.
+- Added `backend/tests/test_cors.py` (6 tests) for config merge, wildcard rejection, and allow/deny behavior.
+- Updated `docs/MANUAL_VERIFICATION.md` with CORS port guidance and latest `ui_verify` **36/36** smoke state.
+
+下次接着做：
+
+- Commit pending ui_verify hardening (Sessions 17–18) plus this CORS slice if user wants.
+- Continue HANDOFF slices: Vite/esbuild or TestClient/httpx2 maintenance pass, behavior idle/proactive scheduling.
+
+已知问题：
+
+- Mock TTS still returns silent WAV timed to text length, not real speech.
+- Vite 5.x / esbuild dev-server audit remains open; mitigated by localhost-only dev binding.
+- FastAPI TestClient `httpx` -> `httpx2` deprecation warning remains.
+
+相关文件：
+
+- `backend/app/cors.py`
+- `backend/app/main.py`
+- `backend/tests/test_cors.py`
+- `.env.example`
+- `docs/MANUAL_VERIFICATION.md`
+- `docs/SESSION_LOG.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed; **60** backend tests passed; frontend `tsc --noEmit` passed.
+- `npm run build:frontend`: passed.
+
+不要改动的边界：
+
+- Did not start Phase 11 hardware work.
+- Did not wire cloud STT/TTS adapters.
+- Did not change provider abstraction, memory schema, behavior contract, or file permission policy.
+
+## 2026-06-08 - Session 20
+
+本次完成：
+
+- **TestClient/httpx2 maintenance pass** (HANDOFF next slice): added `httpx2>=2.0.0` to `backend/requirements-dev.txt` so Starlette 1.2+ TestClient uses httpx2 instead of deprecated httpx path; production DeepSeek adapter still uses `httpx`.
+- Recorded httpx2 in `docs/OPEN_SOURCE_REUSE.md`; marked TODO maintenance item done.
+- Pytest warning `StarletteDeprecationWarning: ... install httpx2 instead` is gone (**60 passed, 0 warnings**).
+
+下次接着做：
+
+- Commit pending slices (ui_verify hardening, CORS, httpx2) if user wants a checkpoint.
+- Continue HANDOFF: behavior idle/proactive tick scheduling, or Vite/esbuild pass if dev exposure changes.
+
+已知问题：
+
+- Mock TTS still returns silent WAV timed to text length, not real speech.
+- Vite 5.x / esbuild dev-server audit remains open; mitigated by localhost-only dev binding.
+
+相关文件：
+
+- `backend/requirements-dev.txt`
+- `docs/OPEN_SOURCE_REUSE.md`
+- `docs/TODO.md`
+- `docs/SESSION_LOG.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed; **60** backend tests passed, **0** pytest warnings; frontend `tsc --noEmit` passed.
+- `npm run build:frontend`: passed.
+
+不要改动的边界：
+
+- Did not start Phase 11 hardware work.
+- Did not wire cloud STT/TTS adapters.
+- Did not change provider abstraction, memory schema, behavior contract, or file permission policy.
+- Did not bump Vite/esbuild production dependencies.
+
+## 2026-06-08 - Session 21
+
+本次完成：
+
+- **Behavior idle/proactive tick scheduling** (HANDOFF next slice):
+  - Backend: `idle_tick` handler with mood drift (`apply_idle_tick_mood_delta`), boredom/loneliness `mutter` threshold, `observe`/`sleepy` idle states, and 180s local-line cooldown via `tick_policy.py`.
+  - Extended `POST /behavior/evaluate` schema with `idle_tick`; proactive_check now respects the same cooldown.
+  - Frontend: `useBehaviorTicks` polls `idle_tick` every 90s and `proactive_check` every 5m (only when tab visible, API ok, not sending/TTS, user quiet ≥2m); tick lines render as local Boxi bubbles with avatar/TTS handoff.
+  - Added behavior tests (65 total backend tests).
+
+下次接着做：
+
+- Commit pending slices (ui_verify, CORS, httpx2, behavior ticks) if user wants.
+- Vite/esbuild maintenance pass only if dev exposure changes; cloud STT/TTS when explicitly requested.
+
+已知问题：
+
+- Tick-initiated mutter/proactive lines are UI-only (not persisted via `/chat/complete`).
+- Mock TTS still returns silent WAV timed to text length, not real speech.
+- Vite 5.x / esbuild dev-server audit remains open; mitigated by localhost-only dev binding.
+
+相关文件：
+
+- `backend/app/behavior/engine.py`
+- `backend/app/behavior/mood.py`
+- `backend/app/behavior/tick_policy.py`
+- `backend/app/schemas.py`
+- `backend/tests/test_behavior.py`
+- `frontend/src/api/behavior.ts`
+- `frontend/src/avatar/useBehaviorTicks.ts`
+- `frontend/src/App.tsx`
+- `docs/MANUAL_VERIFICATION.md`
+- `docs/SESSION_LOG.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed; **65** backend tests passed, 0 warnings; frontend `tsc --noEmit` passed.
+- `npm run build:frontend`: passed.
+
+不要改动的边界：
+
+- Did not start Phase 11 hardware work.
+- Did not wire cloud STT/TTS adapters.
+- Did not change provider abstraction, memory schema, behavior decision contract, or file permission policy.
+
+## 2026-06-08 - Session 22
+
+本次完成：
+
+- **Persist tick-initiated local behavior lines** (Session 21 follow-up):
+  - Backend: `persist_local_behavior_line` saves `mutter` / `proactive` lines from `idle_tick` and `proactive_check` into SQLite with `source=behavior_tick` and behavior metadata.
+  - `/behavior/evaluate` returns `saved_message_id` when a local line is persisted.
+  - Frontend uses `saved_message_id` for tick bubbles so reload from `/memory/messages` stays consistent.
+  - Added 3 integration tests (**68** backend tests total).
+
+下次接着做：
+
+- Commit pending slices (ui_verify, CORS, httpx2, behavior ticks, tick persistence) if user wants.
+- Vite/esbuild maintenance pass only if dev exposure changes; cloud STT/TTS when explicitly requested.
+
+已知问题：
+
+- Mock TTS still returns silent WAV timed to text length, not real speech.
+- Vite 5.x / esbuild dev-server audit remains open; mitigated by localhost-only dev binding.
+
+相关文件：
+
+- `backend/app/memory/chat_persistence.py`
+- `backend/app/main.py`
+- `backend/app/schemas.py`
+- `backend/tests/test_memory.py`
+- `frontend/src/api/behavior.ts`
+- `frontend/src/App.tsx`
+- `docs/MANUAL_VERIFICATION.md`
+- `docs/SESSION_LOG.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed; **68** backend tests passed, 0 warnings; frontend `tsc --noEmit` passed.
+- `npm run build:frontend`: passed.
+
+不要改动的边界：
+
+- Did not start Phase 11 hardware work.
+- Did not wire cloud STT/TTS adapters.
+- Did not change provider abstraction, memory schema, behavior decision contract, or file permission policy.
+
+## 2026-06-08 - Session 23
+
+本次完成：
+
+- **Vite/esbuild dev-server audit maintenance pass** (open Security TODO):
+  - Upgraded `vite` 5.4.x → **6.4.3** (clears GHSA-4w7w-66w2-5vf9 path traversal and GHSA-67mh-4wv8-2f99 esbuild dev-server advisories).
+  - Upgraded root `playwright` **1.49.x → 1.60.x** (clears GHSA-7mvr-c777-76hp).
+  - Hardened `frontend/vite.config.ts`: explicit localhost for dev + preview; documented rule in `docs/SECURITY_AND_PERMISSIONS.md`.
+  - Updated `docs/OPEN_SOURCE_REUSE.md`, `docs/MANUAL_VERIFICATION.md`, `docs/HANDOFF.md`; marked Security TODO done.
+  - `npm audit` and `npm audit --omit=dev`: **0 vulnerabilities**.
+
+下次接着做：
+
+- Commit pending slices (ui_verify, CORS, httpx2, behavior ticks, tick persistence, Vite upgrade) if user wants.
+- Claude Code read-only review of Phase 2–10 MVP batch.
+- Cloud STT/TTS when explicitly requested.
+
+已知问题：
+
+- Mock TTS still returns silent WAV timed to text length, not real speech.
+
+相关文件：
+
+- `frontend/package.json`
+- `frontend/vite.config.ts`
+- `package.json`
+- `package-lock.json`
+- `docs/SECURITY_AND_PERMISSIONS.md`
+- `docs/OPEN_SOURCE_REUSE.md`
+- `docs/TODO.md`
+- `docs/HANDOFF.md`
+- `docs/MANUAL_VERIFICATION.md`
+- `docs/SESSION_LOG.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed; **68** backend tests passed, 0 warnings; frontend `tsc --noEmit` passed.
+- `npm run build:frontend`: passed (Vite 6.4.3 production build).
+- `npm audit` / `npm audit --omit=dev`: 0 vulnerabilities.
+
+不要改动的边界：
+
+- Did not start Phase 11 hardware work.
+- Did not wire cloud STT/TTS adapters.
+- Did not change provider abstraction, memory schema, behavior decision contract, or file permission policy.
+- Did not expose dev servers beyond localhost.

@@ -23,7 +23,7 @@ PYTHON_BIN=.venv/bin/python npm run check
 npm run build:frontend
 ```
 
-Both passed after Session 14. Backend tests were at 54 passing; frontend `tsc --noEmit` passed. One known `fastapi.testclient` / `httpx2` deprecation warning remains.
+Both passed after Session 23. Backend tests: 68 passing; frontend `tsc --noEmit` and Vite 6.4.x production build pass. `npm audit` reports 0 vulnerabilities (dev and prod).
 
 `node scripts/ui_verify.mjs` has a passing API section, but full browser smoke needs Playwright browser binaries installed locally. Do not install/download browsers unless the user approves.
 
@@ -111,9 +111,6 @@ Do these only after the current uncommitted batch is checkpointed or the user ex
 - Expand backend CORS config if the frontend is routinely run on non-5173 ports. Keep it explicit, not wildcard.
 - Install Playwright browser binaries only with user approval, then run full `node scripts/ui_verify.mjs`.
 - Add a manual verification note for the latest browser smoke state.
-- Do a dedicated Vite/esbuild maintenance pass only if dev server exposure changes beyond localhost.
-- Handle the FastAPI TestClient/httpx2 warning in a dedicated maintenance pass.
-- Improve behavior scheduling for idle/proactive tick events.
 - Wire real cloud STT/TTS only if `allow_cloud_stt` / `allow_cloud_tts` are true and keys are configured.
 
 ## Boundaries

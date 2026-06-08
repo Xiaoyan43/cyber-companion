@@ -95,6 +95,21 @@ Supported decisions:
 - `proactive`
 - `observe`
 
+Supported event types: `user_message`, `proactive_check`, `idle_tick`.
+
+Idle and proactive ticks have side effects:
+
+- `idle_tick` drifts mood locally (boredom/loneliness up, energy down) and may
+  surface a local `mutter`/`observe` line without calling the LLM.
+- `proactive_check` may surface a stale-job `proactive` nudge.
+- A local-line cooldown (`mood.metadata.last_local_line_at`) throttles repeated
+  unsolicited lines.
+- When a tick produces a `mutter`/`proactive` line, it is persisted as an
+  assistant message with `source="behavior_tick"`. These lines are kept for UI
+  history but are **excluded from the replayed recent turns and from
+  conversation summaries** (see `docs/MEMORY_DESIGN.md`), so the companion never
+  feeds its own idle chatter back into the provider prompt.
+
 ### Memory Engine
 
 Owns:

@@ -63,6 +63,30 @@ def apply_user_message_mood_delta(
     )
 
 
+def apply_idle_tick_mood_delta(mood: MoodStateRecord) -> MoodStateRecord:
+    boredom = min(1.0, mood.boredom + 0.05)
+    loneliness = min(1.0, mood.loneliness + 0.03)
+    energy = max(0.0, mood.energy - 0.02)
+    next_mood = mood.mood
+
+    if boredom >= 0.55 or loneliness >= 0.55:
+        next_mood = "annoyed"
+    elif boredom >= 0.4 or energy <= 0.35:
+        next_mood = "sleepy"
+
+    return MoodStateRecord(
+        updated_at=mood.updated_at,
+        mood=next_mood,
+        energy=round(energy, 3),
+        annoyance=mood.annoyance,
+        boredom=round(boredom, 3),
+        worry=mood.worry,
+        trust=mood.trust,
+        loneliness=round(loneliness, 3),
+        metadata=dict(mood.metadata),
+    )
+
+
 def find_stale_job_memory(memories: list[MemoryRecord], *, stale_after_days: int = 7) -> MemoryRecord | None:
     from backend.app.behavior.rules import stale_days_from_iso
 

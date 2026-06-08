@@ -17,6 +17,6 @@
     "build:frontend": "npm run build --workspace frontend"
   },
   "devDependencies": {
-    "playwright": "^1.49.1"
+    "playwright": "^1.60.0"
   }
 }

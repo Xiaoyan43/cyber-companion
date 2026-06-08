@@ -27,7 +27,14 @@ def maybe_update_conversation_summary(
     budget: BudgetConfig | None = None,
 ) -> bool:
     config = budget or BudgetConfig()
-    all_messages = store.list_messages(limit=10_000)
+    # Summaries recap the real conversation only; idle/proactive behavior-tick
+    # lines are excluded so they neither enter summaries nor advance the batch
+    # threshold.
+    all_messages = [
+        message
+        for message in store.list_messages(limit=10_000)
+        if message.source == "chat"
+    ]
     if len(all_messages) <= config.max_raw_turns + 1:
         return False
 

@@ -12,6 +12,10 @@ npm run dev
 
 Open `http://127.0.0.1:5173/` in a desktop browser. Repeat key checks at a 390px-wide viewport.
 
+Dev servers bind to localhost only (`127.0.0.1`). Do not expose Vite or Uvicorn on `0.0.0.0` without reviewing `docs/SECURITY_AND_PERMISSIONS.md`.
+
+If Vite falls back to another local port (for example `5174`), the backend already allows `5173` and `5174` on `127.0.0.1` / `localhost`. For any other dev origin, set `CYBER_COMPANION_CORS_ORIGINS` to a comma-separated explicit list (no wildcards), then restart the API.
+
 ## Companion Panel
 
 - [ ] Default state is `idle` with trapped-in-box motion, not a static pose.
@@ -50,6 +54,9 @@ Open `http://127.0.0.1:5173/` in a desktop browser. Repeat key checks at a 390px
 - [ ] Refusal patterns return local `refuse` lines and `angry` avatar state.
 - [ ] Long rambling input triggers `interrupt` and still allows provider reply when configured.
 - [ ] Stale `job_progress` memory plus casual input can trigger local `proactive` nudges.
+- [ ] After ~2 minutes idle with API online, proactive tick may nudge stale job progress (no LLM).
+- [ ] After extended idle, avatar may briefly show `sleepy` or deliver a local `mutter` line (no LLM).
+- [ ] Tick-initiated `mutter` / `proactive` lines persist to SQLite and survive page refresh.
 - [ ] `/chat/complete` response includes `avatar_state`, `decision`, and `should_call_llm`.
 
 ## Layout
@@ -82,3 +89,11 @@ Open `http://127.0.0.1:5173/` in a desktop browser. Repeat key checks at a 390px
 PYTHON_BIN=.venv/bin/python npm run check
 npm run build:frontend
 ```
+
+With the local API on `18000` and frontend on `5173`, browser smoke can be run as:
+
+```bash
+CYBER_VERIFY_API_URL=http://127.0.0.1:18000 node scripts/ui_verify.mjs
+```
+
+Latest verified state: **36/36 passed** (Session 18), including delayed TTS synthesis, refuse synthesize handoff, and overlapping chat-round avatar regression checks.

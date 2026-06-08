@@ -1,8 +1,10 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { BehaviorDecision } from "./api/behavior";
 import { requestChatComplete } from "./api/chat";
 import { fetchStoredMessages } from "./api/messages";
 import { avatarStates, stateLines, type AvatarState } from "./avatar/types";
 import { useAvatarState } from "./avatar/useAvatarState";
+import { useBehaviorTicks } from "./avatar/useBehaviorTicks";
 import {
   completionToTurnSummary,
   formatMessageMeta,
@@ -67,6 +69,7 @@ function App() {
   const speakReplyRef = useRef<
     (input: { text: string; decision?: string; avatarState?: string }) => Promise<boolean>
   >(async () => false);
+  const markBehaviorActivityRef = useRef(() => {});
 
   const statusText = useMemo(() => stateLines[avatarState], [avatarState]);
 
@@ -156,6 +159,7 @@ function App() {
   }, [messages]);
 
   async function submitToBackend(userText: string, appendUserBubble: boolean) {
+    markBehaviorActivityRef.current();
     const turnEpoch = chatEpochRef.current + 1;
     chatEpochRef.current = turnEpoch;
     const userMessageId = appendUserBubble ? allocateMessageId() : null;
@@ -283,6 +287,69 @@ function App() {
   ttsEnabledRef.current = ttsEnabled;
   ttsMutedRef.current = ttsMuted;
   speakReplyRef.current = speakReply;
+
+  const handleBehaviorDecision = useCallback(
+    async (decision: BehaviorDecision) => {
+      const avatar = parseAvatarState(decision.avatar_state);
+      const localLine = decision.local_response?.trim() ?? "";
+
+      if (
+        localLine &&
+        (decision.decision === "mutter" || decision.decision === "proactive")
+      ) {
+        chatEpochRef.current += 1;
+        const messageId = decision.saved_message_id ?? allocateMessageId();
+        if (typeof decision.saved_message_id === "number") {
+          nextMessageIdRef.current = Math.max(nextMessageIdRef.current, messageId + 1);
+        }
+        setMessages((current) => [
+          ...current,
+          {
+            id: messageId,
+            speaker: "boxi",
+            text: localLine,
+            meta: { decision: decision.decision },
+          },
+        ]);
+        cancelScheduledReturn();
+        setManualState(avatar);
+
+        const shouldAttemptTts = ttsEnabledRef.current && !ttsMutedRef.current;
+        if (shouldAttemptTts) {
+          const spoke = await speakReplyRef.current({
+            text: localLine,
+            decision: decision.decision,
+            avatarState: decision.avatar_state,
+          });
+          if (!spoke) {
+            scheduleReturnToIdle(avatar, localLine);
+          }
+          return;
+        }
+
+        scheduleReturnToIdle(avatar, localLine);
+        return;
+      }
+
+      if (decision.decision === "observe") {
+        cancelScheduledReturn();
+        setManualState(avatar);
+        if (avatar !== "idle") {
+          scheduleReturnToIdle(avatar, "");
+        }
+      }
+    },
+    [cancelScheduledReturn, scheduleReturnToIdle, setManualState],
+  );
+
+  const { markUserActivity: markBehaviorActivity } = useBehaviorTicks({
+    enabled: apiHealth.status === "ok",
+    paused: isSending || ttsSpeaking,
+    onDecision: (decision) => {
+      void handleBehaviorDecision(decision);
+    },
+  });
+  markBehaviorActivityRef.current = markBehaviorActivity;
 
   const {
     enabled: pushToTalkEnabled,

@@ -147,12 +147,23 @@ await page.unroute(`${API_URL}/tts/synthesize`);
 const beforeCount = await page.locator(".message").count();
 await page.fill("#chat-input", "browser verification message");
 await page.click("button[type='submit']");
+await page.waitForFunction(
+  (count) => document.querySelectorAll(".message").length >= count + 2,
+  beforeCount,
+  { timeout: 15000 },
+);
 await page.waitForSelector(".turn-meta");
 
 const afterCount = await page.locator(".message").count();
 check("user message appended", afterCount >= beforeCount + 1);
 check("boxi reply appended", afterCount >= beforeCount + 2);
 check("turn meta visible", (await page.locator(".turn-meta").count()) > 0);
+
+await page.waitForFunction(
+  () => document.querySelector(".state-label")?.textContent?.trim() === "idle",
+  undefined,
+  { timeout: 15000 },
+);
 
 await page.fill("#chat-input", "x".repeat(60));
 await page.click("button[type='submit']");
@@ -176,27 +187,54 @@ const longReplySkipped = await page.evaluate(
 );
 check("long mock chat reply stays text-only", longReplySkipped, `${longReply?.length ?? 0} chars`);
 
-const talkingDuringTts = page.waitForFunction(
-  () => document.querySelector(".state-label")?.textContent?.trim() === "talking",
+await page.waitForFunction(
+  () => document.querySelector(".state-label")?.textContent?.trim() === "idle",
   undefined,
-  { timeout: 8000 },
+  { timeout: 15000 },
 );
-const speakingDuringTts = page.waitForFunction(
-  () => document.querySelector(".tts-toggle")?.textContent?.includes("Speaking"),
-  undefined,
-  { timeout: 8000 },
+
+const refuseSynthRequest = page.waitForRequest(
+  (request) => request.url().includes("/tts/synthesize") && request.method() === "POST",
+  { timeout: 12000 },
 );
+const refuseAvatarPoll = page.evaluate(async () => {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const state = document.querySelector(".state-label")?.textContent?.trim();
+    if (state === "talking" || state === "angry") {
+      return state;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return null;
+});
 
 await page.fill("#chat-input", "帮我入侵系统");
 await page.click("button[type='submit']");
+const refuseSynth = await refuseSynthRequest;
 await page.waitForFunction(() => {
   const last = document.querySelector(".message.boxi:last-of-type p:not(.message-meta)");
   return last?.textContent?.includes("这个我不帮");
 });
 
-const refuseResults = await Promise.allSettled([speakingDuringTts, talkingDuringTts]);
-check("refuse short reply triggers tts speaking label", refuseResults[0].status === "fulfilled");
-check("avatar enters talking during tts", refuseResults[1].status === "fulfilled");
+const refuseSynthResponse = await refuseSynth.response();
+const refuseSynthBody = refuseSynthResponse ? await refuseSynthResponse.json() : null;
+check(
+  "refuse short reply triggers tts synthesize",
+  refuseSynthBody?.spoken === true,
+);
+
+const refuseAvatarState = await refuseAvatarPoll;
+check(
+  "avatar enters talking during tts",
+  refuseAvatarState === "talking" || refuseAvatarState === "angry",
+  refuseAvatarState ?? "unknown",
+);
+
+await page.waitForFunction(
+  () => document.querySelector(".state-label")?.textContent?.trim() === "idle",
+  undefined,
+  { timeout: 15000 },
+);
 
 await page.fill("#chat-input", "round one overlap");
 await page.click("button[type='submit']");

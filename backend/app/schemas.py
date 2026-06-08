@@ -52,11 +52,12 @@ class BehaviorDecisionSchema(BaseModel):
     reason: str
     local_response: str | None = None
     tone_mode: str = "normal"
+    saved_message_id: int | None = None
 
 
 class BehaviorEvaluateRequest(BaseModel):
     user_input: str = ""
-    event_type: Literal["user_message", "proactive_check"] = "user_message"
+    event_type: Literal["user_message", "proactive_check", "idle_tick"] = "user_message"
 
 
 class ProviderStatusSchema(BaseModel):

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from backend.app.behavior.local_responses import local_response_for_decision
 from backend.app.behavior.mood import (
+    apply_idle_tick_mood_delta,
     apply_user_message_mood_delta,
     choose_tone_mode,
     find_stale_job_memory,
 )
+from backend.app.behavior.tick_policy import mark_local_line_spoken, recently_spoke_locally
 from backend.app.behavior.rules import (
     is_empty_input,
     is_low_value_input,
@@ -24,6 +26,9 @@ def evaluate_behavior(store: MemoryStore, event: BehaviorEvent) -> BehaviorDecis
 
     if event.event_type == "proactive_check":
         return _evaluate_proactive_check(store)
+
+    if event.event_type == "idle_tick":
+        return _evaluate_idle_tick(store)
 
     return BehaviorDecision(
         decision="observe",
@@ -125,6 +130,15 @@ def _evaluate_user_message(store: MemoryStore, user_input: str) -> BehaviorDecis
 
 
 def _evaluate_proactive_check(store: MemoryStore) -> BehaviorDecision:
+    mood = store.get_mood_state()
+    if recently_spoke_locally(mood):
+        return BehaviorDecision(
+            decision="observe",
+            avatar_state="idle",
+            should_call_llm=False,
+            reason="local_line_cooldown",
+        )
+
     stale_job = find_stale_job_memory(store.list_memories(limit=100))
     if stale_job is None:
         return BehaviorDecision(
@@ -134,6 +148,7 @@ def _evaluate_proactive_check(store: MemoryStore) -> BehaviorDecision:
             reason="no_stale_job_progress",
         )
 
+    store.update_mood_state(metadata=mark_local_line_spoken(mood.metadata))
     return BehaviorDecision(
         decision="proactive",
         avatar_state="worried",
@@ -141,4 +156,50 @@ def _evaluate_proactive_check(store: MemoryStore) -> BehaviorDecision:
         reason="stale_job_progress",
         local_response=local_response_for_decision("proactive"),
         tone_mode="normal",
+    )
+
+
+def _evaluate_idle_tick(store: MemoryStore) -> BehaviorDecision:
+    mood = store.get_mood_state()
+    updated_mood = apply_idle_tick_mood_delta(mood)
+    store.update_mood_state(
+        mood=updated_mood.mood,
+        energy=updated_mood.energy,
+        boredom=updated_mood.boredom,
+        loneliness=updated_mood.loneliness,
+        metadata=updated_mood.metadata,
+    )
+
+    if recently_spoke_locally(updated_mood):
+        return BehaviorDecision(
+            decision="observe",
+            avatar_state=updated_mood.mood if updated_mood.mood in {"sleepy", "annoyed"} else "idle",
+            should_call_llm=False,
+            reason="local_line_cooldown",
+        )
+
+    if updated_mood.boredom >= 0.55 or updated_mood.loneliness >= 0.55:
+        store.update_mood_state(metadata=mark_local_line_spoken(updated_mood.metadata))
+        return BehaviorDecision(
+            decision="mutter",
+            avatar_state="annoyed",
+            should_call_llm=False,
+            reason="idle_boredom_threshold",
+            local_response=local_response_for_decision("mutter"),
+            tone_mode="normal",
+        )
+
+    if updated_mood.boredom >= 0.4 or updated_mood.energy <= 0.35:
+        return BehaviorDecision(
+            decision="observe",
+            avatar_state="sleepy",
+            should_call_llm=False,
+            reason="idle_low_energy",
+        )
+
+    return BehaviorDecision(
+        decision="observe",
+        avatar_state="idle",
+        should_call_llm=False,
+        reason="idle_tick",
     )

@@ -71,6 +71,57 @@ def test_stale_job_progress_triggers_proactive(store: MemoryStore) -> None:
     assert "求职" in (decision.local_response or "")
 
 
+def test_proactive_check_returns_observe_without_stale_job(store: MemoryStore) -> None:
+    decision = evaluate_behavior(store, BehaviorEvent(event_type="proactive_check"))
+    assert decision.decision == "observe"
+    assert decision.reason == "no_stale_job_progress"
+
+
+def test_proactive_check_uses_stale_job_memory(store: MemoryStore) -> None:
+    memory = store.create_memory(
+        type="job_progress",
+        content="Applied to two backend roles.",
+        tags=["job-search"],
+    )
+    _age_memory(store, memory.id, "2020-01-01T00:00:00+00:00")
+
+    decision = evaluate_behavior(store, BehaviorEvent(event_type="proactive_check"))
+    assert decision.decision == "proactive"
+    assert decision.local_response is not None
+
+
+def test_idle_tick_eventually_mutters_when_bored(store: MemoryStore) -> None:
+    store.update_mood_state(boredom=0.52, loneliness=0.52)
+
+    decision = evaluate_behavior(store, BehaviorEvent(event_type="idle_tick"))
+
+    assert decision.decision == "mutter"
+    assert decision.avatar_state == "annoyed"
+    assert decision.local_response is not None
+
+
+def test_idle_tick_observe_when_calm(store: MemoryStore) -> None:
+    decision = evaluate_behavior(store, BehaviorEvent(event_type="idle_tick"))
+    assert decision.decision == "observe"
+    assert decision.reason == "idle_tick"
+
+
+def test_proactive_check_respects_local_line_cooldown(store: MemoryStore) -> None:
+    memory = store.create_memory(
+        type="job_progress",
+        content="Applied to two backend roles.",
+        tags=["job-search"],
+    )
+    _age_memory(store, memory.id, "2020-01-01T00:00:00+00:00")
+
+    first = evaluate_behavior(store, BehaviorEvent(event_type="proactive_check"))
+    assert first.decision == "proactive"
+
+    second = evaluate_behavior(store, BehaviorEvent(event_type="proactive_check"))
+    assert second.decision == "observe"
+    assert second.reason == "local_line_cooldown"
+
+
 def test_overwhelmed_input_uses_comfort_tone(store: MemoryStore) -> None:
     decision = evaluate_behavior(
         store,

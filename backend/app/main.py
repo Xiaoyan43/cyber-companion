@@ -8,11 +8,16 @@ from backend.app.behavior.completion import build_local_completion
 from backend.app.behavior.engine import evaluate_behavior
 from backend.app.behavior.parser import parse_structured_assistant_response
 from backend.app.behavior.types import BehaviorEvent
+from backend.app.cors import load_cors_origins
 from backend.app.files.config import load_permissions_config
 from backend.app.files.gateway import get_file_gateway, reset_file_gateway
 from backend.app.memory.budget import load_budget_config
 from backend.app.memory.context_builder import build_provider_context, extract_latest_user_input
-from backend.app.memory.chat_persistence import persist_chat_turn
+from backend.app.memory.chat_persistence import (
+    persist_chat_turn,
+    persist_local_behavior_line,
+    should_persist_local_behavior_line,
+)
 from backend.app.memory.summary_policy import maybe_update_conversation_summary
 from backend.app.memory.database import MemoryRecord, MessageRecord, MoodStateRecord
 from backend.app.memory.store import get_memory_store, reset_memory_store
@@ -127,10 +132,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://127.0.0.1:5173",
-        "http://localhost:5173",
-    ],
+    allow_origins=load_cors_origins(),
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -481,7 +483,7 @@ def preview_context(user_input: str) -> ContextPreviewResponse:
     )
 
 
-def _decision_to_schema(decision) -> BehaviorDecisionSchema:
+def _decision_to_schema(decision, *, saved_message_id: int | None = None) -> BehaviorDecisionSchema:
     return BehaviorDecisionSchema(
         decision=decision.decision,
         avatar_state=decision.avatar_state,
@@ -489,6 +491,7 @@ def _decision_to_schema(decision) -> BehaviorDecisionSchema:
         reason=decision.reason,
         local_response=decision.local_response,
         tone_mode=decision.tone_mode,
+        saved_message_id=saved_message_id,
     )
 
 
@@ -499,7 +502,16 @@ def evaluate_behavior_route(request: BehaviorEvaluateRequest) -> BehaviorDecisio
         store,
         BehaviorEvent(event_type=request.event_type, user_input=request.user_input),
     )
-    return _decision_to_schema(decision)
+    saved_message_id: int | None = None
+    if request.event_type in {"idle_tick", "proactive_check"} and should_persist_local_behavior_line(
+        decision,
+    ):
+        saved_message_id = persist_local_behavior_line(
+            store,
+            decision,
+            event_type=request.event_type,
+        )
+    return _decision_to_schema(decision, saved_message_id=saved_message_id)
 
 
 @app.post(
