@@ -303,10 +303,37 @@ check("send button usable", await page.locator("button[type='submit']").isEnable
 check("ptt button usable at 390px", await page.locator(".ptt-button").isEnabled());
 check("tts toggle visible at 390px", (await page.locator(".tts-toggle").count()) > 0);
 
+const lastUserSnippet =
+  (await page.locator(".message.user").last().textContent())?.trim().slice(0, 24) ?? "";
+const lastBoxiSnippet =
+  (await page.locator(".message.boxi").last().locator("p:not(.message-meta)").textContent())
+    ?.trim()
+    .slice(0, 24) ?? "";
+
 await page.reload({ waitUntil: "networkidle" });
-await page.waitForFunction(() => document.querySelectorAll(".message").length > 0);
+await page.waitForFunction(() => {
+  const status = document.querySelector(".api-status strong")?.textContent?.trim();
+  return status === "ok" || status === "offline";
+});
+await page.waitForFunction(
+  ({ user, boxi }) => {
+    const body = document.body.textContent ?? "";
+    return body.includes(user) && body.includes(boxi);
+  },
+  { user: lastUserSnippet, boxi: lastBoxiSnippet },
+  { timeout: 15000 },
+);
 const reloadedCount = await page.locator(".message").count();
-check("history reload after refresh", reloadedCount >= pttAfter);
+check(
+  "history reload after refresh",
+  reloadedCount > 0 && reloadedCount <= pttAfter,
+  `${reloadedCount} messages (pre-refresh ${pttAfter})`,
+);
+check(
+  "last chat turn survives refresh",
+  (await page.locator(".message.user").last().textContent())?.includes(lastUserSnippet.slice(0, 8)),
+  lastUserSnippet,
+);
 
 const metaCount = await page.locator(".message.boxi .message-meta").count();
 check("stored assistant metadata on reload", metaCount > 0);

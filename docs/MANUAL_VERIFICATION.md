@@ -90,10 +90,13 @@ PYTHON_BIN=.venv/bin/python npm run check
 npm run build:frontend
 ```
 
-With the local API on `18000` and frontend on `5173`, browser smoke can be run as:
+With the local API on `18000` and frontend on `5173`, install Playwright browsers once, then run browser smoke:
 
 ```bash
+npx playwright install chromium
+CYBER_COMPANION_API_PORT=18000 VITE_API_BASE_URL=http://127.0.0.1:18000 npm run dev --workspace frontend
+# separate terminal:
 CYBER_VERIFY_API_URL=http://127.0.0.1:18000 node scripts/ui_verify.mjs
 ```
 
-Latest verified state: **36/36 passed** (Session 18), including delayed TTS synthesis, refuse synthesize handoff, and overlapping chat-round avatar regression checks.
+Latest verified state: **37/37 passed** (Session 25), including refuse TTS synthesize, overlapping chat-round avatar checks, and history reload after refresh.

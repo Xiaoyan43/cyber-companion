@@ -1135,3 +1135,39 @@
 - Did not install Playwright browser binaries.
 - Did not wire cloud STT/TTS adapters.
 - Did not change provider abstraction, memory schema, behavior contract, or file permission policy.
+
+## 2026-06-08 - Session 25
+
+本次完成：
+
+- **Playwright browser smoke verification**:
+  - Installed Playwright Chromium 1.60 (`npx playwright install chromium`).
+  - Ran full `node scripts/ui_verify.mjs` against API `18000` + frontend `5173`: **37/37 passed**.
+  - Fixed flaky `history reload after refresh`: compare against persisted tail + last-turn survival (not raw DOM count vs 50-message API limit).
+  - Updated `docs/MANUAL_VERIFICATION.md` and `docs/HANDOFF.md` with install/run steps and latest smoke state.
+
+下次接着做：
+
+- Claude Code read-only MVP batch review.
+- Cloud STT/TTS when explicitly requested.
+
+已知问题：
+
+- Mock TTS still returns silent WAV timed to text length, not real speech.
+- `/memory/messages?limit=50` caps reload history; ui_verify now checks last-turn survival instead of full DOM parity.
+
+相关文件：
+
+- `scripts/ui_verify.mjs`
+- `docs/MANUAL_VERIFICATION.md`
+- `docs/HANDOFF.md`
+- `docs/SESSION_LOG.md`
+
+测试结果：
+
+- `CYBER_VERIFY_API_URL=http://127.0.0.1:18000 node scripts/ui_verify.mjs`: **37 passed, 0 failed**.
+
+不要改动的边界：
+
+- Did not wire cloud STT/TTS adapters.
+- Did not change provider abstraction, memory schema, behavior contract, or file permission policy.

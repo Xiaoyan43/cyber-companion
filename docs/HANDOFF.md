@@ -25,7 +25,7 @@ npm run build:frontend
 
 Both passed after Session 23. Backend tests: 70 passing; frontend `tsc --noEmit` and Vite 6.4.x production build pass. `npm audit` reports 0 vulnerabilities (dev and prod).
 
-`node scripts/ui_verify.mjs` has a passing API section, but full browser smoke needs Playwright browser binaries installed locally. Do not install/download browsers unless the user approves.
+`node scripts/ui_verify.mjs`: **37/37 passed** after Session 25 (Playwright 1.60 + Chromium installed). API section passes without browsers; full browser smoke needs `npx playwright install chromium`.
 
 ## Ownership Model
 
@@ -95,7 +95,7 @@ npm run build:frontend
 
 ## Next Small Slices
 
-- Fix or extend `scripts/ui_verify.mjs` (install Playwright browsers with user approval to run full smoke locally).
+- Fix or extend `scripts/ui_verify.mjs` (Playwright browsers installed; re-run after UI changes).
 - Have Claude Code do read-only MVP batch review (see prompt below).
 - Wire real cloud STT/TTS only if `allow_cloud_stt` / `allow_cloud_tts` are true and keys are configured.
 
