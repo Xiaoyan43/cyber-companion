@@ -1606,3 +1606,32 @@
 不要改动的边界：
 
 - STT/chat/memory/behavior unchanged; `mac_say` still available when switching `default_provider` back.
+
+## 2026-06-09 - Session 29 (Doubao TTS HTTP connection reuse)
+
+本次完成：
+
+- `DoubaoTTSProvider` 不再每次合成 `with httpx.Client(...)`；改为模块级 `get_shared_http_client()` 常驻连接池（keep-alive，`http2=True` 在已装 `h2` 时启用，否则回退 HTTP/1.1）。
+- 导出 `close_doubao_http_client()`；首次取共享 client 时 hook `reset_tts_router`，重置 router 时关闭连接；注入 `http_client` 的测试分支不变。
+- 测试：`test_doubao_shared_http_client_reused`、`test_reset_tts_router_closes_doubao_http_client`；autouse fixture 补充 `close_doubao_http_client()`。
+
+下次接着做：
+
+- 可选：装 `httpx[http2]` 启用 HTTP/2；或提交未提交的 `useTextToSpeech.ts` 分块播放。
+
+已知问题：
+
+- `main.py` lifespan 里 `from router import reset_tts_router` 为早期绑定，进程退出时可能未走 hook；长驻 dev server 可接受，测试 fixture 已显式 close。
+
+相关文件：
+
+- `backend/app/tts/doubao.py`
+- `backend/tests/test_tts.py`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed — **125** backend tests; frontend `tsc --noEmit` passed.
+
+不要改动的边界：
+
+- TTS provider 接口未改；仅 doubao HTTP 层性能优化。

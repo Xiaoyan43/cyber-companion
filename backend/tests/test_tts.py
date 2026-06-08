@@ -12,7 +12,14 @@ from backend.app.memory.budget import BudgetConfig
 from backend.app.memory.store import reset_memory_store
 from backend.app.providers.router import reset_provider_router
 from backend.app.tts.config import TTSConfig, TTSProviderConfigEntry
-from backend.app.tts.doubao import TTS_HTTP_ENDPOINT, DoubaoTTSProvider
+from backend.app.tts.doubao import (
+    CANCAN_BIGMODEL_SPEAKER,
+    TTS_HTTP_ENDPOINT,
+    DoubaoTTSProvider,
+    close_doubao_http_client,
+    get_shared_http_client,
+    resolve_resource_id,
+)
 from backend.app.tts.exceptions import TTSConfigError, TTSError
 from backend.app.tts.mac_say import MacSayTTSProvider
 from backend.app.tts.mock import MockTTSProvider
@@ -28,10 +35,12 @@ from backend.app.tts.wav_utils import generate_silent_wav, parse_wav_duration_ms
 def reset_singletons() -> None:
     reset_provider_router()
     reset_memory_store()
+    close_doubao_http_client()
     reset_tts_router()
     yield
     reset_provider_router()
     reset_memory_store()
+    close_doubao_http_client()
     reset_tts_router()
 
 
@@ -280,8 +289,8 @@ def test_force_mock_overrides_doubao_default(monkeypatch: pytest.MonkeyPatch, tm
 
 def _set_doubao_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DOUBAO_TTS_API_KEY", "api-key-abc")
-    monkeypatch.setenv("DOUBAO_TTS_VOICE_TYPE", "BV700_streaming")
-    monkeypatch.setenv("DOUBAO_TTS_RESOURCE_ID", "seed-tts-1.0")
+    monkeypatch.setenv("DOUBAO_TTS_VOICE_TYPE", CANCAN_BIGMODEL_SPEAKER)
+    monkeypatch.setenv("DOUBAO_TTS_RESOURCE_ID", "seed-tts-2.0")
     monkeypatch.delenv("DOUBAO_TTS_ACCESS_TOKEN", raising=False)
 
 
@@ -306,7 +315,7 @@ def test_doubao_provider_status_contract(monkeypatch: pytest.MonkeyPatch) -> Non
 
     assert status.name == "doubao"
     assert status.enabled is False
-    assert status.model == "BV700_streaming"
+    assert status.model == CANCAN_BIGMODEL_SPEAKER
     assert status.configured is True
     assert status.api_key_present is True
     assert status.placeholder is False
@@ -325,6 +334,22 @@ def test_doubao_unconfigured_raises_config_error(monkeypatch: pytest.MonkeyPatch
         provider.synthesize(SynthesisRequest(text="你好"))
 
     assert "DOUBAO_TTS_API_KEY" in str(error.value)
+
+
+def test_resolve_resource_id_for_cancan_bigmodel() -> None:
+    assert resolve_resource_id(CANCAN_BIGMODEL_SPEAKER) == "seed-tts-2.0"
+    assert resolve_resource_id("zh_female_shuangkuaisisi_moon_bigtts") == "seed-tts-1.0"
+
+
+def test_doubao_rejects_legacy_bv_streaming_speaker(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DOUBAO_TTS_API_KEY", "api-key-abc")
+    monkeypatch.setenv("DOUBAO_TTS_VOICE_TYPE", "BV700_streaming")
+    provider = DoubaoTTSProvider()
+
+    with pytest.raises(TTSError) as error:
+        provider.synthesize(SynthesisRequest(text="你好"))
+
+    assert "legacy small-model" in str(error.value).lower()
 
 
 def test_doubao_accepts_legacy_access_token_alias(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -372,6 +397,24 @@ def _fake_stream_client(lines: list[str], captured: dict[str, object]) -> object
     return FakeClient()
 
 
+def test_doubao_shared_http_client_reused() -> None:
+    close_doubao_http_client()
+    first = get_shared_http_client(30.0)
+    second = get_shared_http_client(30.0)
+    assert first is second
+
+
+def test_reset_tts_router_closes_doubao_http_client() -> None:
+    from backend.app.tts import router as tts_router
+
+    close_doubao_http_client()
+    client = get_shared_http_client(30.0)
+
+    tts_router.reset_tts_router()
+
+    assert client.is_closed
+
+
 def test_doubao_synthesize_mocked_http(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_doubao_env(monkeypatch)
     audio = b"mp3-audio-bytes"
@@ -387,19 +430,19 @@ def test_doubao_synthesize_mocked_http(monkeypatch: pytest.MonkeyPatch) -> None:
     assert captured["url"] == TTS_HTTP_ENDPOINT
     headers = captured["headers"]
     assert headers["X-Api-Key"] == "api-key-abc"
-    assert headers["X-Api-Resource-Id"] == "seed-tts-1.0"
+    assert headers["X-Api-Resource-Id"] == "seed-tts-2.0"
     assert headers["X-Api-Request-Id"]
     assert headers["Content-Type"] == "application/json"
 
     body = captured["json"]
     assert body["user"]["uid"] == "cyber-companion"
     assert body["req_params"]["text"] == "你好，Boxi。"
-    assert body["req_params"]["speaker"] == "BV700_streaming"
+    assert body["req_params"]["speaker"] == CANCAN_BIGMODEL_SPEAKER
     assert body["req_params"]["audio_params"]["format"] == "mp3"
 
     assert result.mock is False
     assert result.provider == "doubao"
-    assert result.model == "BV700_streaming"
+    assert result.model == CANCAN_BIGMODEL_SPEAKER
     assert result.mime_type == "audio/mpeg"
     assert result.audio_bytes == audio
 

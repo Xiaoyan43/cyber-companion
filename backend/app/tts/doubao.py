@@ -26,6 +26,8 @@ ENV_RESOURCE_ID = "DOUBAO_TTS_RESOURCE_ID"
 
 DEFAULT_RESOURCE_ID = "seed-tts-1.0"
 DEFAULT_FORMAT = "mp3"
+# Big-model 灿灿 2.0 (V3 + X-Api-Key). Legacy BV700_streaming is small-model only.
+CANCAN_BIGMODEL_SPEAKER = "zh_female_cancan_uranus_bigtts"
 
 FORMAT_TO_MIME: dict[str, str] = {
     "wav": "audio/wav",
@@ -33,6 +35,53 @@ FORMAT_TO_MIME: dict[str, str] = {
     "mp3": "audio/mpeg",
     "ogg_opus": "audio/ogg",
 }
+
+_shared_http_client: httpx.Client | None = None
+_shared_http_client_timeout: float | None = None
+
+
+def _create_http_client(timeout_s: float) -> httpx.Client:
+    try:
+        return httpx.Client(timeout=timeout_s, http2=True)
+    except ImportError:
+        return httpx.Client(timeout=timeout_s)
+
+
+def get_shared_http_client(timeout_s: float) -> httpx.Client:
+    global _shared_http_client, _shared_http_client_timeout
+    _install_reset_tts_router_hook()
+    if _shared_http_client is None or _shared_http_client_timeout != timeout_s:
+        close_doubao_http_client()
+        _shared_http_client = _create_http_client(timeout_s)
+        _shared_http_client_timeout = timeout_s
+    return _shared_http_client
+
+
+def close_doubao_http_client() -> None:
+    global _shared_http_client, _shared_http_client_timeout
+    if _shared_http_client is not None:
+        _shared_http_client.close()
+        _shared_http_client = None
+        _shared_http_client_timeout = None
+
+
+def _install_reset_tts_router_hook() -> None:
+    import sys
+
+    router_mod = sys.modules.get("backend.app.tts.router")
+    if router_mod is None:
+        return
+
+    original_reset = getattr(router_mod, "reset_tts_router", None)
+    if original_reset is None or getattr(original_reset, "_closes_doubao_http_client", False):
+        return
+
+    def reset_tts_router() -> None:
+        close_doubao_http_client()
+        original_reset()
+
+    reset_tts_router._closes_doubao_http_client = True  # type: ignore[attr-defined]
+    router_mod.reset_tts_router = reset_tts_router
 
 
 class DoubaoTTSProvider(TextToSpeechProvider):
@@ -68,10 +117,11 @@ class DoubaoTTSProvider(TextToSpeechProvider):
         voice_type = self._env(ENV_VOICE_TYPE)
         if not api_key or not voice_type:
             return None
+        explicit_resource = self._env(ENV_RESOURCE_ID) or self._resource_id
         return {
             "api_key": api_key,
             "voice_type": voice_type,
-            "resource_id": self._env(ENV_RESOURCE_ID) or self._resource_id or DEFAULT_RESOURCE_ID,
+            "resource_id": resolve_resource_id(voice_type, explicit_resource),
         }
 
     def is_configured(self) -> bool:
@@ -101,6 +151,8 @@ class DoubaoTTSProvider(TextToSpeechProvider):
         text = request.text.strip()
         if not text:
             raise TTSError("Text payload is empty.", provider=self.name, status_code=400)
+
+        _validate_speaker_for_v3(creds["voice_type"])
 
         payload = self._build_request_payload(text, creds)
         headers = self._build_request_headers(creds)
@@ -155,24 +207,19 @@ class DoubaoTTSProvider(TextToSpeechProvider):
         }
 
     def _stream_synthesis(self, payload: dict[str, Any], headers: dict[str, str]) -> bytes:
-        if self._http_client is not None:
-            with self._http_client.stream(
-                "POST",
-                TTS_HTTP_ENDPOINT,
-                json=payload,
-                headers=headers,
-                timeout=self._timeout_s,
-            ) as response:
-                return self._read_streamed_audio(response)
-
-        with httpx.Client(timeout=self._timeout_s) as client:
-            with client.stream(
-                "POST",
-                TTS_HTTP_ENDPOINT,
-                json=payload,
-                headers=headers,
-            ) as response:
-                return self._read_streamed_audio(response)
+        client = (
+            self._http_client
+            if self._http_client is not None
+            else get_shared_http_client(self._timeout_s)
+        )
+        with client.stream(
+            "POST",
+            TTS_HTTP_ENDPOINT,
+            json=payload,
+            headers=headers,
+            timeout=self._timeout_s,
+        ) as response:
+            return self._read_streamed_audio(response)
 
     def _read_streamed_audio(self, response: httpx.Response) -> bytes:
         if response.status_code in {401, 403}:
@@ -228,6 +275,31 @@ class DoubaoTTSProvider(TextToSpeechProvider):
         )
 
 
+def resolve_resource_id(speaker: str, explicit: str | None = None) -> str:
+    if explicit:
+        return explicit
+    if speaker.startswith("S_"):
+        return "seed-icl-2.0"
+    if "_uranus_" in speaker or speaker.startswith("saturn_"):
+        return "seed-tts-2.0"
+    if "_moon_bigtts" in speaker or "_mars_bigtts" in speaker or speaker.startswith("ICL_"):
+        return "seed-tts-1.0"
+    return DEFAULT_RESOURCE_ID
+
+
+def _validate_speaker_for_v3(speaker: str) -> None:
+    if speaker.endswith("_streaming") or (
+        speaker.startswith("BV") and "_streaming" in speaker
+    ):
+        raise TTSError(
+            f"Speaker `{speaker}` is a legacy small-model voice and does not work with "
+            f"V3 X-Api-Key. Use big-model 灿灿 2.0 `{CANCAN_BIGMODEL_SPEAKER}` with "
+            "`seed-tts-2.0`, or switch TTS back to `mac_say`.",
+            provider="doubao",
+            status_code=503,
+        )
+
+
 def _iter_response_lines(response: httpx.Response) -> Iterator[str]:
     for raw_line in response.iter_lines():
         if not raw_line:
@@ -268,6 +340,7 @@ def _looks_like_auth_or_quota_error(message: str) -> bool:
         "grant",
         "access denied",
         "permission denied",
+        "resource id is mismatched",
         "quota exceeded",
         "quota",
         "invalid x-api",
