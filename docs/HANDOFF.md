@@ -2,9 +2,9 @@
 
 ## Current State
 
-This repository has a large uncommitted MVP batch on top of baseline commit `d7d225f`.
+Baseline checkpoint: commit `5005731` (Phase 2–10 MVP batch including behavior ticks, CORS, Vite 6, tick persistence). **Policy: one slice → one checkpoint commit; do not accumulate uncommitted work.**
 
-Implemented in the working tree:
+Implemented through Session 23:
 
 - Phase 2 pixel character UI and avatar state animations.
 - Phase 3 provider abstraction with mock, DeepSeek, OpenAI placeholder, and local placeholder.
@@ -23,7 +23,7 @@ PYTHON_BIN=.venv/bin/python npm run check
 npm run build:frontend
 ```
 
-Both passed after Session 23. Backend tests: 68 passing; frontend `tsc --noEmit` and Vite 6.4.x production build pass. `npm audit` reports 0 vulnerabilities (dev and prod).
+Both passed after Session 23. Backend tests: 70 passing; frontend `tsc --noEmit` and Vite 6.4.x production build pass. `npm audit` reports 0 vulnerabilities (dev and prod).
 
 `node scripts/ui_verify.mjs` has a passing API section, but full browser smoke needs Playwright browser binaries installed locally. Do not install/download browsers unless the user approves.
 
@@ -49,21 +49,10 @@ Claude Code should not rewrite broad modules unless the user explicitly asks. Co
 
 ## First Thing To Do
 
-Before new feature work, stabilize the current uncommitted batch.
-
-Recommended order:
-
-1. Inspect `git status`.
-2. Read `AGENTS.md`, `CLAUDE.md`, `.cursor/rules/cyber-companion.mdc`, `docs/CURSOR_PHASE_PLAYBOOK.md`, `docs/TODO.md`, `docs/SESSION_LOG.md`, and this file.
-3. Run:
-
-```bash
-PYTHON_BIN=.venv/bin/python npm run check
-npm run build:frontend
-```
-
-4. If the checks still pass, create a checkpoint commit for the current Phase 2-10 MVP batch.
-5. Only after the checkpoint, continue with small slices.
+1. Inspect `git status` — working tree should be clean after each slice commit.
+2. Read project docs (`AGENTS.md`, `docs/HANDOFF.md`, `docs/TODO.md`, `docs/SESSION_LOG.md`).
+3. Run `PYTHON_BIN=.venv/bin/python npm run check` and `npm run build:frontend`.
+4. Pick one slice from **Next Small Slices**, implement, verify, **commit immediately**, update `docs/SESSION_LOG.md`.
 
 ## Recommended Claude Code Prompt
 
@@ -106,11 +95,8 @@ npm run build:frontend
 
 ## Next Small Slices
 
-Do these only after the current uncommitted batch is checkpointed or the user explicitly asks to continue without a checkpoint.
-
-- Expand backend CORS config if the frontend is routinely run on non-5173 ports. Keep it explicit, not wildcard.
-- Install Playwright browser binaries only with user approval, then run full `node scripts/ui_verify.mjs`.
-- Add a manual verification note for the latest browser smoke state.
+- Fix or extend `scripts/ui_verify.mjs` (install Playwright browsers with user approval to run full smoke locally).
+- Have Claude Code do read-only MVP batch review (see prompt below).
 - Wire real cloud STT/TTS only if `allow_cloud_stt` / `allow_cloud_tts` are true and keys are configured.
 
 ## Boundaries

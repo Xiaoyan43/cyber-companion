@@ -1097,3 +1097,41 @@
 - Did not wire cloud STT/TTS adapters.
 - Did not change provider abstraction, memory schema, behavior decision contract, or file permission policy.
 - Did not expose dev servers beyond localhost.
+
+## 2026-06-08 - Session 24
+
+本次完成：
+
+- **ui_verify refuse/TTS timing hardening** (known flake from bundled commit):
+  - After delayed-TTS race check, wait for avatar `idle` before the next chat turn.
+  - Refuse smoke: use `waitForResponse` (not parallel request/poll race); wait for refuse bubble before asserting synthesize payload; then wait for `talking`/`angry` avatar.
+- Updated `docs/HANDOFF.md` for per-slice checkpoint policy and current baseline `5005731`.
+- Marked checkpoint TODO done in `docs/TODO.md`.
+
+下次接着做：
+
+- Run full `node scripts/ui_verify.mjs` after `npx playwright install` (needs user approval for browser download).
+- Claude Code read-only MVP batch review.
+- Cloud STT/TTS when explicitly requested.
+
+已知问题：
+
+- Mock TTS still returns silent WAV timed to text length, not real speech.
+- Full browser ui_verify not re-run this session (Playwright 1.60 browsers not installed locally).
+
+相关文件：
+
+- `scripts/ui_verify.mjs`
+- `docs/HANDOFF.md`
+- `docs/TODO.md`
+- `docs/SESSION_LOG.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed; **70** backend tests passed, 0 warnings; frontend `tsc --noEmit` passed.
+
+不要改动的边界：
+
+- Did not install Playwright browser binaries.
+- Did not wire cloud STT/TTS adapters.
+- Did not change provider abstraction, memory schema, behavior contract, or file permission policy.

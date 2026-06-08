@@ -2,7 +2,7 @@
 
 ## Current Priority
 
-- [ ] Create a checkpoint commit for the current Phase 2-10 MVP batch after user approval.
+- [x] Create a checkpoint commit for the current Phase 2-10 MVP batch after user approval.
 - [ ] Have Claude Code do a read-only architecture/security/memory/behavior review of the current MVP batch.
 - [x] Create foundational project files and cross-tool rules.
 - [x] Add open-source reuse policy.

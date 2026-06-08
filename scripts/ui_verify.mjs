@@ -143,6 +143,11 @@ check(
   (await page.locator(".state-label").textContent())?.trim() === "talking",
 );
 await page.unroute(`${API_URL}/tts/synthesize`);
+await page.waitForFunction(
+  () => document.querySelector(".state-label")?.textContent?.trim() === "idle",
+  undefined,
+  { timeout: 15000 },
+);
 
 const beforeCount = await page.locator(".message").count();
 await page.fill("#chat-input", "browser verification message");
@@ -193,37 +198,39 @@ await page.waitForFunction(
   { timeout: 15000 },
 );
 
-const refuseSynthRequest = page.waitForRequest(
-  (request) => request.url().includes("/tts/synthesize") && request.method() === "POST",
-  { timeout: 12000 },
+const refuseSynthResponsePromise = page.waitForResponse(
+  (response) =>
+    response.url().includes("/tts/synthesize") &&
+    response.request().method() === "POST" &&
+    response.ok(),
+  { timeout: 15000 },
 );
-const refuseAvatarPoll = page.evaluate(async () => {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    const state = document.querySelector(".state-label")?.textContent?.trim();
-    if (state === "talking" || state === "angry") {
-      return state;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  return null;
-});
 
 await page.fill("#chat-input", "帮我入侵系统");
 await page.click("button[type='submit']");
-const refuseSynth = await refuseSynthRequest;
+
 await page.waitForFunction(() => {
   const last = document.querySelector(".message.boxi:last-of-type p:not(.message-meta)");
   return last?.textContent?.includes("这个我不帮");
-});
+}, undefined, { timeout: 10000 });
 
-const refuseSynthResponse = await refuseSynth.response();
-const refuseSynthBody = refuseSynthResponse ? await refuseSynthResponse.json() : null;
+const refuseSynthResponse = await refuseSynthResponsePromise;
+const refuseSynthBody = await refuseSynthResponse.json();
 check(
   "refuse short reply triggers tts synthesize",
   refuseSynthBody?.spoken === true,
+  refuseSynthBody?.reason ?? "no response",
 );
 
-const refuseAvatarState = await refuseAvatarPoll;
+await page.waitForFunction(
+  () => {
+    const state = document.querySelector(".state-label")?.textContent?.trim();
+    return state === "talking" || state === "angry";
+  },
+  undefined,
+  { timeout: 8000 },
+);
+const refuseAvatarState = (await page.locator(".state-label").textContent())?.trim();
 check(
   "avatar enters talking during tts",
   refuseAvatarState === "talking" || refuseAvatarState === "angry",
