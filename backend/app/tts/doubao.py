@@ -2,29 +2,32 @@ from __future__ import annotations
 
 import base64
 import binascii
+import json
 import os
 import uuid
-from typing import Any
+from typing import Any, Iterator
 
 import httpx
 
 from backend.app.tts.base import TextToSpeechProvider
 from backend.app.tts.exceptions import TTSConfigError, TTSError
 from backend.app.tts.types import SynthesisRequest, SynthesisResult, TTSProviderStatus
-from backend.app.tts.wav_utils import parse_wav_duration_ms
 
-# Volcano Engine / Doubao speech HTTP TTS (non-streaming v1).
-# Docs: https://www.volcengine.com/docs/6561/1257584
-#       https://www.volcengine.com/docs/6561/79820
-TTS_HTTP_ENDPOINT = "https://openspeech.bytedance.com/api/v1/tts"
-SUCCESS_CODE = 3000
+# Volcano Engine / Doubao speech HTTP TTS V3 (unidirectional chunked).
+# Docs: https://www.volcengine.com/docs/6561/1598757
+TTS_HTTP_ENDPOINT = "https://openspeech.bytedance.com/api/v3/tts/unidirectional"
+STREAM_DONE_CODE = 20_000_000
+STREAM_AUDIO_CODE = 0
 
-ENV_APPID = "DOUBAO_TTS_APPID"
-ENV_ACCESS_TOKEN = "DOUBAO_TTS_ACCESS_TOKEN"
-ENV_CLUSTER = "DOUBAO_TTS_CLUSTER"
+ENV_API_KEY = "DOUBAO_TTS_API_KEY"
+ENV_ACCESS_TOKEN = "DOUBAO_TTS_ACCESS_TOKEN"  # legacy alias for API key
 ENV_VOICE_TYPE = "DOUBAO_TTS_VOICE_TYPE"
+ENV_RESOURCE_ID = "DOUBAO_TTS_RESOURCE_ID"
 
-ENCODING_TO_MIME: dict[str, str] = {
+DEFAULT_RESOURCE_ID = "seed-tts-1.0"
+DEFAULT_FORMAT = "mp3"
+
+FORMAT_TO_MIME: dict[str, str] = {
     "wav": "audio/wav",
     "pcm": "audio/pcm",
     "mp3": "audio/mpeg",
@@ -40,13 +43,15 @@ class DoubaoTTSProvider(TextToSpeechProvider):
         self,
         *,
         enabled: bool = False,
-        encoding: str = "wav",
+        audio_format: str = DEFAULT_FORMAT,
+        resource_id: str | None = None,
         uid: str = "cyber-companion",
         timeout_s: float = 30.0,
         http_client: httpx.Client | None = None,
     ) -> None:
         self._enabled = enabled
-        self._encoding = encoding
+        self._audio_format = audio_format
+        self._resource_id = resource_id
         self._uid = uid
         self._timeout_s = timeout_s
         self._http_client = http_client
@@ -55,18 +60,18 @@ class DoubaoTTSProvider(TextToSpeechProvider):
         value = os.getenv(key, "").strip()
         return value or None
 
+    def _api_key(self) -> str | None:
+        return self._env(ENV_API_KEY) or self._env(ENV_ACCESS_TOKEN)
+
     def _credentials(self) -> dict[str, str] | None:
-        appid = self._env(ENV_APPID)
-        access_token = self._env(ENV_ACCESS_TOKEN)
-        cluster = self._env(ENV_CLUSTER)
+        api_key = self._api_key()
         voice_type = self._env(ENV_VOICE_TYPE)
-        if not appid or not access_token or not cluster or not voice_type:
+        if not api_key or not voice_type:
             return None
         return {
-            "appid": appid,
-            "access_token": access_token,
-            "cluster": cluster,
+            "api_key": api_key,
             "voice_type": voice_type,
+            "resource_id": self._env(ENV_RESOURCE_ID) or self._resource_id or DEFAULT_RESOURCE_ID,
         }
 
     def is_configured(self) -> bool:
@@ -80,7 +85,7 @@ class DoubaoTTSProvider(TextToSpeechProvider):
             enabled=self._enabled,
             model=voice_type,
             configured=creds is not None,
-            api_key_present=creds is not None,
+            api_key_present=self._api_key() is not None,
             placeholder=False,
             cloud=True,
         )
@@ -89,8 +94,8 @@ class DoubaoTTSProvider(TextToSpeechProvider):
         creds = self._credentials()
         if not creds:
             raise TTSConfigError(
-                "Doubao TTS is selected but DOUBAO_TTS_APPID, DOUBAO_TTS_ACCESS_TOKEN, "
-                "DOUBAO_TTS_CLUSTER, and DOUBAO_TTS_VOICE_TYPE must all be configured."
+                "Doubao TTS is selected but DOUBAO_TTS_API_KEY (or DOUBAO_TTS_ACCESS_TOKEN) "
+                "and DOUBAO_TTS_VOICE_TYPE must be configured."
             )
 
         text = request.text.strip()
@@ -98,64 +103,13 @@ class DoubaoTTSProvider(TextToSpeechProvider):
             raise TTSError("Text payload is empty.", provider=self.name, status_code=400)
 
         payload = self._build_request_payload(text, creds)
-        headers = {
-            "Authorization": f"Bearer;{creds['access_token']}",
-            "Content-Type": "application/json",
-        }
+        headers = self._build_request_headers(creds)
 
         try:
-            response = self._post_json(payload, headers)
+            audio_bytes = self._stream_synthesis(payload, headers)
         except httpx.HTTPError as error:
             raise TTSError(
                 f"Doubao TTS network error: {error}",
-                provider=self.name,
-            ) from error
-
-        if response.status_code in {401, 403}:
-            raise TTSError(
-                "Doubao TTS authentication failed. Check DOUBAO_TTS_APPID and DOUBAO_TTS_ACCESS_TOKEN.",
-                provider=self.name,
-                status_code=503,
-            )
-
-        try:
-            body = response.json()
-        except ValueError as error:
-            raise TTSError(
-                "Doubao TTS returned a non-JSON response.",
-                provider=self.name,
-            ) from error
-
-        if response.status_code >= 400:
-            message = _response_message(body) or f"HTTP {response.status_code}"
-            raise TTSError(
-                f"Doubao TTS request failed: {message}",
-                provider=self.name,
-                status_code=502,
-            )
-
-        code = body.get("code")
-        if code != SUCCESS_CODE:
-            message = _response_message(body) or f"error code {code}"
-            status_code = 503 if _looks_like_auth_or_quota_error(message) else 502
-            raise TTSError(
-                f"Doubao TTS synthesis failed: {message}",
-                provider=self.name,
-                status_code=status_code,
-            )
-
-        audio_b64 = body.get("data")
-        if not isinstance(audio_b64, str) or not audio_b64.strip():
-            raise TTSError(
-                "Doubao TTS returned no audio data.",
-                provider=self.name,
-            )
-
-        try:
-            audio_bytes = base64.b64decode(audio_b64, validate=True)
-        except (ValueError, binascii.Error) as error:
-            raise TTSError(
-                "Doubao TTS returned invalid base64 audio.",
                 provider=self.name,
             ) from error
 
@@ -165,15 +119,8 @@ class DoubaoTTSProvider(TextToSpeechProvider):
                 provider=self.name,
             )
 
-        mime_type = ENCODING_TO_MIME.get(self._encoding, "application/octet-stream")
-        duration_ms = _duration_from_response(body)
-        if duration_ms is None and self._encoding == "wav":
-            try:
-                duration_ms = parse_wav_duration_ms(audio_bytes)
-            except ValueError:
-                duration_ms = None
-        if duration_ms is None:
-            duration_ms = max(1, len(text) * 45)
+        mime_type = FORMAT_TO_MIME.get(self._audio_format, "application/octet-stream")
+        duration_ms = max(1, len(text) * 45)
 
         return SynthesisResult(
             provider=self.name,
@@ -184,43 +131,126 @@ class DoubaoTTSProvider(TextToSpeechProvider):
             mock=False,
         )
 
+    def _build_request_headers(self, creds: dict[str, str]) -> dict[str, str]:
+        return {
+            "X-Api-Key": creds["api_key"],
+            "X-Api-Resource-Id": creds["resource_id"],
+            "X-Api-Request-Id": str(uuid.uuid4()),
+            "Content-Type": "application/json",
+        }
+
     def _build_request_payload(self, text: str, creds: dict[str, str]) -> dict[str, Any]:
         return {
-            "app": {
-                "appid": creds["appid"],
-                "token": creds["access_token"],
-                "cluster": creds["cluster"],
-            },
             "user": {
                 "uid": self._uid,
             },
-            "audio": {
-                "voice_type": creds["voice_type"],
-                "encoding": self._encoding,
-                "speed_ratio": 1.0,
-            },
-            "request": {
-                "reqid": str(uuid.uuid4()),
+            "req_params": {
                 "text": text,
-                "operation": "query",
+                "speaker": creds["voice_type"],
+                "audio_params": {
+                    "format": self._audio_format,
+                    "sample_rate": 24_000,
+                },
             },
         }
 
-    def _post_json(self, payload: dict[str, Any], headers: dict[str, str]) -> httpx.Response:
+    def _stream_synthesis(self, payload: dict[str, Any], headers: dict[str, str]) -> bytes:
         if self._http_client is not None:
-            return self._http_client.post(
+            with self._http_client.stream(
+                "POST",
                 TTS_HTTP_ENDPOINT,
                 json=payload,
                 headers=headers,
                 timeout=self._timeout_s,
-            )
+            ) as response:
+                return self._read_streamed_audio(response)
 
         with httpx.Client(timeout=self._timeout_s) as client:
-            return client.post(
+            with client.stream(
+                "POST",
                 TTS_HTTP_ENDPOINT,
                 json=payload,
                 headers=headers,
+            ) as response:
+                return self._read_streamed_audio(response)
+
+    def _read_streamed_audio(self, response: httpx.Response) -> bytes:
+        if response.status_code in {401, 403}:
+            raise TTSError(
+                "Doubao TTS authentication failed. Check DOUBAO_TTS_API_KEY.",
+                provider=self.name,
+                status_code=503,
             )
+
+        if response.status_code >= 400:
+            raise TTSError(
+                f"Doubao TTS request failed with HTTP {response.status_code}.",
+                provider=self.name,
+                status_code=502,
+            )
+
+        audio_parts: list[bytes] = []
+        for line in _iter_response_lines(response):
+            chunk = _parse_stream_chunk(line)
+            if chunk is None:
+                continue
+
+            code = chunk.get("code")
+            if code == STREAM_AUDIO_CODE:
+                data = chunk.get("data")
+                if isinstance(data, str) and data:
+                    try:
+                        audio_parts.append(base64.b64decode(data, validate=True))
+                    except (ValueError, binascii.Error) as error:
+                        raise TTSError(
+                            "Doubao TTS returned invalid base64 audio.",
+                            provider=self.name,
+                        ) from error
+                continue
+
+            if code == STREAM_DONE_CODE:
+                return b"".join(audio_parts)
+
+            message = _response_message(chunk) or f"error code {code}"
+            status_code = 503 if _looks_like_auth_or_quota_error(message) else 502
+            raise TTSError(
+                f"Doubao TTS synthesis failed: {message}",
+                provider=self.name,
+                status_code=status_code,
+            )
+
+        if audio_parts:
+            return b"".join(audio_parts)
+
+        raise TTSError(
+            "Doubao TTS stream ended without audio data.",
+            provider=self.name,
+        )
+
+
+def _iter_response_lines(response: httpx.Response) -> Iterator[str]:
+    for raw_line in response.iter_lines():
+        if not raw_line:
+            continue
+        if isinstance(raw_line, bytes):
+            yield raw_line.decode("utf-8")
+        else:
+            yield raw_line
+
+
+def _parse_stream_chunk(line: str) -> dict[str, Any] | None:
+    payload = line.strip()
+    if not payload:
+        return None
+    if payload.startswith("data:"):
+        payload = payload[5:].strip()
+    if not payload:
+        return None
+    try:
+        parsed = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def _response_message(body: dict[str, Any]) -> str | None:
@@ -230,19 +260,6 @@ def _response_message(body: dict[str, Any]) -> str | None:
     return None
 
 
-def _duration_from_response(body: dict[str, Any]) -> int | None:
-    addition = body.get("addition")
-    if not isinstance(addition, dict):
-        return None
-    raw = addition.get("duration")
-    if raw is None:
-        return None
-    try:
-        return max(1, int(str(raw)))
-    except ValueError:
-        return None
-
-
 def _looks_like_auth_or_quota_error(message: str) -> bool:
     lowered = message.lower()
     markers = (
@@ -250,7 +267,10 @@ def _looks_like_auth_or_quota_error(message: str) -> bool:
         "auth",
         "grant",
         "access denied",
+        "permission denied",
         "quota exceeded",
         "quota",
+        "invalid x-api",
+        "api key",
     )
     return any(marker in lowered for marker in markers)

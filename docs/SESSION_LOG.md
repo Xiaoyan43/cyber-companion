@@ -1570,3 +1570,39 @@
 
 - TTS provider interface unchanged; no STT/chat/memory/behavior changes.
 - `CYBER_COMPANION_TTS_MODE=mock` and local `mac_say` must keep working when doubao is unavailable.
+
+## 2026-06-08 - Session 28 (Enable Doubao TTS: 灿灿)
+
+本次完成：
+
+- Upgraded `DoubaoTTSProvider` to V3 HTTP API (`X-Api-Key` + `X-Api-Resource-Id`) per official docs; legacy `DOUBAO_TTS_ACCESS_TOKEN` alias kept.
+- `config/tts.json`: `default_provider: doubao`, voice metadata `BV700_streaming` (灿灿); `mac_say`/`mock` remain enabled as fallback.
+- New `config/budget.json`: `allow_cloud_tts: true`.
+- `.env`: `DOUBAO_TTS_API_KEY`, `DOUBAO_TTS_VOICE_TYPE=BV700_streaming`, `DOUBAO_TTS_RESOURCE_ID=seed-tts-1.0`.
+
+下次接着做：
+
+- Manual E2E: chat reply → Boxi speaks via Doubao 灿灿; switch voice by changing `DOUBAO_TTS_VOICE_TYPE` + matching `DOUBAO_TTS_RESOURCE_ID`.
+
+已知问题：
+
+- Doubao real audio not automated in CI; `CYBER_COMPANION_TTS_MODE=mock` still forces mock.
+
+相关文件：
+
+- `backend/app/tts/doubao.py`
+- `config/tts.json`
+- `config/budget.json`
+- `.env.example`
+- `backend/tests/test_tts.py`
+
+测试结果：
+
+- `backend/tests/test_tts.py`: 24 passed (doubao V3 mock paths).
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed — **121** backend tests; frontend `tsc --noEmit` passed.
+- `npm run build:frontend`: passed.
+- `/tts/status`: `default_provider=doubao`, `configured=true`, `allow_cloud_tts=true`.
+
+不要改动的边界：
+
+- STT/chat/memory/behavior unchanged; `mac_say` still available when switching `default_provider` back.

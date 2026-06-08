@@ -1,6 +1,6 @@
 {
   "enabled": true,
-  "default_provider": "mac_say",
+  "default_provider": "doubao",
   "max_speech_chars": 120,
   "speak_decisions": ["proactive", "interrupt", "refuse", "reply"],
   "providers": {
@@ -12,6 +12,11 @@
       "enabled": true,
       "model": "mac-say",
       "voice": "Tingting"
+    },
+    "doubao": {
+      "enabled": true,
+      "model": "BV700_streaming",
+      "cloud": true
     },
     "openai_tts": {
       "enabled": false,

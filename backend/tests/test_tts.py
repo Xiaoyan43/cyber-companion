@@ -1,4 +1,5 @@
 import base64
+import json
 import subprocess
 from pathlib import Path
 
@@ -51,7 +52,7 @@ def test_tts_status_route(client: TestClient) -> None:
     payload = response.json()
     assert payload["enabled"] is True
     assert payload["force_mock"] is True
-    assert payload["allow_cloud_tts"] is False
+    assert payload["allow_cloud_tts"] is True
     assert payload["max_speech_chars"] == 120
     assert any(provider["name"] == "mock" for provider in payload["providers"])
 
@@ -249,7 +250,7 @@ def test_mac_say_synthesize_mocked_subprocess(monkeypatch: pytest.MonkeyPatch) -
     assert result.duration_ms == 600
 
 
-def test_tts_config_defaults_to_mac_say_without_force_mock(
+def test_tts_config_defaults_to_doubao_without_force_mock(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from backend.app.tts.config import load_tts_config
@@ -259,11 +260,11 @@ def test_tts_config_defaults_to_mac_say_without_force_mock(
     monkeypatch.delenv("CYBER_COMPANION_TTS_MODE", raising=False)
 
     config = load_tts_config(repo_root / "config")
-    assert config.default_provider == "mac_say"
+    assert config.default_provider == "doubao"
     assert config.force_mock is False
 
 
-def test_force_mock_overrides_mac_say_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_force_mock_overrides_doubao_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from backend.app.tts.router import get_tts_router
 
     repo_root = Path(__file__).resolve().parents[2]
@@ -278,10 +279,10 @@ def test_force_mock_overrides_mac_say_default(monkeypatch: pytest.MonkeyPatch, t
 
 
 def _set_doubao_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("DOUBAO_TTS_APPID", "app-123")
-    monkeypatch.setenv("DOUBAO_TTS_ACCESS_TOKEN", "token-abc")
-    monkeypatch.setenv("DOUBAO_TTS_CLUSTER", "volcano_tts")
+    monkeypatch.setenv("DOUBAO_TTS_API_KEY", "api-key-abc")
     monkeypatch.setenv("DOUBAO_TTS_VOICE_TYPE", "BV700_streaming")
+    monkeypatch.setenv("DOUBAO_TTS_RESOURCE_ID", "seed-tts-1.0")
+    monkeypatch.delenv("DOUBAO_TTS_ACCESS_TOKEN", raising=False)
 
 
 def test_registry_builds_doubao_provider() -> None:
@@ -313,9 +314,8 @@ def test_doubao_provider_status_contract(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_doubao_unconfigured_raises_config_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("DOUBAO_TTS_APPID", raising=False)
+    monkeypatch.delenv("DOUBAO_TTS_API_KEY", raising=False)
     monkeypatch.delenv("DOUBAO_TTS_ACCESS_TOKEN", raising=False)
-    monkeypatch.delenv("DOUBAO_TTS_CLUSTER", raising=False)
     monkeypatch.delenv("DOUBAO_TTS_VOICE_TYPE", raising=False)
 
     provider = DoubaoTTSProvider()
@@ -324,86 +324,105 @@ def test_doubao_unconfigured_raises_config_error(monkeypatch: pytest.MonkeyPatch
     with pytest.raises(TTSConfigError) as error:
         provider.synthesize(SynthesisRequest(text="你好"))
 
-    assert "DOUBAO_TTS_APPID" in str(error.value)
+    assert "DOUBAO_TTS_API_KEY" in str(error.value)
 
 
-def test_doubao_synthesize_mocked_http(monkeypatch: pytest.MonkeyPatch) -> None:
-    _set_doubao_env(monkeypatch)
-    wav = generate_silent_wav(900)
-    captured: dict[str, object] = {}
+def test_doubao_accepts_legacy_access_token_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DOUBAO_TTS_API_KEY", raising=False)
+    monkeypatch.setenv("DOUBAO_TTS_ACCESS_TOKEN", "legacy-token")
+    monkeypatch.setenv("DOUBAO_TTS_VOICE_TYPE", "BV700_streaming")
 
-    class FakeResponse:
+    provider = DoubaoTTSProvider()
+    assert provider.is_configured() is True
+
+
+def _fake_stream_client(lines: list[str], captured: dict[str, object]) -> object:
+    class FakeStreamResponse:
         status_code = 200
 
-        @staticmethod
-        def json() -> dict[str, object]:
-            return {
-                "reqid": "req-1",
-                "code": 3000,
-                "message": "Success",
-                "sequence": -1,
-                "data": base64.b64encode(wav).decode("ascii"),
-                "addition": {"duration": "900"},
-            }
+        def __init__(self, stream_lines: list[str]) -> None:
+            self._lines = stream_lines
+
+        def iter_lines(self) -> list[str]:
+            return self._lines
+
+        def __enter__(self) -> "FakeStreamResponse":
+            return self
+
+        def __exit__(self, *args: object) -> bool:
+            return False
 
     class FakeClient:
-        def post(self, url: str, *, json: dict, headers: dict[str, str], timeout: float) -> FakeResponse:
+        def stream(
+            self,
+            method: str,
+            url: str,
+            *,
+            json: dict,
+            headers: dict[str, str],
+            timeout: float,
+        ) -> FakeStreamResponse:
+            captured["method"] = method
             captured["url"] = url
             captured["json"] = json
             captured["headers"] = headers
             captured["timeout"] = timeout
-            return FakeResponse()
+            return FakeStreamResponse(lines)
 
-    provider = DoubaoTTSProvider(http_client=FakeClient())  # type: ignore[arg-type]
+    return FakeClient()
+
+
+def test_doubao_synthesize_mocked_http(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_doubao_env(monkeypatch)
+    audio = b"mp3-audio-bytes"
+    captured: dict[str, object] = {}
+    lines = [
+        json.dumps({"code": 0, "message": "", "data": base64.b64encode(audio).decode("ascii")}),
+        json.dumps({"code": 20_000_000, "message": "OK", "data": None}),
+    ]
+
+    provider = DoubaoTTSProvider(http_client=_fake_stream_client(lines, captured))  # type: ignore[arg-type]
     result = provider.synthesize(SynthesisRequest(text="你好，Boxi。"))
 
     assert captured["url"] == TTS_HTTP_ENDPOINT
     headers = captured["headers"]
-    assert headers["Authorization"] == "Bearer;token-abc"
+    assert headers["X-Api-Key"] == "api-key-abc"
+    assert headers["X-Api-Resource-Id"] == "seed-tts-1.0"
+    assert headers["X-Api-Request-Id"]
     assert headers["Content-Type"] == "application/json"
 
     body = captured["json"]
-    assert body["app"]["appid"] == "app-123"
-    assert body["app"]["token"] == "token-abc"
-    assert body["app"]["cluster"] == "volcano_tts"
-    assert body["audio"]["voice_type"] == "BV700_streaming"
-    assert body["audio"]["encoding"] == "wav"
-    assert body["request"]["text"] == "你好，Boxi。"
-    assert body["request"]["operation"] == "query"
-    assert body["request"]["reqid"]
+    assert body["user"]["uid"] == "cyber-companion"
+    assert body["req_params"]["text"] == "你好，Boxi。"
+    assert body["req_params"]["speaker"] == "BV700_streaming"
+    assert body["req_params"]["audio_params"]["format"] == "mp3"
 
     assert result.mock is False
     assert result.provider == "doubao"
     assert result.model == "BV700_streaming"
-    assert result.mime_type == "audio/wav"
-    assert result.audio_bytes == wav
-    assert result.duration_ms == 900
+    assert result.mime_type == "audio/mpeg"
+    assert result.audio_bytes == audio
 
 
 def test_doubao_auth_failure_raises_tts_error(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_doubao_env(monkeypatch)
-
-    class FakeResponse:
-        status_code = 200
-
-        @staticmethod
-        def json() -> dict[str, object]:
-            return {
-                "code": 3001,
-                "message": "authenticate request: load grant: requested grant not found",
+    captured: dict[str, object] = {}
+    lines = [
+        json.dumps(
+            {
+                "code": 45_000_000,
+                "message": "speaker permission denied: get resource id: access denied",
             }
+        ),
+    ]
 
-    class FakeClient:
-        def post(self, *args: object, **kwargs: object) -> FakeResponse:
-            return FakeResponse()
-
-    provider = DoubaoTTSProvider(http_client=FakeClient())  # type: ignore[arg-type]
+    provider = DoubaoTTSProvider(http_client=_fake_stream_client(lines, captured))  # type: ignore[arg-type]
 
     with pytest.raises(TTSError) as error:
         provider.synthesize(SynthesisRequest(text="你好"))
 
     assert error.value.provider == "doubao"
-    assert "authenticate" in str(error.value).lower()
+    assert "permission denied" in str(error.value).lower()
     assert error.value.status_code == 503
 
 
@@ -411,7 +430,7 @@ def test_doubao_network_error_raises_tts_error(monkeypatch: pytest.MonkeyPatch) 
     _set_doubao_env(monkeypatch)
 
     class FakeClient:
-        def post(self, *args: object, **kwargs: object) -> None:
+        def stream(self, *args: object, **kwargs: object) -> None:
             raise httpx.ConnectError("connection refused", request=httpx.Request("POST", TTS_HTTP_ENDPOINT))
 
     provider = DoubaoTTSProvider(http_client=FakeClient())  # type: ignore[arg-type]
