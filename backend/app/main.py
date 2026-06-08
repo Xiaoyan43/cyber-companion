@@ -4,7 +4,7 @@ import base64
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.app.behavior.completion import build_local_completion
+from backend.app.behavior.completion import build_budget_block_completion, build_local_completion
 from backend.app.behavior.engine import evaluate_behavior
 from backend.app.behavior.parser import parse_structured_assistant_response
 from backend.app.behavior.types import BehaviorEvent
@@ -19,6 +19,7 @@ from backend.app.memory.chat_persistence import (
     should_persist_local_behavior_line,
 )
 from backend.app.memory.summary_policy import maybe_update_conversation_summary
+from backend.app.memory.usage_guard import evaluate_llm_budget_gate
 from backend.app.memory.database import MemoryRecord, MessageRecord, MoodStateRecord
 from backend.app.memory.store import get_memory_store, reset_memory_store
 from backend.app.stt.exceptions import STTError
@@ -539,41 +540,60 @@ def chat_complete(request: ChatCompleteRequest) -> ChatCompleteResponse:
         BehaviorEvent(event_type="user_message", user_input=user_input),
     )
     final_decision = decision.decision
+    called_llm = False
 
     if decision.should_call_llm:
-        built = build_provider_context(
-            store,
-            user_input=user_input,
-            budget=budget,
-            behavior=decision,
-        )
-        completion_request = ChatCompletionRequest(
-            messages=built.messages,
-            max_output_tokens=min(request.max_output_tokens, budget.max_output_tokens_per_turn),
-        )
-
+        # Resolve the target model first so the spend brake can also veto pricier
+        # reasoning models before any provider call happens.
         try:
-            result = router.complete(completion_request, provider_name=request.provider)
+            target_model = router.get_provider(request.provider).status().model
         except ProviderError as error:
             raise HTTPException(
                 status_code=error.status_code,
                 detail={"error": error.message, "provider": error.provider},
             ) from error
 
-        parsed = parse_structured_assistant_response(result.content)
-        avatar_state = parsed.avatar_state or (
-            "talking" if decision.decision in {"reply", "interrupt"} else decision.avatar_state
-        )
-        if parsed.decision:
-            final_decision = parsed.decision
-        result = type(result)(
-            provider=result.provider,
-            model=result.model,
-            content=parsed.content,
-            usage=result.usage,
-            cost=result.cost,
-            mock=result.mock,
-        )
+        gate = evaluate_llm_budget_gate(store, budget, target_model=target_model)
+        if not gate.allowed:
+            # Spend brake tripped: answer locally, never touch the provider.
+            result = build_budget_block_completion(gate.block_line or "预算用完了，先省着点。")
+            avatar_state = "annoyed"
+            final_decision = "refuse"
+        else:
+            built = build_provider_context(
+                store,
+                user_input=user_input,
+                budget=budget,
+                behavior=decision,
+            )
+            completion_request = ChatCompletionRequest(
+                messages=built.messages,
+                max_output_tokens=min(request.max_output_tokens, budget.max_output_tokens_per_turn),
+            )
+
+            try:
+                result = router.complete(completion_request, provider_name=request.provider)
+            except ProviderError as error:
+                raise HTTPException(
+                    status_code=error.status_code,
+                    detail={"error": error.message, "provider": error.provider},
+                ) from error
+
+            parsed = parse_structured_assistant_response(result.content)
+            avatar_state = parsed.avatar_state or (
+                "talking" if decision.decision in {"reply", "interrupt"} else decision.avatar_state
+            )
+            if parsed.decision:
+                final_decision = parsed.decision
+            result = type(result)(
+                provider=result.provider,
+                model=result.model,
+                content=parsed.content,
+                usage=result.usage,
+                cost=result.cost,
+                mock=result.mock,
+            )
+            called_llm = True
     else:
         result = build_local_completion(decision, user_input=user_input)
         avatar_state = decision.avatar_state
@@ -584,7 +604,7 @@ def chat_complete(request: ChatCompleteRequest) -> ChatCompleteResponse:
         result,
         decision=final_decision,
         avatar_state=avatar_state,
-        should_call_llm=decision.should_call_llm,
+        should_call_llm=called_llm,
     )
     maybe_update_conversation_summary(store, budget=budget)
 
@@ -606,5 +626,5 @@ def chat_complete(request: ChatCompleteRequest) -> ChatCompleteResponse:
         mock=result.mock,
         avatar_state=avatar_state,
         decision=final_decision,
-        should_call_llm=decision.should_call_llm,
+        should_call_llm=called_llm,
     )

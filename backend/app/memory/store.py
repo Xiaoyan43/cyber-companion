@@ -67,6 +67,37 @@ class MemoryStore:
         assert row is not None
         return int(row["total"])
 
+    def _assistant_metadata_since(self, since: str) -> list[dict[str, Any]]:
+        # `created_at` uses the SQLite `datetime('now')` format (UTC,
+        # "YYYY-MM-DD HH:MM:SS"), which sorts lexicographically, so a string
+        # `>=` comparison is a valid time filter and uses idx_messages_created_at.
+        with connect(self.db_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT metadata_json FROM messages
+                WHERE role = 'assistant' AND created_at >= ?
+                """,
+                (since,),
+            ).fetchall()
+        return [loads_json(row["metadata_json"], {}) for row in rows]
+
+    def sum_llm_cost_since(self, since: str) -> float:
+        total = 0.0
+        for metadata in self._assistant_metadata_since(since):
+            cost = metadata.get("cost") or {}
+            try:
+                total += float(cost.get("total_usd", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                continue
+        return round(total, 8)
+
+    def count_llm_turns_since(self, since: str) -> int:
+        return sum(
+            1
+            for metadata in self._assistant_metadata_since(since)
+            if metadata.get("should_call_llm") is True
+        )
+
     def get_latest_conversation_summary(self) -> ConversationSummaryRecord | None:
         with connect(self.db_path) as connection:
             row = connection.execute(

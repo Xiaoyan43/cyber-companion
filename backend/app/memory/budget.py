@@ -15,6 +15,10 @@ class BudgetConfig:
     summary_batch_size: int = 6
     allow_cloud_stt: bool = False
     allow_cloud_tts: bool = False
+    # Spend brakes. <= 0 disables the corresponding cap.
+    monthly_usd_limit: float = 10.0
+    daily_llm_turn_limit: int = 200
+    allow_reasoning_model: bool = False
 
 
 def _config_dir() -> Path:
@@ -42,4 +46,7 @@ def load_budget_config(config_dir: Path | None = None) -> BudgetConfig:
         summary_batch_size=int(payload.get("summary_batch_size", 6)),
         allow_cloud_stt=bool(payload.get("allow_cloud_stt", False)),
         allow_cloud_tts=bool(payload.get("allow_cloud_tts", False)),
+        monthly_usd_limit=float(payload.get("monthly_usd_limit", 10.0)),
+        daily_llm_turn_limit=int(payload.get("daily_llm_turn_limit", 200)),
+        allow_reasoning_model=bool(payload.get("allow_reasoning_model", False)),
     )

@@ -31,7 +31,7 @@ This requires memory retrieval and summaries. Full-history prompting is not acce
 
 ## Budget Controls
 
-Config should eventually support:
+`config/budget.json` (falling back to `budget.example.json`) supports:
 
 ```json
 {
@@ -44,6 +44,28 @@ Config should eventually support:
   "allow_cloud_tts": false
 }
 ```
+
+### Enforcement (implemented)
+
+Before every would-be LLM turn, `/chat/complete` runs a spend brake
+(`backend/app/memory/usage_guard.py`) that blocks the provider call when:
+
+- `daily_llm_turn_limit` — assistant turns with `should_call_llm=true` since
+  UTC midnight reach the cap.
+- `monthly_usd_limit` — summed `cost.total_usd` of assistant turns since the
+  first of the UTC month reaches the cap.
+- `allow_reasoning_model` is `false` and the target model looks like a reasoning
+  model (e.g. `deepseek-reasoner`, `o1-*`).
+
+A blocked turn never reaches a provider: Boxi answers with a short in-character
+"budget exhausted" line, the turn is persisted with `should_call_llm=false` and
+zero cost, so it neither counts toward the daily cap nor adds to monthly spend.
+Set any limit to `0` (or `allow_reasoning_model=true`) to disable that brake.
+
+`max_input_tokens_per_turn` / `max_output_tokens_per_turn` are applied during
+context building and output capping; counts use the
+`estimate_token_count` heuristic, so treat USD figures as estimates and verify
+against official provider pricing.
 
 ## Voice Cost Policy
 
