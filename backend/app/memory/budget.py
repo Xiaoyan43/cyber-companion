@@ -10,9 +10,12 @@ from pathlib import Path
 class BudgetConfig:
     max_input_tokens_per_turn: int = 4000
     max_output_tokens_per_turn: int = 300
+    max_user_input_tokens: int = 1500
     max_raw_turns: int = 4
     max_memories_per_turn: int = 6
     summary_batch_size: int = 6
+    behavior_tick_retention: int = 200
+    auto_memory_write: bool = True
     allow_cloud_stt: bool = False
     allow_cloud_tts: bool = False
     # Spend brakes. <= 0 disables the corresponding cap.
@@ -41,9 +44,12 @@ def load_budget_config(config_dir: Path | None = None) -> BudgetConfig:
     return BudgetConfig(
         max_input_tokens_per_turn=int(payload.get("max_input_tokens_per_turn", 4000)),
         max_output_tokens_per_turn=int(payload.get("max_output_tokens_per_turn", 300)),
+        max_user_input_tokens=int(payload.get("max_user_input_tokens", 1500)),
         max_raw_turns=int(payload.get("max_raw_turns", 4)),
         max_memories_per_turn=int(payload.get("max_memories_per_turn", 6)),
         summary_batch_size=int(payload.get("summary_batch_size", 6)),
+        behavior_tick_retention=int(payload.get("behavior_tick_retention", 200)),
+        auto_memory_write=bool(payload.get("auto_memory_write", True)),
         allow_cloud_stt=bool(payload.get("allow_cloud_stt", False)),
         allow_cloud_tts=bool(payload.get("allow_cloud_tts", False)),
         monthly_usd_limit=float(payload.get("monthly_usd_limit", 10.0)),

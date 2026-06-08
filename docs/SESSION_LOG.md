@@ -1237,3 +1237,101 @@
 
 - Only edited frontend CSS + `docs/SESSION_LOG.md`.
 - Did not change avatar state machine contract, backend, provider, memory, behavior, or cost.
+
+## 2026-06-08 - Session 28
+
+本次完成：
+
+- **A1 — SQL boundary queries for recent chat / summary batches**
+  - `store.py`: `count_chat_messages`, `list_recent_chat_messages`, `list_chat_messages_between`, `get_recent_chat_window_lower_bound_id`.
+  - `context_builder` / `summary_policy` no longer call `list_messages(limit=10_000)` + Python `source` filter.
+  - `docs/ARCHITECTURE.md` Memory Engine note updated.
+- **A2 — `behavior_tick` retention cap**
+  - `behavior_tick_retention` in `budget.py` + `config/budget.example.json` (default 200).
+  - `prune_behavior_tick_messages` in `store.py`; called from `evaluate_behavior_route` after persist.
+  - `docs/MEMORY_DESIGN.md` behavior_tick retention note.
+- **B3 — Per-turn user input hard truncate before provider**
+  - `max_user_input_tokens` (default 1500); provider context only; persistence unchanged.
+  - `docs/COST_AND_TOKEN_BUDGET.md` updated.
+- **M1 — Exclude expired memories from context recall**
+  - `is_expired` in `retrieval.py`; filtered in `context_builder` before `rank_memories`.
+  - `/memory/memories` API unchanged.
+  - `docs/MEMORY_DESIGN.md` Retrieval Policy note.
+
+下次接着做：
+
+- **M2** — auto-write memories from conversation (dedicated phase per `docs/MEMORY_DESIGN.md`).
+- Other backlog from `docs/TODO.md` as user directs.
+
+已知问题：
+
+- Mock TTS still returns silent WAV timed to text length, not real speech.
+
+相关文件：
+
+- `backend/app/memory/store.py`
+- `backend/app/memory/context_builder.py`
+- `backend/app/memory/summary_policy.py`
+- `backend/app/memory/budget.py`
+- `backend/app/memory/retrieval.py`
+- `backend/app/main.py`
+- `config/budget.example.json`
+- `backend/tests/test_context_builder.py`
+- `backend/tests/test_behavior_tick_retention.py`
+- `backend/tests/test_user_input_truncation.py`
+- `backend/tests/test_memory_retrieval.py`
+- `docs/ARCHITECTURE.md`
+- `docs/MEMORY_DESIGN.md`
+- `docs/COST_AND_TOKEN_BUDGET.md`
+- `docs/TODO.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed; **86** backend tests passed; frontend `tsc --noEmit` passed.
+- `npm run build:frontend`: passed.
+
+不要改动的边界：
+
+- Did not change behavior decision contract, provider abstraction, or file permission policy.
+- Did not change `/memory/memories` listing semantics (expired memories still visible there).
+
+## 2026-06-08 - Session 29
+
+本次完成：
+
+- **M2 — Rule-based auto-write memories from conversation (MVP)**
+  - `backend/app/memory/write_policy.py`: `extract_memory_candidates` + `maybe_write_memories_from_turn`.
+  - Triggers: explicit remember, profile, project, preference, job topic + action verb.
+  - Dedup via substring/token overlap update; gated by `auto_memory_write` in budget config.
+  - Wired into `/chat/complete` after `persist_chat_turn` (links `source_message_id` to user row).
+  - Tests: `backend/tests/test_memory_write_policy.py` (6 cases, incl. chat integration).
+  - `docs/MEMORY_DESIGN.md` Auto-Write section; `config/budget.example.json` updated.
+
+下次接着做：
+
+- Optional M2 follow-up: LLM-assisted memory extraction (separate phase, needs cost review).
+- `scripts/ui_verify.mjs` extension or other backlog per `docs/HANDOFF.md`.
+
+已知问题：
+
+- Rule-based writer may miss paraphrased facts; LLM extraction not implemented yet.
+- Mock TTS still returns silent WAV timed to text length, not real speech.
+相关文件：
+
+- `backend/app/memory/write_policy.py`
+- `backend/app/memory/budget.py`
+- `backend/app/main.py`
+- `config/budget.example.json`
+- `backend/tests/test_memory_write_policy.py`
+- `docs/MEMORY_DESIGN.md`
+- `docs/TODO.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed; **92** backend tests passed; frontend `tsc --noEmit` passed.
+- `npm run build:frontend`: passed.
+
+不要改动的边界：
+
+- Did not change memory schema, behavior decision contract, provider abstraction, or file permission policy.
+- No extra LLM call for memory extraction in this slice.

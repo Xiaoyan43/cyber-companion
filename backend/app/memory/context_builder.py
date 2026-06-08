@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from backend.app.behavior.local_responses import behavior_tone_instruction
 from backend.app.behavior.types import BehaviorDecision
 from backend.app.memory.budget import BudgetConfig
 from backend.app.memory.database import ConversationSummaryRecord, MemoryRecord, MessageRecord, MoodStateRecord
 from backend.app.memory.persona import load_persona_system_prompt
-from backend.app.memory.retrieval import rank_memories, tokenize
+from backend.app.memory.retrieval import is_expired, rank_memories, tokenize
 from backend.app.memory.store import MemoryStore
 from backend.app.providers.cost import estimate_token_count
 from backend.app.providers.types import ChatMessage
@@ -51,6 +52,18 @@ def _format_summary_block(summary: ConversationSummaryRecord | None) -> str | No
     return f"[Recent conversation summary]\n{summary.summary}\nKeywords: {keywords}"
 
 
+_TRUNCATION_SUFFIX = " …[truncated]"
+
+
+def _truncate_user_input_for_provider(user_input: str, max_tokens: int) -> str:
+    if max_tokens <= 0 or estimate_token_count(user_input) <= max_tokens:
+        return user_input
+
+    max_chars = max_tokens * 3
+    clipped = user_input[:max_chars].rstrip()
+    return f"{clipped}{_TRUNCATION_SUFFIX}"
+
+
 def _pack_sections(
     sections: list[str],
     *,
@@ -79,10 +92,15 @@ def build_provider_context(
     behavior: BehaviorDecision | None = None,
 ) -> BuiltContext:
     config = budget or BudgetConfig()
-    all_messages = store.list_messages(limit=10_000)
     mood = store.get_mood_state()
     latest_summary = store.get_latest_conversation_summary()
-    ranked_memories = rank_memories(store.list_memories(limit=200), user_input)
+    now_iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    active_memories = [
+        memory
+        for memory in store.list_memories(limit=200)
+        if not is_expired(memory, now_iso)
+    ]
+    ranked_memories = rank_memories(active_memories, user_input)
 
     selected_memories: list[MemoryRecord] = []
     for memory in ranked_memories:
@@ -91,11 +109,8 @@ def build_provider_context(
         selected_memories.append(memory)
 
     # Only real conversation turns (source="chat") may be replayed to the
-    # provider. Idle/proactive behavior-tick lines are persisted for history
-    # but must not be fed back as recent context, or they pollute the prompt
-    # and inflate token/summary cost.
-    conversation_messages = [message for message in all_messages if message.source == "chat"]
-    recent_raw = conversation_messages[-config.max_raw_turns :] if config.max_raw_turns > 0 else []
+    # provider. SQL boundary queries avoid loading the full messages table.
+    recent_raw = store.list_recent_chat_messages(config.max_raw_turns)
 
     system_sections = [load_persona_system_prompt(), _format_mood_block(mood)]
     if behavior is not None:
@@ -107,7 +122,11 @@ def build_provider_context(
         system_sections.append(summary_block)
     system_sections.append(_format_memories_block(selected_memories))
 
-    reserved_tokens = estimate_token_count(user_input) + sum(
+    provider_user_input = _truncate_user_input_for_provider(
+        user_input,
+        config.max_user_input_tokens,
+    )
+    reserved_tokens = estimate_token_count(provider_user_input) + sum(
         estimate_token_count(f"{message.role}: {message.content}") for message in recent_raw
     )
     memory_budget = max(256, config.max_input_tokens_per_turn - reserved_tokens)
@@ -125,7 +144,7 @@ def build_provider_context(
         provider_messages.append(ChatMessage(role=role, content=message.content))
         included_message_ids.append(message.id)
 
-    provider_messages.append(ChatMessage(role="user", content=user_input))
+    provider_messages.append(ChatMessage(role="user", content=provider_user_input))
 
     estimated_input_tokens = sum(
         estimate_token_count(message.content) for message in provider_messages
@@ -138,7 +157,7 @@ def build_provider_context(
         included_message_ids=included_message_ids,
         summary_used=latest_summary.summary if latest_summary else None,
         truncated=truncated,
-        total_stored_messages=len(all_messages),
+        total_stored_messages=store.count_chat_messages(),
     )
 
 

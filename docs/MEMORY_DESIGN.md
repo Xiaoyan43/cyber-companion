@@ -51,7 +51,10 @@ Fields:
 Only `source="chat"` rows are replayed as recent raw turns and counted toward
 conversation summaries. `behavior_tick` rows are kept for UI history but
 excluded from both, so the companion's own idle chatter never re-enters the
-provider prompt or inflates token/summary cost.
+provider prompt or inflates token/summary cost. Retention is capped by
+`behavior_tick_retention` in budget config (default 200): after each persisted
+idle/proactive line, older `behavior_tick` rows beyond the keep count are pruned;
+`chat` rows are never deleted by this policy.
 
 ### conversation_summaries
 
@@ -127,6 +130,9 @@ Fields:
 
 ## Retrieval Policy
 
+Expired memories (`expires_at` in the past) are excluded from context recall;
+`/memory/memories` may still list them for inspection.
+
 Each LLM call should include:
 
 1. System/persona prompt.
@@ -157,4 +163,23 @@ Avoid writing:
 - transient emotion unless useful
 
 Every memory write should include `importance` and `confidence`.
+
+## Auto-Write From Conversation (M2, rule-based MVP)
+
+After each `/chat/complete` turn, `maybe_write_memories_from_turn` may create or
+update memories when the user message matches conservative local rules (no extra
+LLM call). Gated by `auto_memory_write` in budget config (default `true`).
+
+Current triggers:
+
+- explicit remember cues (`记住`, `记得`, `remind me`, …) → `reminder`
+- self-intro cues (`我叫`, `I am`, …) → `stable_profile`
+- project cues (`我在做`, `working on`, …) → `project`
+- style/preference cues → `behavior_preference`
+- job topic plus an action verb (`投递`, `面试`, `applied`, …) → `job_progress`
+
+Low-value one-liners, bare keyword mentions, and sub-threshold confidence
+guesses are skipped. Near-duplicate memories of the same type are updated in
+place instead of inserted again. Writes link to the persisted user message via
+`source_message_id`.
 

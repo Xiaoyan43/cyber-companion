@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 
 from backend.app.memory.database import MemoryRecord
 
@@ -16,6 +17,33 @@ TYPE_KEYWORDS: dict[str, set[str]] = {
     "recent_event": {"today", "yesterday", "今天", "昨天", "刚刚"},
     "emotion_state": {"feel", "mood", "情绪", "心情", "焦虑"},
 }
+
+
+def _parse_iso_timestamp(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def is_expired(memory: MemoryRecord, now_iso: str) -> bool:
+    if memory.expires_at is None:
+        return False
+
+    expires_at = _parse_iso_timestamp(memory.expires_at)
+    now = _parse_iso_timestamp(now_iso)
+    if expires_at is None or now is None:
+        return False
+
+    return expires_at.astimezone(timezone.utc) <= now.astimezone(timezone.utc)
 
 
 def tokenize(text: str) -> set[str]:

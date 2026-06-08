@@ -19,6 +19,7 @@ from backend.app.memory.chat_persistence import (
     should_persist_local_behavior_line,
 )
 from backend.app.memory.summary_policy import maybe_update_conversation_summary
+from backend.app.memory.write_policy import maybe_write_memories_from_turn
 from backend.app.memory.usage_guard import evaluate_llm_budget_gate
 from backend.app.memory.database import MemoryRecord, MessageRecord, MoodStateRecord
 from backend.app.memory.store import get_memory_store, reset_memory_store
@@ -512,6 +513,9 @@ def evaluate_behavior_route(request: BehaviorEvaluateRequest) -> BehaviorDecisio
             decision,
             event_type=request.event_type,
         )
+        budget = load_budget_config()
+        if budget.behavior_tick_retention > 0:
+            store.prune_behavior_tick_messages(budget.behavior_tick_retention)
     return _decision_to_schema(decision, saved_message_id=saved_message_id)
 
 
@@ -598,13 +602,20 @@ def chat_complete(request: ChatCompleteRequest) -> ChatCompleteResponse:
         result = build_local_completion(decision, user_input=user_input)
         avatar_state = decision.avatar_state
 
-    persist_chat_turn(
+    saved_ids = persist_chat_turn(
         store,
         [ChatMessageSchema(role="user", content=user_input)],
         result,
         decision=final_decision,
         avatar_state=avatar_state,
         should_call_llm=called_llm,
+    )
+    user_message_id = saved_ids[0] if user_input.strip() and saved_ids else None
+    maybe_write_memories_from_turn(
+        store,
+        user_input=user_input,
+        source_message_id=user_message_id,
+        budget=budget,
     )
     maybe_update_conversation_summary(store, budget=budget)
 

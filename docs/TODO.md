@@ -23,22 +23,19 @@ contract) — do not hand to Cursor without explicit approval + doc updates.
   `backend/app/memory/usage_guard.py` (blocked turns answer locally, cost 0, not
   counted). Documented in `docs/COST_AND_TOKEN_BUDGET.md`; tests in
   `backend/tests/test_usage_guard.py`.
-- [ ] **A1+A2 — Memory-layer scan + retention `[Claude]` (medium).**
-  `build_provider_context` / `summary_policy` call `list_messages(limit=10_000)`
-  and filter `source` in Python every turn; push `WHERE source='chat'` + limit
-  into SQL, add a `messages(source)` index, and add a message
-  retention/pruning cap (behavior_tick lines grow unbounded).
-- [ ] **B3 — Truncate user input before provider call `[Claude]` (low-med).**
-  Long pastes classified `interrupt` still send the full input to the provider;
-  clamp the user turn to a token ceiling. (Pairs with S3.)
-- [ ] **M1 — Filter expired memories on retrieval `[Cursor-ok with approval]` (low).**
-  `list_memories` / `rank_memories` never check `expires_at`; expired memories are
-  still recalled. Filter by `expires_at` + add a test. Touches the memory layer,
-  so confirm before Cursor starts.
-- [ ] **M2 — Auto-write memories from conversation `[Claude to plan]` (medium, own phase).**
-  Memories are CRUD-only today; the dialogue loop never extracts stable/job/
-  project facts. Plan as a dedicated phase (not a small slice) per
-  `docs/MEMORY_DESIGN.md` write policy.
+- [x] **A1+A2 — Memory-layer scan + retention `[Claude]` (done @ this commit).**
+  `build_provider_context` / `summary_policy` now use SQL boundary queries
+  (`count_chat_messages`, `list_recent_chat_messages`, `list_chat_messages_between`);
+  `behavior_tick_retention` prunes idle lines after each persisted tick.
+- [x] **B3 — Truncate user input before provider call `[Claude]` (done @ this commit).**
+  `max_user_input_tokens` clamps the provider-bound user turn; behavior and
+  persistence still use the full original text.
+- [x] **M1 — Filter expired memories on retrieval (done @ this commit).**
+  `is_expired` + context_builder recall filter; `/memory/memories` unchanged.
+- [x] **M2 — Auto-write memories from conversation (rule-based MVP @ this commit).**
+  `write_policy.maybe_write_memories_from_turn` runs after `/chat/complete`;
+  conservative regex triggers, dedup update, `auto_memory_write` budget gate.
+  LLM-based extraction remains future work.
 
 ## Backlog
 

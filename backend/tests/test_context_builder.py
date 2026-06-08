@@ -138,6 +138,42 @@ def test_score_memory_is_deterministic(store: MemoryStore) -> None:
     assert first == second
 
 
+def test_sql_recent_chat_excludes_behavior_tick_and_counts_chat_only(store: MemoryStore) -> None:
+    budget = BudgetConfig(max_raw_turns=2, max_memories_per_turn=2, summary_batch_size=4)
+
+    for index in range(6):
+        role = "user" if index % 2 == 0 else "assistant"
+        store.create_message(role=role, content=f"chat-{index}")
+
+    for index in range(20):
+        store.create_message(
+            role="assistant",
+            content=f"idle-{index}",
+            source="behavior_tick",
+        )
+
+    built = build_provider_context(store, user_input="chat-6", budget=budget)
+
+    assert built.total_stored_messages == 6
+    assert len(built.included_message_ids) == budget.max_raw_turns
+    non_system_contents = [
+        message.content for message in built.messages if message.role != "system"
+    ]
+    assert "chat-4" in non_system_contents
+    assert "chat-5" in non_system_contents
+    assert "chat-2" not in non_system_contents
+    assert not any(content.startswith("idle-") for content in non_system_contents)
+
+    for index in range(4):
+        role = "user" if index % 2 == 0 else "assistant"
+        store.create_message(role=role, content=f"extra-{index}")
+
+    assert maybe_update_conversation_summary(store, budget=budget) is True
+    latest = store.get_latest_conversation_summary()
+    assert latest is not None
+    assert "chat-0" in latest.summary
+
+
 def test_context_builder_excludes_behavior_tick_lines(store: MemoryStore) -> None:
     budget = BudgetConfig(max_raw_turns=4, max_memories_per_turn=2)
     store.create_message(role="user", content="real question one")

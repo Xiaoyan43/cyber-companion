@@ -67,6 +67,10 @@ context building and output capping; counts use the
 `estimate_token_count` heuristic, so treat USD figures as estimates and verify
 against official provider pricing.
 
+`max_user_input_tokens` (default 1500) hard-truncates the current user turn
+before it is appended to the provider context (behavior evaluation and SQLite
+persistence still use the full original text).
+
 ## Voice Cost Policy
 
 Stage 1 uses text only.

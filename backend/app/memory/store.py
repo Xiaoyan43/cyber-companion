@@ -67,6 +67,83 @@ class MemoryStore:
         assert row is not None
         return int(row["total"])
 
+    def count_chat_messages(self) -> int:
+        with connect(self.db_path) as connection:
+            row = connection.execute(
+                "SELECT COUNT(*) AS total FROM messages WHERE source = 'chat'",
+            ).fetchone()
+        assert row is not None
+        return int(row["total"])
+
+    def list_recent_chat_messages(self, limit: int) -> list[MessageRecord]:
+        if limit <= 0:
+            return []
+        with connect(self.db_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM messages
+                WHERE source = 'chat'
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [_row_to_message(row) for row in reversed(rows)]
+
+    def list_chat_messages_between(
+        self,
+        after_id: int,
+        before_id: int,
+        limit: int,
+    ) -> list[MessageRecord]:
+        if limit <= 0:
+            return []
+        with connect(self.db_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM messages
+                WHERE source = 'chat' AND id > ? AND id < ?
+                ORDER BY id ASC
+                LIMIT ?
+                """,
+                (after_id, before_id, limit),
+            ).fetchall()
+        return [_row_to_message(row) for row in rows]
+
+    def prune_behavior_tick_messages(self, keep: int) -> int:
+        if keep <= 0:
+            return 0
+        with connect(self.db_path) as connection:
+            cursor = connection.execute(
+                """
+                DELETE FROM messages
+                WHERE source = 'behavior_tick'
+                  AND id NOT IN (
+                    SELECT id FROM messages
+                    WHERE source = 'behavior_tick'
+                    ORDER BY id DESC
+                    LIMIT ?
+                  )
+                """,
+                (keep,),
+            )
+        return int(cursor.rowcount)
+
+    def get_recent_chat_window_lower_bound_id(self, max_raw_turns: int) -> int | None:
+        if max_raw_turns <= 0:
+            return None
+        with connect(self.db_path) as connection:
+            row = connection.execute(
+                """
+                SELECT id FROM messages
+                WHERE source = 'chat'
+                ORDER BY id DESC
+                LIMIT 1 OFFSET ?
+                """,
+                (max_raw_turns - 1,),
+            ).fetchone()
+        return int(row["id"]) if row else None
+
     def _assistant_metadata_since(self, since: str) -> list[dict[str, Any]]:
         # `created_at` uses the SQLite `datetime('now')` format (UTC,
         # "YYYY-MM-DD HH:MM:SS"), which sorts lexicographically, so a string

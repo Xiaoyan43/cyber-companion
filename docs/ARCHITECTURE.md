@@ -121,7 +121,9 @@ Owns:
 - Importance and confidence.
 - Expiration.
 
-It must avoid sending full chat history by default.
+It must avoid sending full chat history by default. Recent turns and summary
+batch boundaries are resolved with parameterized SQL (`WHERE source='chat'` +
+`LIMIT`/`OFFSET`), not by loading the entire messages table each turn.
 
 ### Provider Router
 

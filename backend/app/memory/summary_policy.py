@@ -27,30 +27,28 @@ def maybe_update_conversation_summary(
     budget: BudgetConfig | None = None,
 ) -> bool:
     config = budget or BudgetConfig()
-    # Summaries recap the real conversation only; idle/proactive behavior-tick
-    # lines are excluded so they neither enter summaries nor advance the batch
-    # threshold.
-    all_messages = [
-        message
-        for message in store.list_messages(limit=10_000)
-        if message.source == "chat"
-    ]
-    if len(all_messages) <= config.max_raw_turns + 1:
+    # Summaries recap the real conversation only; SQL boundary queries avoid
+    # loading the full messages table and exclude behavior_tick lines.
+    total = store.count_chat_messages()
+    if total <= config.max_raw_turns + 1:
+        return False
+
+    window_lower_bound_id = store.get_recent_chat_window_lower_bound_id(config.max_raw_turns)
+    if window_lower_bound_id is None:
         return False
 
     latest_summary = store.get_latest_conversation_summary()
     covered_until = latest_summary.range_end_message_id if latest_summary else 0
-    cutoff_index = max(0, len(all_messages) - config.max_raw_turns)
-    older_messages = [
-        message
-        for message in all_messages[:cutoff_index]
-        if message.id > covered_until
-    ]
+    older_messages = store.list_chat_messages_between(
+        covered_until,
+        window_lower_bound_id,
+        config.summary_batch_size,
+    )
 
     if len(older_messages) < config.summary_batch_size:
         return False
 
-    batch = older_messages[: config.summary_batch_size]
+    batch = older_messages
     summary_text, keywords = build_rule_based_summary(batch)
     store.create_conversation_summary(
         range_start_message_id=batch[0].id,
