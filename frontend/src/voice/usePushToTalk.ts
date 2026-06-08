@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 import { fetchSttStatus, transcribeAudio } from "../api/stt";
+import { primeAudioPlayback } from "./audioUnlock";
+
+const RECORDER_TIMESLICE_MS = 100;
 
 export type PushToTalkState = "idle" | "recording" | "transcribing" | "error";
 
@@ -25,6 +28,7 @@ function pickMimeType(): string | undefined {
 
 export function usePushToTalk({ onTranscript, onError }: UsePushToTalkOptions) {
   const [enabled, setEnabled] = useState(false);
+  const [forceMock, setForceMock] = useState(false);
   const [state, setState] = useState<PushToTalkState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -43,6 +47,7 @@ export function usePushToTalk({ onTranscript, onError }: UsePushToTalkOptions) {
         }
 
         setEnabled(status.enabled);
+        setForceMock(status.force_mock);
       } catch {
         if (!active) {
           return;
@@ -109,7 +114,7 @@ export function usePushToTalk({ onTranscript, onError }: UsePushToTalkOptions) {
     cleanupStream();
 
     if (!blob || blob.size === 0) {
-      fail("No audio captured.");
+      fail("No audio captured. Hold the mic button a little longer.");
       return;
     }
 
@@ -160,7 +165,7 @@ export function usePushToTalk({ onTranscript, onError }: UsePushToTalkOptions) {
 
       mediaStreamRef.current = stream;
       mediaRecorderRef.current = recorder;
-      recorder.start();
+      recorder.start(RECORDER_TIMESLICE_MS);
       setState("recording");
     } catch (error) {
       const message =
@@ -187,6 +192,7 @@ export function usePushToTalk({ onTranscript, onError }: UsePushToTalkOptions) {
   const handlePointerDown = useCallback(
     (event: PointerEvent<HTMLButtonElement>) => {
       event.preventDefault();
+      primeAudioPlayback();
       pointerActiveRef.current = true;
       handleHoldStart();
     },
@@ -220,6 +226,7 @@ export function usePushToTalk({ onTranscript, onError }: UsePushToTalkOptions) {
 
   return {
     enabled,
+    forceMock,
     state,
     errorMessage,
     handlePointerDown,

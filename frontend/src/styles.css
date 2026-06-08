@@ -328,6 +328,34 @@ button {
   color: #dd5b44;
 }
 
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.clear-chat-button {
+  height: 44px;
+  border: 1px solid #5a5146;
+  border-radius: 6px;
+  background: #2a2726;
+  color: #cfc4aa;
+  padding: 0 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.clear-chat-button:hover:not(:disabled) {
+  color: #fff3d2;
+  border-color: #7a6f60;
+}
+
+.clear-chat-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .tts-toggle {
   height: 44px;
   border: 1px solid #5a5146;

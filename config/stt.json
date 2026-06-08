@@ -1,6 +1,6 @@
 {
   "enabled": true,
-  "default_provider": "mock",
+  "default_provider": "faster_whisper",
   "providers": {
     "mock": {
       "enabled": true,

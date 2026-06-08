@@ -291,6 +291,37 @@ Used for: Local offline TTS via `MacSayTTSProvider` (`backend/app/tts/mac_say.py
 Local files: backend/app/tts/mac_say.py, config/tts.json, config/tts.example.json
 Notes: No dependency added. Invoked with `subprocess.run([...], shell=False)`; text passed as a single argv element. Default zh voice `Tingting` configurable in `tts.json`. Unavailable on non-macOS hosts — raises `TTSError`; `CYBER_COMPANION_TTS_MODE=mock` still forces mock.
 
+Name: faster-whisper
+URL: https://github.com/SYSTRAN/faster-whisper
+License: MIT
+Version/commit: >=1.1.0
+Used for: Local offline STT via `FasterWhisperProvider` (`backend/app/stt/faster_whisper.py`). CPU int8, lazy module-level model cache.
+Local files: backend/app/stt/faster_whisper.py, backend/requirements.txt, config/stt.json, config/stt.example.json
+Notes: Dependency only. No source copied. Whisper `base` model downloads on first transcribe (~142 MB). `CYBER_COMPANION_STT_MODE=mock` still forces mock.
+
+Name: PyAV (av)
+URL: https://github.com/PyAV-Org/PyAV
+License: BSD-3-Clause
+Version/commit: >=12.0.0
+Used for: Decoding browser webm/opus recordings to 16 kHz mono float32 before Whisper transcription.
+Local files: backend/app/stt/faster_whisper.py, backend/requirements.txt
+Notes: Dependency only. No source copied. Requires system `ffmpeg` (`brew install ffmpeg`) for codec support.
+
+Name: ffmpeg (system binary)
+URL: https://ffmpeg.org/
+License: LGPL/GPL (system install via Homebrew)
+Used for: Audio codec support for PyAV when decoding push-to-talk webm/opus uploads.
+Local files: (none — `brew install ffmpeg`)
+Notes: Not a Python dependency. Checked via `shutil.which("ffmpeg")` in provider status. User installs locally.
+
+Name: NumPy
+URL: https://numpy.org/
+License: BSD-3-Clause
+Version/commit: >=1.26.0
+Used for: Float32 audio array passed to faster-whisper `transcribe`.
+Local files: backend/app/stt/faster_whisper.py, backend/requirements.txt
+Notes: Dependency only (also pulled by faster-whisper). No source copied.
+
 Name: Playwright
 URL: https://playwright.dev/
 License: Apache-2.0

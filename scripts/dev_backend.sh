@@ -11,7 +11,11 @@ if [ -f ".env" ]; then
   set +a
 fi
 
-PYTHON_BIN="${PYTHON_BIN:-python3}"
+if [ -z "${PYTHON_BIN:-}" ] && [ -x "$ROOT_DIR/.venv/bin/python" ]; then
+  PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
+else
+  PYTHON_BIN="${PYTHON_BIN:-python3}"
+fi
 HOST="${CYBER_COMPANION_API_HOST:-127.0.0.1}"
 PORT="${CYBER_COMPANION_API_PORT:-8000}"
 RELOAD="${CYBER_COMPANION_API_RELOAD:-1}"

@@ -1452,3 +1452,50 @@
 
 - TTS provider interface unchanged; no STT/chat/memory/behavior/provider changes.
 - `CYBER_COMPANION_TTS_MODE=mock` must keep forcing mock TTS.
+
+## 2026-06-08 - Session 25 (Voice V2: faster-whisper STT)
+
+本次完成：
+
+- Added `FasterWhisperProvider` (`backend/app/stt/faster_whisper.py`): local offline STT, `cloud=False`, CPU `int8`, module-level lazy model cache with thread lock.
+- PyAV decode: webm/opus uploads → 16 kHz mono float32 → `model.transcribe(array, language=…)`; segment join; graceful `STTError` for empty/garbled audio and no speech.
+- Registered `faster_whisper` in `registry.py`; `config/stt.example.json` + new `config/stt.json` (`default_provider: faster_whisper`, `model: base`).
+- Dependencies: `faster-whisper`, `av`, `numpy` in `backend/requirements.txt`.
+- Tests: mock transcribe route, registry build, status contract, mocked transcribe/decode paths, config default, `CYBER_COMPANION_STT_MODE=mock` override.
+- Frontend: push-to-talk hint for first-use model load latency when real STT is active.
+- Recorded faster-whisper, PyAV, ffmpeg, NumPy in `docs/OPEN_SOURCE_REUSE.md`.
+
+下次接着做：
+
+- Voice V3 polish per `docs/PHASE_VOICE_LOCAL.md` (optional model warm-up, thread-safety hardening, piper TTS).
+- Manual E2E: hold-to-talk → real transcription → chat → Boxi speaks.
+
+已知问题：
+
+- First transcription downloads Whisper `base` (~142 MB) and is slow; warm-up not implemented yet (V3).
+- Real transcription verified manually on this Mac only; CI uses mocks via `CYBER_COMPANION_STT_MODE=mock`.
+- Requires `brew install ffmpeg` and `pip install -r backend/requirements.txt` in `.venv`.
+
+相关文件：
+
+- `backend/app/stt/faster_whisper.py`
+- `backend/app/stt/registry.py`
+- `config/stt.json`
+- `config/stt.example.json`
+- `backend/requirements.txt`
+- `backend/tests/test_stt.py`
+- `frontend/src/App.tsx`
+- `.env.example`
+- `docs/OPEN_SOURCE_REUSE.md`
+- `docs/PHASE_VOICE_LOCAL.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed — **113** backend tests; frontend `tsc --noEmit` passed.
+- `npm run build:frontend`: passed.
+- Real faster-whisper transcription: manual verification on this Mac (not automated).
+
+不要改动的边界：
+
+- STT provider interface unchanged; no TTS/chat/memory/behavior/provider changes.
+- `CYBER_COMPANION_STT_MODE=mock` must keep forcing mock STT.

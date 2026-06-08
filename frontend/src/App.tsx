@@ -16,6 +16,7 @@ import {
   type TurnSummary,
 } from "./chat/types";
 import { PixelCharacter } from "./components/PixelCharacter";
+import { primeAudioPlayback } from "./voice/audioUnlock";
 import { usePushToTalk } from "./voice/usePushToTalk";
 import { useTextToSpeech } from "./voice/useTextToSpeech";
 
@@ -34,6 +35,7 @@ type HealthResponse = {
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 const showAvatarDebug =
   import.meta.env.DEV || import.meta.env.VITE_SHOW_AVATAR_DEBUG === "1";
+const CHAT_VIEW_CLEARED_KEY = "cyber-companion-chat-view-cleared";
 
 function parseAvatarState(value: string): AvatarState {
   if ((avatarStates as readonly string[]).includes(value)) {
@@ -49,6 +51,9 @@ function App() {
   const [historyStatus, setHistoryStatus] = useState<"loading" | "ready" | "offline">("loading");
   const [isSending, setIsSending] = useState(false);
   const [lastTurn, setLastTurn] = useState<TurnSummary | null>(null);
+  const [chatViewCleared, setChatViewCleared] = useState(
+    () => sessionStorage.getItem(CHAT_VIEW_CLEARED_KEY) === "1",
+  );
   const [apiHealth, setApiHealth] = useState<ApiHealth>({
     status: "checking",
     detail: "checking local API",
@@ -126,22 +131,29 @@ function App() {
       }
 
       try {
-        const stored = await fetchStoredMessages();
+        const skipHistoryRestore = sessionStorage.getItem(CHAT_VIEW_CLEARED_KEY) === "1";
+        if (!skipHistoryRestore) {
+          const stored = await fetchStoredMessages();
+          if (!active) {
+            return;
+          }
+
+          const restored = stored
+            .map(storedMessageToChatMessage)
+            .filter((message): message is ChatMessage => message !== null);
+
+          setMessages(restored);
+          nextMessageIdRef.current =
+            restored.reduce((maxId, message) => Math.max(maxId, message.id), 0) + 1;
+          const restoredLastTurn = restoreLastTurnFromMessages(restored);
+          if (restoredLastTurn) {
+            setLastTurn(restoredLastTurn);
+          }
+        }
         if (!active) {
           return;
         }
 
-        const restored = stored
-          .map(storedMessageToChatMessage)
-          .filter((message): message is ChatMessage => message !== null);
-
-        setMessages(restored);
-        nextMessageIdRef.current =
-          restored.reduce((maxId, message) => Math.max(maxId, message.id), 0) + 1;
-        const restoredLastTurn = restoreLastTurnFromMessages(restored);
-        if (restoredLastTurn) {
-          setLastTurn(restoredLastTurn);
-        }
         setHistoryStatus("ready");
       } catch {
         if (!active) {
@@ -190,8 +202,21 @@ function App() {
     };
   }, [moodRest.refreshMood]);
 
+  const clearChatView = useCallback(() => {
+    setMessages([]);
+    setLastTurn(null);
+    nextMessageIdRef.current = 1;
+    sessionStorage.setItem(CHAT_VIEW_CLEARED_KEY, "1");
+    setChatViewCleared(true);
+  }, []);
+
   async function submitToBackend(userText: string, appendUserBubble: boolean) {
+    primeAudioPlayback();
     markBehaviorActivityRef.current();
+    if (userText.trim()) {
+      sessionStorage.removeItem(CHAT_VIEW_CLEARED_KEY);
+      setChatViewCleared(false);
+    }
     const turnEpoch = chatEpochRef.current + 1;
     chatEpochRef.current = turnEpoch;
     const userMessageId = appendUserBubble ? allocateMessageId() : null;
@@ -299,6 +324,9 @@ function App() {
     enabled: ttsEnabled,
     muted: ttsMuted,
     speaking: ttsSpeaking,
+    providerName: ttsProviderName,
+    forceMock: ttsForceMock,
+    lastError: ttsLastError,
     toggleMuted: toggleTtsMuted,
     speakReply,
   } = useTextToSpeech({
@@ -385,6 +413,7 @@ function App() {
 
   const {
     enabled: pushToTalkEnabled,
+    forceMock: sttForceMock,
     state: pushToTalkState,
     errorMessage: pushToTalkError,
     handlePointerDown: handlePttPointerDown,
@@ -412,14 +441,23 @@ function App() {
     }
 
     if (pushToTalkEnabled) {
-      return "Hold the mic button to talk. Audio only uploads after you release.";
+      if (sttForceMock) {
+        return "Hold the mic button (≥0.5s). STT is mock — placeholder text only, not your words.";
+      }
+
+      return "Hold the mic button (≥0.5s). First transcription may be slow while the Whisper model loads.";
+    }
+
+    if (apiHealth.status !== "ok") {
+      return "Voice input needs the local API. Restart with npm run dev (backend must be running on :8000).";
     }
 
     return null;
-  }, [pushToTalkEnabled, pushToTalkError, pushToTalkState]);
+  }, [apiHealth.status, pushToTalkEnabled, pushToTalkError, pushToTalkState, sttForceMock]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    primeAudioPlayback();
     const text = draft.trim();
 
     if (isSending) {
@@ -483,16 +521,32 @@ function App() {
             <strong>{apiHealth.status}</strong>
             <small>{apiHealth.version ? `v${apiHealth.version}` : apiHealth.detail}</small>
           </div>
-          {ttsEnabled ? (
+          <div className="chat-header-actions">
             <button
               type="button"
-              className={ttsMuted ? "tts-toggle muted" : "tts-toggle"}
-              aria-pressed={ttsMuted}
-              onClick={toggleTtsMuted}
+              className="clear-chat-button"
+              onClick={clearChatView}
+              disabled={isSending || messages.length === 0}
+              title="只清空当前对话框显示，不删除后端记忆"
             >
-              {ttsMuted ? "TTS off" : ttsSpeaking ? "Speaking" : "TTS on"}
+              清空对话
             </button>
-          ) : null}
+            {ttsEnabled ? (
+              <button
+                type="button"
+                className={ttsMuted ? "tts-toggle muted" : "tts-toggle"}
+                aria-pressed={ttsMuted}
+                onClick={toggleTtsMuted}
+                title={
+                  ttsForceMock
+                    ? "TTS forced to silent mock by CYBER_COMPANION_TTS_MODE=mock"
+                    : `TTS provider: ${ttsProviderName ?? "unknown"}`
+                }
+              >
+                {ttsMuted ? "TTS off" : ttsSpeaking ? "Speaking" : "TTS on"}
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {lastTurn ? (
@@ -516,7 +570,11 @@ function App() {
             <p className="chat-empty">Loading chat history...</p>
           ) : null}
           {historyStatus !== "loading" && messages.length === 0 ? (
-            <p className="chat-empty">还没有聊天记录。可以先扔一句话进来。</p>
+            <p className="chat-empty">
+              {chatViewCleared
+                ? "对话框已清空。记忆仍保留在本地；新开标签页可重新看到历史。"
+                : "还没有聊天记录。可以先扔一句话进来。"}
+            </p>
           ) : null}
           {messages.map((message) => {
             const metaLine = message.meta ? formatMessageMeta(message.meta) : null;
@@ -571,14 +629,14 @@ function App() {
           </button>
         </form>
 
-        {voiceStatusText ? (
+        {voiceStatusText || ttsLastError ? (
           <p
             className={`voice-status${pushToTalkState === "recording" ? " recording" : ""}${
-              pushToTalkError ? " error" : ""
+              pushToTalkError || ttsLastError ? " error" : ""
             }`}
             aria-live="polite"
           >
-            {voiceStatusText}
+            {ttsLastError ?? voiceStatusText}
           </p>
         ) : null}
       </section>
