@@ -329,6 +329,13 @@ Used for: Optional cloud TTS via `DoubaoTTSProvider` (`backend/app/tts/doubao.py
 Local files: backend/app/tts/doubao.py, config/tts.example.json, `.env` (`DOUBAO_TTS_API_KEY`, `DOUBAO_TTS_VOICE_TYPE`, `DOUBAO_TTS_RESOURCE_ID`)
 Notes: Cloud adapter only; `cloud=True` behind `allow_cloud_tts` budget gate. New console uses API Key (not legacy Bearer;Access Token v1). `DOUBAO_TTS_ACCESS_TOKEN` kept as alias. Default TTS remains local (`mac_say`).
 
+Name: Volcano Engine / Doubao ASR flash API (openspeech.bytedance.com)
+URL: https://www.volcengine.com/docs/6561/1631584
+License: Proprietary (cloud service; personal-use experiment)
+Used for: Optional cloud STT via `DoubaoASRProvider` (`backend/app/stt/doubao.py`). One-shot flash endpoint `https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash` with `X-Api-Key` + `X-Api-Resource-Id` (`volc.bigasr.auc_turbo`) per official docs (https://www.volcengine.com/docs/6561/1816214).
+Local files: backend/app/stt/doubao.py, config/stt.json, config/stt.example.json, `.env` (`DOUBAO_API_KEY`, optional `DOUBAO_ASR_RESOURCE_ID`)
+Notes: Cloud adapter only; `cloud=True` behind `allow_cloud_stt` budget gate. Push-to-talk webm/opus transcoded to WAV via existing PyAV decode path before base64 upload. `CYBER_COMPANION_STT_MODE=mock` and local `faster_whisper` remain available.
+
 Name: Playwright
 URL: https://playwright.dev/
 License: Apache-2.0

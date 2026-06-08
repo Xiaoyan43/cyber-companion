@@ -6,6 +6,11 @@
       "enabled": true,
       "model": "mock-stt"
     },
+    "doubao": {
+      "enabled": true,
+      "model": "bigmodel",
+      "cloud": true
+    },
     "faster_whisper": {
       "enabled": true,
       "model": "base"

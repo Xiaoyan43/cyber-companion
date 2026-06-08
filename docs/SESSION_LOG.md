@@ -1892,3 +1892,40 @@
 不要改动的边界：
 
 - 未改后端；`/chat/complete` 与 `/tts/*` 契约不变。
+
+## 2026-06-09 - Session 37 (Doubao cloud ASR provider)
+
+本次完成：
+
+- **DoubaoASRProvider** — `backend/app/stt/doubao.py`
+  - 实现 `SpeechToTextProvider`；`cloud=True`；`is_configured()` = `DOUBAO_API_KEY` 存在。
+  - 鉴权：新版 `X-Api-Key` + `X-Api-Resource-Id`（默认 `volc.bigasr.auc_turbo`）+ `X-Api-Request-Id` + `X-Api-Sequence: -1`（不用旧 AppID/Token/Cluster/Bearer）。
+  - `transcribe()`：push-to-talk 录音经 PyAV 解码（webm 等）转 WAV 或直传 wav/mp3/ogg；POST flash 极速版 ` /api/v3/auc/bigmodel/recognize/flash`；返回 `TranscriptionResult(provider="doubao", …)`。
+  - 注册 `registry.py`；`config/stt.json` 默认 `doubao`；`stt.example.json` 增条目；`.env.example` 增 `DOUBAO_API_KEY` / `DOUBAO_ASR_RESOURCE_ID`。
+  - 测试：`backend/tests/test_stt.py` mock 网络层（成功/静音/鉴权/网络/预算闸/共享 httpx client）。
+
+下次接着做：
+
+- 真机 push-to-talk + `allow_cloud_stt: true` 联调豆包 ASR；按需补 voice cost 跟踪。
+
+已知问题：
+
+- 未配置 `DOUBAO_API_KEY` 时默认 provider 为 doubao 会在 `allow_cloud_stt: true` 下报未配置；`CYBER_COMPANION_STT_MODE=mock` 或改 `stt.json` 可兜底。
+
+相关文件：
+
+- `backend/app/stt/doubao.py`
+- `backend/app/stt/registry.py`
+- `backend/tests/test_stt.py`
+- `config/stt.json`
+- `config/stt.example.json`
+- `.env.example`
+- `docs/OPEN_SOURCE_REUSE.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: **148** backend tests + frontend `tsc` passed。
+
+不要改动的边界：
+
+- 未改 `/stt/transcribe` 契约；`faster_whisper` / mock / `CYBER_COMPANION_STT_MODE=mock` 保留。

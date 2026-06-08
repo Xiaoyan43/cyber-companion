@@ -1,10 +1,15 @@
 {
   "enabled": true,
-  "default_provider": "faster_whisper",
+  "default_provider": "doubao",
   "providers": {
     "mock": {
       "enabled": true,
       "model": "mock-stt"
+    },
+    "doubao": {
+      "enabled": true,
+      "model": "bigmodel",
+      "cloud": true
     },
     "faster_whisper": {
       "enabled": true,
