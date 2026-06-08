@@ -169,6 +169,10 @@ check("tts mute survives refresh", (await page.locator(".tts-toggle").textConten
 await page.click(".tts-toggle");
 check("tts unmute restores label", (await page.locator(".tts-toggle").textContent())?.includes("TTS on"));
 
+await page.route("**/chat/stream**", async (route) => {
+  await new Promise((resolve) => setTimeout(resolve, 1800));
+  await route.continue();
+});
 await page.route("**/tts/stream**", async (route) => {
   await new Promise((resolve) => setTimeout(resolve, 1800));
   await route.continue();

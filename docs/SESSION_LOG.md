@@ -1773,3 +1773,48 @@
 不要改动的边界：
 
 - 未改前端（S2 再做）；未改 `/chat/complete` 行为；未改 behavior/memory/provider 语义。
+
+## 2026-06-09 - Session 34 (Streaming S2 — frontend live text)
+
+本次完成：
+
+- **S2 — Frontend consume `/chat/stream`, live text rendering**
+  - `frontend/src/api/chat.ts`: `requestChatStream`（fetch + ReadableStream SSE 解析）、`parseSseDataLine` / `processSseLines`、`onDelta` / `onDone` / `onError` 回调；流失败回退 `requestChatComplete`。
+  - `frontend/src/chat/streamRender.ts`: `appendChatStreamDelta` 增量更新指定 Boxi 气泡。
+  - `frontend/src/chat/types.ts`: `streamMetaToTurnSummary` / `streamMetaToMessageMeta`。
+  - `App.tsx`: 提交优先走流式；先追加空 Boxi 气泡随 delta 长出文字；首个 delta 前 `thinking`、流式中 `talking`；`done` 写入 meta + `lastTurn`；流结束后一次 `speakReply`（TTS 不变）；保留 epoch / deferIdleFallback / onSpeakingStart-End 契约。
+  - 测试：`frontend/src/api/chat.test.ts`（SSE 解析 + stream 回调）、`frontend/src/chat/streamRender.test.ts`（增量渲染）。
+  - `scripts/ui_verify.mjs`: 竞态探测改为同时 delay `/chat/stream` 与 `/tts/stream`。
+
+下次接着做：
+
+- **S3** — 按句切块 TTS 队列，音频约第一句起播（`docs/PHASE_STREAMING.md`）。
+
+已知问题：
+
+- 流式失败会整段回退 `/chat/complete`（可能多一次 provider 调用，但后端不半持久化）。
+- 本地 dev API 若 `allow_cloud_tts: true`，ui_verify 的 API 段 `cloud tts blocked by budget` 会失败（与 S2 无关）。
+
+相关文件：
+
+- `frontend/src/api/chat.ts`
+- `frontend/src/api/chat.test.ts`
+- `frontend/src/chat/streamRender.ts`
+- `frontend/src/chat/streamRender.test.ts`
+- `frontend/src/chat/types.ts`
+- `frontend/src/App.tsx`
+- `frontend/src/avatar/useAvatarState.ts`
+- `frontend/vite.config.ts`
+- `scripts/ui_verify.mjs`
+- `docs/PHASE_STREAMING.md`
+
+测试结果：
+
+- `npm run test --workspace frontend`: **18** passed。
+- `PYTHON_BIN=.venv/bin/python npm run check`: **138** backend + frontend `tsc` passed。
+- `npm run build:frontend`: passed。
+- `CYBER_VERIFY_API_URL=http://127.0.0.1:18000 node scripts/ui_verify.mjs`: browser **37/37** passed；API 段 1 项因运行中服务器 `allow_cloud_tts: true` 失败。
+
+不要改动的边界：
+
+- 未改后端；`/chat/complete` 兜底保留；TTS 竞态契约未动。

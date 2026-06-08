@@ -1,4 +1,4 @@
-import type { ChatCompleteResponse } from "../api/chat";
+import type { ChatCompleteResponse, ChatStreamDoneMeta } from "../api/chat";
 import type { StoredMessage } from "../api/messages";
 
 export type MessageMeta = {
@@ -78,6 +78,30 @@ export function storedMessageToChatMessage(message: StoredMessage): ChatMessage 
     speaker: message.role === "assistant" ? "boxi" : "user",
     text: message.content,
     meta: message.role === "assistant" ? readMessageMeta(message.metadata) : undefined,
+  };
+}
+
+export function streamMetaToTurnSummary(meta: ChatStreamDoneMeta): TurnSummary {
+  return {
+    provider: meta.provider,
+    model: meta.model,
+    mock: meta.provider === "mock",
+    decision: meta.decision,
+    shouldCallLlm: meta.should_call_llm,
+    usage: meta.usage,
+    cost: meta.cost,
+  };
+}
+
+export function streamMetaToMessageMeta(meta: ChatStreamDoneMeta): MessageMeta {
+  return {
+    provider: meta.provider,
+    model: meta.model,
+    mock: meta.provider === "mock",
+    decision: meta.decision,
+    shouldCallLlm: meta.should_call_llm,
+    usage: meta.usage,
+    cost: meta.cost,
   };
 }
 

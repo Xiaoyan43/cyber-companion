@@ -7,6 +7,7 @@ export type ChatFetchResult = {
   replyText: string;
   avatarState?: AvatarState;
   meta?: Record<string, unknown>;
+  streamed?: boolean;
 };
 
 export type ChatReplyHandoff = {

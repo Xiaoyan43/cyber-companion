@@ -1,6 +1,10 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BehaviorDecision } from "./api/behavior";
-import { requestChatComplete } from "./api/chat";
+import {
+  requestChatComplete,
+  requestChatStream,
+  type ChatCompleteResponse,
+} from "./api/chat";
 import { fetchStoredMessages } from "./api/messages";
 import { avatarStates, stateLines, type AvatarState } from "./avatar/types";
 import { useAvatarState } from "./avatar/useAvatarState";
@@ -12,9 +16,13 @@ import {
   formatUsd,
   restoreLastTurnFromMessages,
   storedMessageToChatMessage,
+  streamMetaToMessageMeta,
+  streamMetaToTurnSummary,
   type ChatMessage,
+  type MessageMeta,
   type TurnSummary,
 } from "./chat/types";
+import { appendChatStreamDelta } from "./chat/streamRender";
 import { PixelCharacter } from "./components/PixelCharacter";
 import { primeAudioPlayback } from "./voice/audioUnlock";
 import { usePushToTalk } from "./voice/usePushToTalk";
@@ -36,6 +44,26 @@ const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 const showAvatarDebug =
   import.meta.env.DEV || import.meta.env.VITE_SHOW_AVATAR_DEBUG === "1";
 const CHAT_VIEW_CLEARED_KEY = "cyber-companion-chat-view-cleared";
+
+function completionToMessageMeta(completion: ChatCompleteResponse): MessageMeta {
+  return {
+    provider: completion.provider,
+    model: completion.model,
+    mock: completion.mock,
+    decision: completion.decision,
+    shouldCallLlm: completion.should_call_llm,
+    usage: completion.usage,
+    cost: completion.cost,
+  };
+}
+
+function completionToFetchResult(completion: ChatCompleteResponse) {
+  return {
+    replyText: completion.content,
+    avatarState: parseAvatarState(completion.avatar_state),
+    meta: completionToMessageMeta(completion),
+  };
+}
 
 function parseAvatarState(value: string): AvatarState {
   if ((avatarStates as readonly string[]).includes(value)) {
@@ -233,35 +261,85 @@ function App() {
     try {
       await runChatFetchSequence(
         async () => {
-          const completion = await requestChatComplete(userText);
-          setLastTurn(completionToTurnSummary(completion));
-          return {
-            replyText: completion.content,
-            avatarState: parseAvatarState(completion.avatar_state),
-            meta: {
-              provider: completion.provider,
-              model: completion.model,
-              mock: completion.mock,
-              decision: completion.decision,
-              usage: completion.usage,
-              cost: completion.cost,
-            },
+          const boxiMessageId = allocateMessageId();
+
+          const tryStream = async () => {
+            setMessages((current) => [
+              ...current,
+              { id: boxiMessageId, speaker: "boxi", text: "" },
+            ]);
+
+            let sawFirstDelta = false;
+
+            const streamResult = await requestChatStream(userText, {
+              onDelta: (delta) => {
+                if (!sawFirstDelta) {
+                  sawFirstDelta = true;
+                  cancelScheduledReturn();
+                  setManualState("talking");
+                }
+
+                setMessages((current) => appendChatStreamDelta(current, boxiMessageId, delta));
+              },
+              onDone: (meta) => {
+                setLastTurn(streamMetaToTurnSummary(meta));
+                setMessages((current) =>
+                  current.map((message) =>
+                    message.id === boxiMessageId
+                      ? { ...message, meta: streamMetaToMessageMeta(meta) }
+                      : message,
+                  ),
+                );
+              },
+              onError: () => {},
+            });
+
+            return {
+              ...completionToFetchResult({
+                provider: streamResult.meta.provider,
+                model: streamResult.meta.model,
+                content: streamResult.content,
+                usage: streamResult.meta.usage,
+                cost: streamResult.meta.cost,
+                mock: streamResult.meta.provider === "mock",
+                avatar_state: streamResult.meta.avatar_state,
+                decision: streamResult.meta.decision,
+                should_call_llm: streamResult.meta.should_call_llm,
+              }),
+              streamed: true,
+            };
           };
+
+          try {
+            return await tryStream();
+          } catch (error) {
+            setMessages((current) => current.filter((message) => message.id !== boxiMessageId));
+
+            if (error instanceof DOMException && error.name === "AbortError") {
+              throw error;
+            }
+
+            const completion = await requestChatComplete(userText);
+            setLastTurn(completionToTurnSummary(completion));
+            return completionToFetchResult(completion);
+          }
         },
         async (result) => {
           if (!result.replyText.trim()) {
             return;
           }
 
-          setMessages((current) => [
-            ...current,
-            {
-              id: allocateMessageId(),
-              speaker: "boxi",
-              text: result.replyText,
-              meta: result.meta,
-            },
-          ]);
+          if (!result.streamed) {
+            setMessages((current) => [
+              ...current,
+              {
+                id: allocateMessageId(),
+                speaker: "boxi",
+                text: result.replyText,
+                meta: result.meta as MessageMeta | undefined,
+              },
+            ]);
+          }
 
           const shouldAttemptTts =
             ttsEnabledRef.current && !ttsMutedRef.current && Boolean(result.replyText.trim());
