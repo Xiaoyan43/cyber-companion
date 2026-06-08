@@ -5,6 +5,7 @@ import { fetchStoredMessages } from "./api/messages";
 import { avatarStates, stateLines, type AvatarState } from "./avatar/types";
 import { useAvatarState } from "./avatar/useAvatarState";
 import { useBehaviorTicks } from "./avatar/useBehaviorTicks";
+import { useMoodRest } from "./avatar/useMoodRest";
 import {
   completionToTurnSummary,
   formatMessageMeta,
@@ -43,14 +44,6 @@ function parseAvatarState(value: string): AvatarState {
 }
 
 function App() {
-  const {
-    avatarState,
-    setManualState,
-    runChatFetchSequence,
-    runEmptySubmitSequence,
-    scheduleReturnToIdle,
-    cancelScheduledReturn,
-  } = useAvatarState("idle");
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [historyStatus, setHistoryStatus] = useState<"loading" | "ready" | "offline">("loading");
@@ -60,6 +53,24 @@ function App() {
     status: "checking",
     detail: "checking local API",
   });
+  const applyRestStateRef = useRef<(rest?: AvatarState) => void>(() => {});
+  const returnToRestStateRef = useRef<() => void>(() => {});
+  const moodRest = useMoodRest({
+    enabled: apiHealth.status === "ok",
+    onMoodRestUpdated: (restState) => applyRestStateRef.current(restState),
+  });
+  const {
+    avatarState,
+    setManualState,
+    runChatFetchSequence,
+    runEmptySubmitSequence,
+    scheduleReturnToIdle,
+    cancelScheduledReturn,
+    returnToRestState,
+    applyRestStateIfResting,
+  } = useAvatarState("idle", moodRest.getRestState);
+  applyRestStateRef.current = applyRestStateIfResting;
+  returnToRestStateRef.current = returnToRestState;
   const messageListRef = useRef<HTMLDivElement>(null);
   const nextMessageIdRef = useRef(1);
   const chatEpochRef = useRef(0);
@@ -157,6 +168,27 @@ function App() {
 
     messageList.scrollTop = messageList.scrollHeight;
   }, [messages]);
+
+  useEffect(() => {
+    const verifyWindow = window as Window & {
+      __uiVerify?: {
+        refreshMoodRest?: () => Promise<string>;
+        returnToRestState?: () => void;
+        getAvatarStateLabel?: () => string;
+      };
+    };
+
+    verifyWindow.__uiVerify = {
+      ...verifyWindow.__uiVerify,
+      refreshMoodRest: async () => {
+        const restState = await moodRest.refreshMood();
+        return restState;
+      },
+      returnToRestState: () => returnToRestStateRef.current(),
+      getAvatarStateLabel: () =>
+        document.querySelector(".state-label")?.textContent?.trim() ?? "",
+    };
+  }, [moodRest.refreshMood]);
 
   async function submitToBackend(userText: string, appendUserBubble: boolean) {
     markBehaviorActivityRef.current();
@@ -280,7 +312,7 @@ function App() {
         return;
       }
 
-      setManualState("idle");
+      returnToRestStateRef.current();
     },
   });
 

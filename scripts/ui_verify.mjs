@@ -56,6 +56,16 @@ async function verifyVoiceApi() {
 
 await verifyVoiceApi();
 
+async function resetNeutralMood() {
+  await fetch(`${API_URL}/memory/mood`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ energy: 0.5, boredom: 0.2, loneliness: 0.3 }),
+  });
+}
+
+await resetNeutralMood();
+
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
 
@@ -389,6 +399,23 @@ check(
 
 const metaCount = await page.locator(".message.boxi .message-meta").count();
 check("stored assistant metadata on reload", metaCount > 0);
+
+await fetch(`${API_URL}/memory/mood`, {
+  method: "PUT",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ energy: 0.12, boredom: 0.2, loneliness: 0.2 }),
+});
+
+await page.waitForFunction(() => typeof window.__uiVerify?.refreshMoodRest === "function");
+await page.evaluate(async () => {
+  await window.__uiVerify.refreshMoodRest();
+  window.__uiVerify.returnToRestState();
+});
+
+const moodRestState = (await page.locator(".state-label").textContent())?.trim();
+check("low energy mood rest maps to sleepy", moodRestState === "sleepy", moodRestState ?? "unknown");
+
+await resetNeutralMood();
 
 await browser.close();
 

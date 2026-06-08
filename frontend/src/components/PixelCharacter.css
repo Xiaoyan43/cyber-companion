@@ -27,6 +27,17 @@
   filter: none;
 }
 
+.stage[data-state="worried"] {
+  filter: brightness(0.94) saturate(0.9);
+}
+
+.stage[data-state="idle"],
+.stage[data-state="sleepy"],
+.stage[data-state="annoyed"],
+.stage[data-state="worried"] {
+  transition: filter 720ms steps(6);
+}
+
 .stage[data-state="idle"]::before {
   position: absolute;
   inset: 0;
@@ -42,6 +53,7 @@
   width: 176px;
   height: 208px;
   transform: translateY(4px);
+  transition: transform 560ms steps(5), filter 560ms steps(5);
 }
 
 .antenna,

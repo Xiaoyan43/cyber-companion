@@ -1368,3 +1368,44 @@
 不要改动的边界：
 
 - Only touched `write_policy.py`, its tests, and session log; no schema or other modules.
+
+## 2026-06-08 - Session 31
+
+本次完成：
+
+- **Mood-driven rest expressions (frontend-only)**
+  - `useMoodRest`: polls `GET /memory/mood` every 75s, skips hidden tabs; `restMood.moodToRestState` maps energy/boredom/loneliness → sleepy/annoyed/worried/idle.
+  - `useAvatarState`: all idle fallbacks now call `resolveRestState()`; exposes `returnToRestState` / `applyRestStateIfResting` (rest-only live refresh, no new timers).
+  - `App.tsx`: wires mood hook + TTS end uses `returnToRestState`; `__uiVerify` probes for smoke.
+  - `PixelCharacter.css`: softer stepped transitions between rest visuals.
+  - `scripts/ui_verify.mjs`: neutral mood reset + `low energy mood rest maps to sleepy` check.
+
+下次接着做：
+
+- Optional: shorten poll in dev via `VITE_MOOD_POLL_MS` for manual demos.
+- Other backlog per `docs/HANDOFF.md`.
+
+已知问题：
+
+- Mock TTS still returns silent WAV timed to text length, not real speech.
+
+相关文件：
+
+- `frontend/src/api/mood.ts`
+- `frontend/src/avatar/restMood.ts`
+- `frontend/src/avatar/useMoodRest.ts`
+- `frontend/src/avatar/useAvatarState.ts`
+- `frontend/src/App.tsx`
+- `frontend/src/components/PixelCharacter.css`
+- `scripts/ui_verify.mjs`
+- `docs/SESSION_LOG.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed; **98** backend tests; frontend `tsc --noEmit` passed.
+- `npm run build:frontend`: passed.
+
+不要改动的边界：
+
+- Frontend only; no backend/provider/memory/behavior/cost changes.
+- Avatar state machine contract unchanged; rest layer only replaces idle fallback targets.

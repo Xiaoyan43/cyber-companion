@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isRestAvatarState } from "./restMood";
 import type { AvatarState } from "./types";
 import { avatarStateDuration, avatarTiming } from "./timing";
 
@@ -12,9 +13,23 @@ export type ChatReplyHandoff = {
   deferIdleFallback?: boolean;
 };
 
-export function useAvatarState(initialState: AvatarState = "idle") {
+type GetRestState = () => AvatarState;
+
+export function useAvatarState(
+  initialState: AvatarState = "idle",
+  getRestState?: GetRestState,
+) {
   const [avatarState, setAvatarState] = useState<AvatarState>(initialState);
   const timersRef = useRef<number[]>([]);
+  const getRestStateRef = useRef(getRestState);
+
+  useEffect(() => {
+    getRestStateRef.current = getRestState;
+  }, [getRestState]);
+
+  const resolveRestState = useCallback((): AvatarState => {
+    return getRestStateRef.current?.() ?? "idle";
+  }, []);
 
   const clearTimers = useCallback(() => {
     for (const timerId of timersRef.current) {
@@ -37,20 +52,38 @@ export function useAvatarState(initialState: AvatarState = "idle") {
     [clearTimers],
   );
 
+  const returnToRestState = useCallback(() => {
+    clearTimers();
+    setAvatarState(resolveRestState());
+  }, [clearTimers, resolveRestState]);
+
+  const applyRestStateIfResting = useCallback(
+    (nextRest?: AvatarState) => {
+      setAvatarState((current) => {
+        if (!isRestAvatarState(current)) {
+          return current;
+        }
+
+        return nextRest ?? resolveRestState();
+      });
+    },
+    [resolveRestState],
+  );
+
   const scheduleReturnToIdle = useCallback(
     (state: AvatarState, replyText: string) => {
       clearTimers();
       setAvatarState(state);
-      schedule(() => setAvatarState("idle"), avatarStateDuration(state, replyText));
+      schedule(() => setAvatarState(resolveRestState()), avatarStateDuration(state, replyText));
     },
-    [clearTimers, schedule],
+    [clearTimers, resolveRestState, schedule],
   );
 
   const runEmptySubmitSequence = useCallback(() => {
     clearTimers();
     setAvatarState("annoyed");
-    schedule(() => setAvatarState("idle"), avatarTiming.annoyedMs);
-  }, [clearTimers, schedule]);
+    schedule(() => setAvatarState(resolveRestState()), avatarTiming.annoyedMs);
+  }, [clearTimers, resolveRestState, schedule]);
 
   const runChatFetchSequence = useCallback(
     async (
@@ -69,16 +102,16 @@ export function useAvatarState(initialState: AvatarState = "idle") {
         const activeState = result.avatarState ?? "talking";
         setAvatarState(activeState);
         schedule(
-          () => setAvatarState("idle"),
+          () => setAvatarState(resolveRestState()),
           avatarStateDuration(activeState, result.replyText),
         );
       } catch (error) {
         setAvatarState("annoyed");
-        schedule(() => setAvatarState("idle"), avatarTiming.annoyedMs);
+        schedule(() => setAvatarState(resolveRestState()), avatarTiming.annoyedMs);
         throw error;
       }
     },
-    [clearTimers, schedule],
+    [clearTimers, resolveRestState, schedule],
   );
 
   const cancelScheduledReturn = useCallback(() => {
@@ -94,5 +127,7 @@ export function useAvatarState(initialState: AvatarState = "idle") {
     runEmptySubmitSequence,
     scheduleReturnToIdle,
     cancelScheduledReturn,
+    returnToRestState,
+    applyRestStateIfResting,
   };
 }
