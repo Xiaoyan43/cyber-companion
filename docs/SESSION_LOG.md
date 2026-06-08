@@ -1818,3 +1818,42 @@
 不要改动的边界：
 
 - 未改后端；`/chat/complete` 兜底保留；TTS 竞态契约未动。
+
+## 2026-06-09 - Session 35 (Streaming S3 — sentence TTS queue)
+
+本次完成：
+
+- **S3 — Frontend sentence-chunked TTS queue**（`docs/PHASE_STREAMING.md`）
+  - `speechText.ts`: `drainStreamingSpeechChunks` / `flushStreamingSpeechRemainder`（句界 `。！？!?…\n` 或 max-length；Option A 剥离）。
+  - `useTextToSpeech.ts`: 流式 API `beginStreamingReply` / `feedStreamingReplyDelta` / `finishStreamingReply` / `cancelStreamingReply`；顺序 `/tts/stream` 播放队列；首句 `onSpeakingStart`、队列排空且流结束 `onSpeakingEnd`；`playbackSession` epoch + `invalidatePlayback` 取消旧队列/在途音频；静音 `stopSpeaking` 清空队列。
+  - `App.tsx`: 流式 `onDelta` 增量入队；`onReplyReady` 走 `finishStreamingReply`（非流仍 `speakReply`）；`streamEpoch` / `turnEpoch` 守卫；`ttsActiveRef` + 提前绑定 `ttsEpoch` 防 behavior tick 竞态。
+  - 测试：`speechText.test.ts` 流式切块用例。
+
+下次接着做：
+
+- 流式阶段收尾文档（ARCHITECTURE streaming note）；Voice TODO 中 streaming TTS 前端项可勾选。
+- 结构化 JSON persona 与流式对齐仍 out of scope。
+
+已知问题：
+
+- `ui_verify` API 段 `cloud tts blocked` 仍依赖运行中服务器 `allow_cloud_tts: false`（`CYBER_COMPANION_TTS_MODE=mock` 验证）。
+- `ui_verify` PTT 段在本机 fake `MediaRecorder` blob 下 STT 解码失败（与 S3 无关）；TTS 冒烟 + overlap 回归已通过。
+
+相关文件：
+
+- `frontend/src/voice/speechText.ts`
+- `frontend/src/voice/speechText.test.ts`
+- `frontend/src/voice/useTextToSpeech.ts`
+- `frontend/src/App.tsx`
+- `docs/PHASE_STREAMING.md`
+
+测试结果：
+
+- `npm run test --workspace frontend`: **23** passed。
+- `PYTHON_BIN=.venv/bin/python npm run check`: **138** backend + frontend `tsc` passed。
+- `npm run build:frontend`: passed。
+- `CYBER_VERIFY_API_URL=http://127.0.0.1:18000 CYBER_VERIFY_URL=http://127.0.0.1:5173/ node scripts/ui_verify.mjs`（`CYBER_COMPANION_TTS_MODE=mock` 后端）：TTS 竞态/overlap/refuse 冒烟 **PASS**；API `cloud tts blocked` **FAIL**（`allow_cloud_tts: true`）；PTT **FAIL**（mock 音频 STT 解码）。
+
+不要改动的边界：
+
+- 未改后端与 `/tts/*` 契约；`/chat/complete` 兜底保留。

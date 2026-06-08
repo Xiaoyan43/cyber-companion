@@ -69,6 +69,86 @@ export function textChunksForSpeech(text: string, maxChars: number): string[] {
   return chunks;
 }
 
+const STREAMING_SENTENCE_BOUNDARY = /[。！？…\n!?]/;
+
+export function drainStreamingSpeechChunks(
+  rawBuffer: string,
+  maxChars: number,
+): { chunks: string[]; remainder: string } {
+  if (!rawBuffer || maxChars <= 0) {
+    return { chunks: [], remainder: rawBuffer };
+  }
+
+  const chunks: string[] = [];
+  let remaining = rawBuffer;
+
+  while (remaining.length > 0) {
+    const splitAt = findStreamingChunkEnd(remaining, maxChars);
+    if (splitAt === null) {
+      break;
+    }
+
+    const rawChunk = remaining.slice(0, splitAt);
+    remaining = remaining.slice(splitAt);
+    const prepared = prepareTextForSpeech(rawChunk);
+    if (prepared) {
+      chunks.push(prepared);
+    }
+  }
+
+  return { chunks, remainder: remaining };
+}
+
+export function flushStreamingSpeechRemainder(
+  rawBuffer: string,
+  maxChars: number,
+): string[] {
+  const prepared = prepareTextForSpeech(rawBuffer);
+  if (!prepared) {
+    return [];
+  }
+
+  if (prepared.length <= maxChars) {
+    return [prepared];
+  }
+
+  return textChunksForSpeech(prepared, maxChars);
+}
+
+function findStreamingChunkEnd(text: string, maxChars: number): number | null {
+  let earliest: number | null = null;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === ".") {
+      const next = text[index + 1];
+      if (next && next !== " " && next !== "\n") {
+        continue;
+      }
+      const end = index + 1 + (next === " " ? 1 : 0);
+      earliest = earliest === null ? end : Math.min(earliest, end);
+      continue;
+    }
+
+    if (!STREAMING_SENTENCE_BOUNDARY.test(char)) {
+      continue;
+    }
+
+    const end = index + 1;
+    earliest = earliest === null ? end : Math.min(earliest, end);
+  }
+
+  if (earliest !== null) {
+    return earliest;
+  }
+
+  if (text.length >= maxChars) {
+    return findChunkSplit(text, maxChars);
+  }
+
+  return null;
+}
+
 function findChunkSplit(window: string, maxChars: number): number {
   let splitAt = lastIndexOfAny(window, ["\n", "。", "！", "？", "…", "；"]);
   if (splitAt > 0) {
