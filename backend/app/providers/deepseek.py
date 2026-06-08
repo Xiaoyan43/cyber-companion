@@ -13,6 +13,55 @@ from backend.app.providers.types import (
     ProviderStatus,
 )
 
+DEFAULT_TIMEOUT_S = 30.0
+
+_shared_http_client: httpx.Client | None = None
+_shared_http_client_timeout: float | None = None
+
+
+def _create_http_client(timeout_s: float) -> httpx.Client:
+    try:
+        return httpx.Client(timeout=timeout_s, http2=True)
+    except ImportError:
+        return httpx.Client(timeout=timeout_s)
+
+
+def get_shared_http_client(timeout_s: float = DEFAULT_TIMEOUT_S) -> httpx.Client:
+    global _shared_http_client, _shared_http_client_timeout
+    _install_reset_provider_router_hook()
+    if _shared_http_client is None or _shared_http_client_timeout != timeout_s:
+        close_deepseek_http_client()
+        _shared_http_client = _create_http_client(timeout_s)
+        _shared_http_client_timeout = timeout_s
+    return _shared_http_client
+
+
+def close_deepseek_http_client() -> None:
+    global _shared_http_client, _shared_http_client_timeout
+    if _shared_http_client is not None:
+        _shared_http_client.close()
+        _shared_http_client = None
+        _shared_http_client_timeout = None
+
+
+def _install_reset_provider_router_hook() -> None:
+    import sys
+
+    router_mod = sys.modules.get("backend.app.providers.router")
+    if router_mod is None:
+        return
+
+    original_reset = getattr(router_mod, "reset_provider_router", None)
+    if original_reset is None or getattr(original_reset, "_closes_deepseek_http_client", False):
+        return
+
+    def reset_provider_router() -> None:
+        close_deepseek_http_client()
+        original_reset()
+
+    reset_provider_router._closes_deepseek_http_client = True  # type: ignore[attr-defined]
+    router_mod.reset_provider_router = reset_provider_router
+
 
 class DeepSeekProvider(ChatProvider):
     name = "deepseek"
@@ -24,11 +73,15 @@ class DeepSeekProvider(ChatProvider):
         base_url: str,
         api_key_env: str,
         enabled: bool = True,
+        timeout_s: float = DEFAULT_TIMEOUT_S,
+        http_client: httpx.Client | None = None,
     ) -> None:
         self._model = model
         self._base_url = base_url.rstrip("/")
         self._api_key_env = api_key_env
         self._enabled = enabled
+        self._timeout_s = timeout_s
+        self._http_client = http_client
 
     @property
     def api_key(self) -> str | None:
@@ -66,16 +119,21 @@ class DeepSeekProvider(ChatProvider):
             "stream": False,
         }
 
+        client = (
+            self._http_client
+            if self._http_client is not None
+            else get_shared_http_client(self._timeout_s)
+        )
+
         try:
-            with httpx.Client(timeout=30.0) as client:
-                response = client.post(
-                    f"{self._base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                )
+            response = client.post(
+                f"{self._base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
         except httpx.HTTPError as error:
             raise ProviderRequestError(
                 f"DeepSeek request failed: {error}",

@@ -1702,3 +1702,32 @@
 不要改动的边界：
 
 - `App.tsx` epoch / `deferIdleFallback` 未改；`/tts/synthesize` 作兜底保留。
+
+## 2026-06-09 - Session 32 (DeepSeek HTTP connection reuse)
+
+本次完成：
+
+- `DeepSeekProvider` 不再每次 `with httpx.Client(...)`；改为模块级 `get_shared_http_client()` 常驻连接池（keep-alive，`http2=True` 在已装 `h2` 时启用）。
+- 导出 `close_deepseek_http_client()`；首次取共享 client 时 hook `reset_provider_router`，重置时关闭；注入 `http_client` 的测试分支保留。
+- 测试：共享 client 复用、`reset_provider_router` 关闭、mock HTTP complete 契约。
+
+下次接着做：
+
+- 可选：其他 cloud provider（OpenAI 等）同样复用连接池。
+
+已知问题：
+
+- `main.py` lifespan 里 `from router import reset_provider_router` 为早期绑定，进程退出时可能未走 hook；测试 fixture 已显式 `close_deepseek_http_client()`。
+
+相关文件：
+
+- `backend/app/providers/deepseek.py`
+- `backend/tests/test_providers.py`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed — **133** backend tests; frontend `tsc --noEmit` passed.
+
+不要改动的边界：
+
+- `ChatProvider` 接口未改；仅 DeepSeek HTTP 层性能优化。

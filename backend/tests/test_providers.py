@@ -1,17 +1,25 @@
-import os
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
+from backend.app.providers.deepseek import (
+    DeepSeekProvider,
+    close_deepseek_http_client,
+    get_shared_http_client,
+)
 from backend.app.providers.router import reset_provider_router
+from backend.app.providers.types import ChatCompletionRequest, ChatMessage
 
 
 @pytest.fixture(autouse=True)
 def reset_router() -> None:
+    close_deepseek_http_client()
     reset_provider_router()
     yield
+    close_deepseek_http_client()
     reset_provider_router()
 
 
@@ -92,6 +100,85 @@ def test_chat_complete_openai_placeholder_returns_clear_error(
     payload = response.json()
     assert payload["detail"]["provider"] == "openai"
     assert "placeholder" in payload["detail"]["error"]
+
+
+def test_deepseek_shared_http_client_reused() -> None:
+    close_deepseek_http_client()
+    first = get_shared_http_client()
+    second = get_shared_http_client()
+    assert first is second
+
+
+def test_reset_provider_router_closes_deepseek_http_client() -> None:
+    from backend.app.providers import router as provider_router
+
+    close_deepseek_http_client()
+    client = get_shared_http_client()
+
+    provider_router.reset_provider_router()
+
+    assert client.is_closed
+
+
+def test_deepseek_complete_mocked_http(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "choices": [{"message": {"content": "memory schema is sqlite-backed"}}],
+                "usage": {
+                    "prompt_tokens": 12,
+                    "completion_tokens": 8,
+                    "total_tokens": 20,
+                },
+            }
+
+        @property
+        def text(self) -> str:
+            return ""
+
+        @property
+        def reason_phrase(self) -> str:
+            return "OK"
+
+    class FakeClient:
+        def post(
+            self,
+            url: str,
+            *,
+            headers: dict[str, str],
+            json: dict[str, object],
+        ) -> FakeResponse:
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            return FakeResponse()
+
+    provider = DeepSeekProvider(
+        model="deepseek-chat",
+        base_url="https://api.deepseek.com",
+        api_key_env="DEEPSEEK_API_KEY",
+        http_client=FakeClient(),  # type: ignore[arg-type]
+    )
+    result = provider.complete(
+        ChatCompletionRequest(
+            messages=[ChatMessage(role="user", content="Explain memory.")],
+            max_output_tokens=64,
+        ),
+    )
+
+    assert captured["url"] == "https://api.deepseek.com/chat/completions"
+    assert captured["headers"]["Authorization"] == "Bearer test-key"
+    assert captured["json"]["model"] == "deepseek-chat"
+    assert captured["json"]["stream"] is False
+    assert result.provider == "deepseek"
+    assert result.content == "memory schema is sqlite-backed"
+    assert result.mock is False
+    assert result.usage.total_tokens == 20
 
 
 def test_chat_complete_unknown_provider_returns_error(
