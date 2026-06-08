@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -8,11 +9,15 @@ from backend.app.memory.budget import BudgetConfig
 from backend.app.memory.store import reset_memory_store
 from backend.app.providers.router import reset_provider_router
 from backend.app.tts.config import TTSConfig, TTSProviderConfigEntry
+from backend.app.tts.exceptions import TTSError
+from backend.app.tts.mac_say import MacSayTTSProvider
 from backend.app.tts.mock import MockTTSProvider
 from backend.app.tts.openai_tts import OpenAITTSProvider
 from backend.app.tts.policy import evaluate_speech_policy
+from backend.app.tts.registry import build_tts_provider
 from backend.app.tts.router import TTSRouter, reset_tts_router
 from backend.app.tts.types import SynthesisRequest
+from backend.app.tts.wav_utils import generate_silent_wav, parse_wav_duration_ms
 
 
 @pytest.fixture(autouse=True)
@@ -166,3 +171,104 @@ def test_mock_provider_synthesize() -> None:
 def test_policy_skips_observe_and_mutter() -> None:
     assert evaluate_speech_policy("嗯", decision="mutter").should_speak is False
     assert evaluate_speech_policy("看着", decision="observe").should_speak is False
+
+
+def test_parse_wav_duration_ms() -> None:
+    wav = generate_silent_wav(800)
+    assert parse_wav_duration_ms(wav) == 800
+
+
+def test_registry_builds_mac_say_provider() -> None:
+    entry = TTSProviderConfigEntry(
+        name="mac_say",
+        enabled=True,
+        model="mac-say",
+        voice="Tingting",
+        cloud=False,
+    )
+    provider = build_tts_provider(entry)
+
+    assert isinstance(provider, MacSayTTSProvider)
+    assert provider.name == "mac_say"
+    assert provider.cloud is False
+
+
+def test_mac_say_provider_status_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("backend.app.tts.mac_say.shutil.which", lambda _: "/usr/bin/say")
+    provider = MacSayTTSProvider(voice="Tingting")
+    status = provider.status()
+
+    assert status.name == "mac_say"
+    assert status.enabled is True
+    assert status.model == "mac-say-Tingting"
+    assert status.configured is True
+    assert status.placeholder is False
+    assert status.cloud is False
+    assert status.api_key_present is False
+
+
+def test_mac_say_unavailable_raises_tts_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("backend.app.tts.mac_say.shutil.which", lambda _: None)
+    provider = MacSayTTSProvider()
+
+    with pytest.raises(TTSError) as error:
+        provider.synthesize(SynthesisRequest(text="你好"))
+
+    assert "not available" in str(error.value)
+    assert error.value.provider == "mac_say"
+
+
+def test_mac_say_synthesize_mocked_subprocess(monkeypatch: pytest.MonkeyPatch) -> None:
+    wav = generate_silent_wav(600)
+    captured_cmd: list[str] = []
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured_cmd.extend(cmd)
+        assert kwargs.get("shell") is not True
+        out_index = cmd.index("-o") + 1
+        Path(cmd[out_index]).write_bytes(wav)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr("backend.app.tts.mac_say.shutil.which", lambda _: "/usr/bin/say")
+    monkeypatch.setattr("backend.app.tts.mac_say.subprocess.run", fake_run)
+
+    provider = MacSayTTSProvider(voice="Tingting")
+    result = provider.synthesize(SynthesisRequest(text="你好"))
+
+    assert captured_cmd[-1] == "你好"
+    assert "--file-format=WAVE" in captured_cmd
+    assert "--data-format=LEI16@22050" in captured_cmd
+    assert result.mock is False
+    assert result.provider == "mac_say"
+    assert result.model == "mac-say-Tingting"
+    assert result.mime_type == "audio/wav"
+    assert result.audio_bytes == wav
+    assert result.duration_ms == 600
+
+
+def test_tts_config_defaults_to_mac_say_without_force_mock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.app.tts.config import load_tts_config
+
+    repo_root = Path(__file__).resolve().parents[2]
+    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(repo_root / "config"))
+    monkeypatch.delenv("CYBER_COMPANION_TTS_MODE", raising=False)
+
+    config = load_tts_config(repo_root / "config")
+    assert config.default_provider == "mac_say"
+    assert config.force_mock is False
+
+
+def test_force_mock_overrides_mac_say_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from backend.app.tts.router import get_tts_router
+
+    repo_root = Path(__file__).resolve().parents[2]
+    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(repo_root / "config"))
+    monkeypatch.setenv("CYBER_COMPANION_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("CYBER_COMPANION_TTS_MODE", "mock")
+    reset_tts_router()
+
+    tts_router = get_tts_router()
+    assert tts_router.config.force_mock is True
+    assert tts_router.resolve_provider_name() == "mock"

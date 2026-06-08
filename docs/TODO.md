@@ -102,6 +102,7 @@ contract) — do not hand to Cursor without explicit approval + doc updates.
 - [x] Gate cloud STT behind budget/config flags.
 - [x] Add TTS adapter placeholder.
 - [x] Define selective speech policy.
+- [x] Voice V1: local TTS via macOS `say` (`MacSayTTSProvider`, `config/tts.json`).
 
 ### Documentation
 

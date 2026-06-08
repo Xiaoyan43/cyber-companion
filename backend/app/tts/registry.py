@@ -1,5 +1,6 @@
 from backend.app.tts.base import TextToSpeechProvider
 from backend.app.tts.config import TTSConfig, TTSProviderConfigEntry
+from backend.app.tts.mac_say import MacSayTTSProvider
 from backend.app.tts.mock import MockTTSProvider
 from backend.app.tts.openai_tts import OpenAITTSProvider
 
@@ -7,6 +8,12 @@ from backend.app.tts.openai_tts import OpenAITTSProvider
 def build_tts_provider(entry: TTSProviderConfigEntry) -> TextToSpeechProvider:
     if entry.name == "mock":
         return MockTTSProvider(model=entry.model)
+
+    if entry.name == "mac_say":
+        return MacSayTTSProvider(
+            voice=entry.voice or "Tingting",
+            enabled=entry.enabled,
+        )
 
     if entry.name == "openai_tts":
         return OpenAITTSProvider(

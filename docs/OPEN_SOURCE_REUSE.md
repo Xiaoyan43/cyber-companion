@@ -284,6 +284,13 @@ Used for: Generating minimal silent WAV bytes in mock TTS provider.
 Local files: backend/app/tts/wav_utils.py
 Notes: Stdlib only. No source copied.
 
+Name: macOS `say` (system API)
+URL: https://ss64.com/osx/say.html
+License: N/A (macOS built-in)
+Used for: Local offline TTS via `MacSayTTSProvider` (`backend/app/tts/mac_say.py`).
+Local files: backend/app/tts/mac_say.py, config/tts.json, config/tts.example.json
+Notes: No dependency added. Invoked with `subprocess.run([...], shell=False)`; text passed as a single argv element. Default zh voice `Tingting` configurable in `tts.json`. Unavailable on non-macOS hosts — raises `TTSError`; `CYBER_COMPANION_TTS_MODE=mock` still forces mock.
+
 Name: Playwright
 URL: https://playwright.dev/
 License: Apache-2.0

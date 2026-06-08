@@ -1409,3 +1409,46 @@
 
 - Frontend only; no backend/provider/memory/behavior/cost changes.
 - Avatar state machine contract unchanged; rest layer only replaces idle fallback targets.
+
+## 2026-06-08 - Session 24 (Voice V1: macOS say TTS)
+
+本次完成：
+
+- Added `MacSayTTSProvider` (`backend/app/tts/mac_say.py`): local offline TTS via macOS `say`, `cloud=False`, `placeholder=False`.
+- `subprocess.run([...], shell=False)` with text as a single argv; WAV via `--file-format=WAVE --data-format=LEI16@22050`; temp file cleanup; clear `TTSError` when `say` is missing or fails.
+- `parse_wav_duration_ms` in `wav_utils.py` for duration from WAV header.
+- Registered `mac_say` in `registry.py`; `config/tts.example.json` + new `config/tts.json` (`default_provider: mac_say`, voice `Tingting`).
+- Tests: mock subprocess path, interface contract, unavailable `say`, config default, `CYBER_COMPANION_TTS_MODE=mock` override.
+- Recorded macOS `say` in `docs/OPEN_SOURCE_REUSE.md`.
+
+下次接着做：
+
+- Voice V2: local STT via `faster-whisper` per `docs/PHASE_VOICE_LOCAL.md`.
+- Manual E2E: push-to-talk → chat → Boxi speaks with real audio.
+
+已知问题：
+
+- STT still mock; full speak-listen loop not wired to real transcription yet.
+- `mac_say` only works on macOS with `say` installed; CI/non-Mac falls back to tests via mocks.
+
+相关文件：
+
+- `backend/app/tts/mac_say.py`
+- `backend/app/tts/registry.py`
+- `backend/app/tts/wav_utils.py`
+- `config/tts.json`
+- `config/tts.example.json`
+- `backend/tests/test_tts.py`
+- `docs/OPEN_SOURCE_REUSE.md`
+- `docs/PHASE_VOICE_LOCAL.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`: passed (see checkpoint run).
+- `npm run build:frontend`: passed (see checkpoint run).
+- Real `say` audio: manual verification on this Mac (not automated).
+
+不要改动的边界：
+
+- TTS provider interface unchanged; no STT/chat/memory/behavior/provider changes.
+- `CYBER_COMPANION_TTS_MODE=mock` must keep forcing mock TTS.

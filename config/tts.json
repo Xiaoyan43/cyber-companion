@@ -1,6 +1,6 @@
 {
   "enabled": true,
-  "default_provider": "mock",
+  "default_provider": "mac_say",
   "max_speech_chars": 120,
   "speak_decisions": ["proactive", "interrupt", "refuse", "reply"],
   "providers": {
