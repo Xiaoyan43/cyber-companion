@@ -10,6 +10,9 @@
   "behavior_tick_retention": 200,
   "auto_memory_write": true,
   "llm_memory_extraction": true,
+  "enable_reflection": true,
+  "reflection_every_n_turns": 6,
+  "llm_summary": true,
   "allow_reasoning_model": true,
   "allow_cloud_stt": true,
   "allow_cloud_tts": true

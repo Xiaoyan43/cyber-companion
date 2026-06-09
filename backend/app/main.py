@@ -3,9 +3,10 @@ import base64
 import json
 from collections.abc import Iterator
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from starlette.background import BackgroundTask
 from starlette.responses import Response
 
 from backend.app.behavior.completion import build_budget_block_completion, build_local_completion
@@ -24,6 +25,7 @@ from backend.app.memory.chat_persistence import (
     should_persist_local_behavior_line,
 )
 from backend.app.memory.summary_policy import maybe_update_conversation_summary
+from backend.app.reflection.runner import run_reflection_if_due
 from backend.app.memory.write_policy import maybe_write_memories_from_turn, record_turn_memories
 from backend.app.memory.usage_guard import evaluate_llm_budget_gate
 from backend.app.memory.database import MemoryRecord, MessageRecord, MoodStateRecord, RelationshipStateRecord
@@ -594,7 +596,10 @@ def evaluate_behavior_route(request: BehaviorEvaluateRequest) -> BehaviorDecisio
         503: {"model": ErrorResponse},
     },
 )
-def chat_complete(request: ChatCompleteRequest) -> ChatCompleteResponse:
+def chat_complete(
+    request: ChatCompleteRequest,
+    background_tasks: BackgroundTasks,
+) -> ChatCompleteResponse:
     router = get_provider_router()
     store = get_memory_store()
     budget = load_budget_config()
@@ -695,6 +700,10 @@ def chat_complete(request: ChatCompleteRequest) -> ChatCompleteResponse:
     except Exception:
         pass
     maybe_update_conversation_summary(store, budget=budget)
+
+    if called_llm:
+        store.note_llm_turn()
+        background_tasks.add_task(run_reflection_if_due, store, budget)
 
     return ChatCompleteResponse(
         provider=result.provider,
@@ -947,6 +956,7 @@ def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
                     should_call_llm=True,
                 )
                 called_llm = True
+                store.note_llm_turn()
                 parsed = parse_structured_assistant_response(accumulated_text)
                 final_decision = parsed.decision or decision.decision
                 avatar_state = parsed.avatar_state or (
@@ -999,4 +1009,5 @@ def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
         event_generator(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        background=BackgroundTask(run_reflection_if_due, store, budget),
     )

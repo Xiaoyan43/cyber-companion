@@ -2100,3 +2100,47 @@
 
 - 每轮只走 M3 或 M2 一条路径；未删 `extract_memory_candidates`。
 - 无 linking（SD-5）、无反思层（SD-4）、无 schema 改动。
+
+## 2026-06-09 - Session 37 (Cursor：SD-4 background reflection layer)
+
+本次完成：
+
+- **SD-4 Task 1 — `store.py`**
+  - `get_meta` / `set_meta`；`note_llm_turn`；原子 `claim_reflection`（单事务）；`release_reflection`；`get_max_chat_message_id`。
+- **SD-4 Task 2 — config**
+  - `enable_reflection` / `reflection_every_n_turns` / `llm_summary` 三旋钮 → `BudgetConfig` + `config/budget*.json`。
+- **SD-4 Task 3 — `backend/app/reflection/`**
+  - `runner.run_reflection_if_due`（enable→claim→3 job 各自 try/except→finally release）；`jobs.py`：consolidate（archive+deprioritize only）、form_impression（单条 `relationship_state` upsert）、summarize_conversation_llm（`llm_summary` 开时）。
+- **SD-4 Task 4 — `summary_policy.py`**
+  - `llm_summary` 开时同步路径 `return False`，摘要推迟到后台 Job 3。
+- **SD-4 Task 5 — `main.py`**
+  - `/chat/complete`：`BackgroundTasks` + LLM 回合 `note_llm_turn` + `add_task`；`/chat/stream`：LLM 分支 `note_llm_turn` + `StreamingResponse(background=BackgroundTask(...))`。
+- **SD-4 Task 6 — tests**
+  - 新建 `test_reflection.py`（claim/single-flight、disabled、failure isolation、impression upsert、consolidate、summary deferral、chat 不受影响）；`test_context_builder` 规则摘要用例显式 `llm_summary=False`。
+- **SD-4 Task 7 — docs**
+  - `docs/MEMORY_DESIGN.md` 新增 Background reflection (SD-4) 小节。
+
+下次接着做：
+
+- **SD-5（可选）** — `memory_links` + top-down retrieval。
+
+已知问题：
+
+- 反思花费尚未接预算闸（`# TODO(SD-later): gate reflection spend`）；idle_tick  opportunistic 反思未做。
+
+相关文件：
+
+- `backend/app/memory/store.py`, `budget.py`, `summary_policy.py`
+- `backend/app/reflection/`（`runner.py`, `jobs.py`）
+- `backend/app/main.py`
+- `config/budget.json`, `config/budget.example.json`
+- `backend/tests/test_reflection.py`, `test_context_builder.py`
+- `docs/MEMORY_DESIGN.md`, `docs/TODO.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**187 passed** + tsc 通过。
+
+不要改动的边界：
+
+- 无 schema/DDL 改动；无 linking（SD-5）；consolidation 不 merge/不升 importance；同步路径不调 LLM；反思异常不进请求路径；`reflecting` finally 必释放。

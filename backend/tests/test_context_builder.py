@@ -111,7 +111,7 @@ def test_context_builder_respects_small_token_budget(store: MemoryStore) -> None
 
 
 def test_summary_policy_creates_summary_for_old_batch(store: MemoryStore) -> None:
-    budget = BudgetConfig(max_raw_turns=2, summary_batch_size=4)
+    budget = BudgetConfig(max_raw_turns=2, summary_batch_size=4, llm_summary=False)
 
     for index in range(10):
         role = "user" if index % 2 == 0 else "assistant"
@@ -139,7 +139,12 @@ def test_score_memory_is_deterministic(store: MemoryStore) -> None:
 
 
 def test_sql_recent_chat_excludes_behavior_tick_and_counts_chat_only(store: MemoryStore) -> None:
-    budget = BudgetConfig(max_raw_turns=2, max_memories_per_turn=2, summary_batch_size=4)
+    budget = BudgetConfig(
+        max_raw_turns=2,
+        max_memories_per_turn=2,
+        summary_batch_size=4,
+        llm_summary=False,
+    )
 
     for index in range(6):
         role = "user" if index % 2 == 0 else "assistant"

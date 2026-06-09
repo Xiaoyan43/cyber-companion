@@ -218,3 +218,45 @@ guesses are skipped. Near-duplicate memories of the same type are updated in
 place instead of inserted again. Writes link to the persisted user message via
 `source_message_id`.
 
+## Background reflection (SD-4)
+
+After an LLM reply is sent, a **background** worker may run up to three extra LLM
+jobs (Tier ②). The user never waits; reflection is best-effort enrichment only.
+
+### Trigger and coordination (`schema_meta`)
+
+| Key | Purpose |
+|---|---|
+| `turns_since_reflection` | Increments on each real LLM turn (`note_llm_turn`); reset to 0 when reflection claims |
+| `reflecting` | Single-flight lock (`1` while a reflection run is active) |
+| `last_reflected_message_id` | Max chat message id after a successful reflection batch |
+
+Reflection fires when `turns_since_reflection >= reflection_every_n_turns` (default 6)
+and `enable_reflection` is true. `claim_reflection` reads and sets these keys in one
+SQLite transaction; `release_reflection` clears `reflecting` in a `finally` block.
+
+Wiring: `/chat/complete` uses FastAPI `BackgroundTasks`; `/chat/stream` attaches
+`BackgroundTask(run_reflection_if_due, …)` to `StreamingResponse` so work runs after
+the stream closes. Only LLM turns increment the counter.
+
+### Jobs (each isolated; failures swallowed)
+
+1. **Consolidate** — archive stale `job_progress`/`recent_event` via `expires_at`;
+   deprioritize by lowering `importance` only (never raise, never merge/delete content).
+2. **Impression** — one `relationship_state` memory upsert (`metadata.writer="reflection"`)
+   → `[Impression]` block in provider context.
+3. **LLM summary** — when `llm_summary` is true, writes `conversation_summaries` in the
+   background; the synchronous `maybe_update_conversation_summary` returns early so
+   **no LLM runs on the response path**.
+
+When `llm_summary` is false, Job 3 is a no-op and the existing rule-based summary path
+runs synchronously as before.
+
+### Config knobs (`config/budget.json`)
+
+- `enable_reflection` (default true) — master switch for the whole layer
+- `reflection_every_n_turns` (default 6) — cadence between reflection batches
+- `llm_summary` (default true) — LLM summary in reflection vs rule-based sync path
+
+Reflection spend is not yet gated by budget walls (`# TODO(SD-later): gate reflection spend`).
+

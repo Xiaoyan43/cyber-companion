@@ -27,6 +27,8 @@ def maybe_update_conversation_summary(
     budget: BudgetConfig | None = None,
 ) -> bool:
     config = budget or BudgetConfig()
+    if config.llm_summary:
+        return False
     # Summaries recap the real conversation only; SQL boundary queries avoid
     # loading the full messages table and exclude behavior_tick lines.
     total = store.count_chat_messages()

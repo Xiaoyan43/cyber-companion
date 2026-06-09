@@ -28,15 +28,15 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
   `record_turn_memories` orchestrator); keep regex M2 as fallback; `writer="llm"`
   tag; `llm_memory_extraction` knob. Cross-type linking moved to SD-5. Spec:
   `docs/SD3_SPEC.md`.
-- [ ] **SD-4 — Background reflection layer `[Claude]`.** Turn-counter trigger
+- [x] **SD-4 — Background reflection layer `[Claude]`.** Turn-counter trigger
   (`reflection_every_n_turns`); jobs: memory consolidation/evolution, impression
   formation (`relationship_state` memory type), LLM conversation summary. Run via
   `BackgroundTasks` off the response path; single-flight; config-gated
-  (`enable_reflection`); failure-isolated.
+  (`enable_reflection`); failure-isolated. Spec: `docs/SD4_SPEC.md`.
 - [ ] **SD-5 (optional) — Memory links + top-down retrieval `[Claude]`.**
   `memory_links` table + category-first retrieval. **Update `docs/MEMORY_DESIGN.md`.**
-- [ ] **SD config knobs `[Cursor-ok]`.** `llm_memory_extraction` done (SD-3). Still
-  need `enable_reflection`, `reflection_every_n_turns`, `llm_summary` (SD-4) in
+- [x] **SD config knobs `[Cursor-ok]`.** `llm_memory_extraction` (SD-3);
+  `enable_reflection`, `reflection_every_n_turns`, `llm_summary` (SD-4) in
   `BudgetConfig` + `config/budget*.json`.
 
 ## Current Priority
