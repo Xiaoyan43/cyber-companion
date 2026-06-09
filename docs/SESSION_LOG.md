@@ -1968,3 +1968,46 @@
 - 预算墙保持关闭（用户选择），但保留配置旋钮以便日后重启。
 - 灵魂的额外 LLM 调用**别放在“用户等回复”的关键路径上**（同步只用 piggyback，重活后台）。
 - 先做灵魂，语音+盒子是之后阶段。
+
+## 2026-06-09 - Session 34 (Cursor：SD-1 Piggyback signal contract)
+
+本次完成：
+
+- **SD-1 Task 1 — `behavior/parser.py`**
+  - `SIGNALS_SENTINEL = "<<<BOXI_SIGNALS>>>"`；`StructuredAssistantResponse.signals` 字段。
+  - `parse_structured_assistant_response`：sentinel 优先切分 → legacy 整段 JSON → embedded JSON → 纯文本兜底；malformed trailer 不污染 `content`。
+  - `SignalStreamFilter`：hold-back + sentinel 检测 + `flush()`。
+- **SD-1 Task 2 — `main.py` `/chat/stream`**
+  - delta 0 循环接入 `SignalStreamFilter`；`accumulated_parts` 仍收全量 raw text；`try/finally` 保证异常路径也 flush 已缓冲可见文本。
+- **SD-1 Task 3 — `memory/persona.py`**
+  - 两条 prompt 路径末尾 append `OUTPUT_PROTOCOL`（不改 name/tone/boundaries/catchphrases）。
+- **SD-1 Task 4 — `backend/tests/test_behavior.py`**
+  - 新增 parser 三用例 + stream filter 三用例；legacy `test_structured_parser_reads_json_payload` 仍绿。
+
+下次接着做：
+
+- **SD-2** — subjectivity kernel（`relationship_state` 表、appraisal 本地数学、context blocks）。Claude spec 已有，等 Claude 写 SD2_SPEC 或 Cursor 按 `SOUL_DEEPENING_SPEC.md` §4 实现。
+- 顺手修：`test_stt_status_route` 仍断言 `allow_cloud_stt is False`，与已提交的 `config/budget.json`（`true`）不一致 — 153/154 通过。
+
+已知问题：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**153 passed, 1 failed** — `test_stt.py::test_stt_status_route`（预存 config/test 漂移，非 SD-1 引入）。
+- SD-1 未消费 `signals.appraisal` / `relationship` / `memory`（留给 SD-2/SD-3）。
+
+相关文件：
+
+- `backend/app/behavior/parser.py`
+- `backend/app/main.py`（stream delta 循环）
+- `backend/app/memory/persona.py`
+- `backend/tests/test_behavior.py`
+- `docs/SD1_SPEC.md`、`docs/SOUL_DEEPENING_SPEC.md` §3
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：154 项中 **153 通过**（+7 新 behavior 测试）；tsc 未跑到（pytest 先失败）。
+- SD-1 相关：`test_behavior.py` 18/18 绿；`test_chat_stream.py` 5/5 绿。
+
+不要改动的边界：
+
+- 未动 schema/config/budget/provider/file-gateway；未碰 SD-2 及以后。
+- `signals` 只 parse 不 apply；Boxi 毒舌 core persona 未改。

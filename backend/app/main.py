@@ -10,7 +10,7 @@ from starlette.responses import Response
 
 from backend.app.behavior.completion import build_budget_block_completion, build_local_completion
 from backend.app.behavior.engine import evaluate_behavior
-from backend.app.behavior.parser import parse_structured_assistant_response
+from backend.app.behavior.parser import SignalStreamFilter, parse_structured_assistant_response
 from backend.app.behavior.types import BehaviorEvent
 from backend.app.cors import load_cors_origins
 from backend.app.files.config import load_permissions_config
@@ -870,16 +870,23 @@ def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
                 provider_status = provider.status()
                 accumulated_parts: list[str] = []
                 stream_usage = None
-
-                for chunk_kind, chunk_value in router.complete_stream(
-                    completion_request,
-                    provider_name=request.provider,
-                ):
-                    if chunk_kind == "delta":
-                        accumulated_parts.append(chunk_value)
-                        yield _sse_data({"type": "delta", "text": chunk_value})
-                    elif chunk_kind == "usage":
-                        stream_usage = chunk_value
+                signal_filter = SignalStreamFilter()
+                try:
+                    for chunk_kind, chunk_value in router.complete_stream(
+                        completion_request,
+                        provider_name=request.provider,
+                    ):
+                        if chunk_kind == "delta":
+                            accumulated_parts.append(chunk_value)
+                            visible = signal_filter.feed(chunk_value)
+                            if visible:
+                                yield _sse_data({"type": "delta", "text": visible})
+                        elif chunk_kind == "usage":
+                            stream_usage = chunk_value
+                finally:
+                    tail = signal_filter.flush()
+                    if tail:
+                        yield _sse_data({"type": "delta", "text": tail})
 
                 if stream_usage is None:
                     yield _sse_data({"type": "error", "message": "Provider stream ended without usage."})

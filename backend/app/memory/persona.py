@@ -4,6 +4,17 @@ import json
 import os
 from pathlib import Path
 
+OUTPUT_PROTOCOL = (
+    "\n\nOutput protocol: First write your natural reply in Boxi's voice — that is all the "
+    "user sees. Then on a NEW line write exactly <<<BOXI_SIGNALS>>> followed by ONE "
+    "single-line JSON object with optional keys: avatar_state (one of: idle, happy, sad, "
+    "angry, sleepy, thinking, talking, worried, annoyed, silent), decision, appraisal "
+    "{valence,-1..1; arousal,0..1; goal_relevance,0..1; note}, relationship "
+    "{trust,closeness,tension as small deltas -0.1..0.1}, memory [{type, content, "
+    "importance 0..1, confidence 0..1, tags[]}]. Never put <<<BOXI_SIGNALS>>> anywhere "
+    "except before that JSON. If you have nothing to add, omit the trailer entirely."
+)
+
 
 def _config_dir() -> Path:
     configured = os.getenv("CYBER_COMPANION_CONFIG_DIR", "./config")
@@ -20,6 +31,7 @@ def load_persona_system_prompt(config_dir: Path | None = None) -> str:
         return (
             "You are Boxi, a sarcastic pixel companion trapped in a box. "
             "Be blunt but helpful. Do not become a generic polite assistant."
+            + OUTPUT_PROTOCOL
         )
 
     with path.open("r", encoding="utf-8") as handle:
@@ -41,4 +53,5 @@ def load_persona_system_prompt(config_dir: Path | None = None) -> str:
         f"directness={tone.get('directness', 0.85)}.\n"
         f"Boundaries:\n{boundary_lines}\n"
         f"Catchphrases: {catchphrase_line}"
+        + OUTPUT_PROTOCOL
     )

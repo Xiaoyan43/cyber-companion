@@ -3,7 +3,11 @@ from pathlib import Path
 import pytest
 
 from backend.app.behavior.engine import evaluate_behavior
-from backend.app.behavior.parser import parse_structured_assistant_response
+from backend.app.behavior.parser import (
+    SIGNALS_SENTINEL,
+    SignalStreamFilter,
+    parse_structured_assistant_response,
+)
 from backend.app.behavior.rules import is_rambling
 from backend.app.behavior.types import BehaviorEvent
 from backend.app.memory.database import connect
@@ -139,3 +143,59 @@ def test_structured_parser_reads_json_payload() -> None:
     assert parsed.content == "先做一步。"
     assert parsed.avatar_state == "talking"
     assert parsed.decision == "reply"
+
+
+def test_parser_no_sentinel_plain_text() -> None:
+    parsed = parse_structured_assistant_response("行吧，先做一步。")
+    assert parsed.content == "行吧，先做一步。"
+    assert parsed.signals is None
+    assert parsed.avatar_state is None
+
+
+def test_parser_sentinel_valid_json() -> None:
+    parsed = parse_structured_assistant_response(
+        '先做一步。\n<<<BOXI_SIGNALS>>>\n{"avatar_state":"thinking","decision":"reply","relationship":{"trust":0.04}}'
+    )
+    assert parsed.content == "先做一步。"
+    assert parsed.avatar_state == "thinking"
+    assert parsed.decision == "reply"
+    assert parsed.signals is not None
+    assert parsed.signals["relationship"]["trust"] == 0.04
+
+
+def test_parser_sentinel_malformed_json() -> None:
+    parsed = parse_structured_assistant_response("先做一步。\n<<<BOXI_SIGNALS>>>\n{not valid json")
+    assert parsed.content == "先做一步。"
+    assert parsed.signals is None
+    assert parsed.avatar_state is None
+    assert SIGNALS_SENTINEL not in parsed.content
+    assert "not valid json" not in parsed.content
+
+
+def _stream_filter_output(chunks: list[str]) -> str:
+    filt = SignalStreamFilter()
+    parts = [filt.feed(chunk) for chunk in chunks]
+    parts.append(filt.flush())
+    return "".join(parts)
+
+
+def test_stream_filter_no_sentinel() -> None:
+    assert _stream_filter_output(["行吧", "，先", "做一步。"]) == "行吧，先做一步。"
+
+
+def test_stream_filter_strips_trailer() -> None:
+    output = _stream_filter_output(["先做一步。", "\n<<<BOXI", "_SIGNALS>>>\n{...}"])
+    assert output == "先做一步。\n"
+    assert "<<<" not in output
+    assert "SIGNALS" not in output
+    assert "{" not in output
+
+
+def test_stream_filter_sentinel_split_across_chunks() -> None:
+    prefix = "行吧，"
+    chunks = [prefix] + list(SIGNALS_SENTINEL) + ['\n{"avatar_state":"happy"}']
+    output = _stream_filter_output(chunks)
+    assert output == prefix
+    assert SIGNALS_SENTINEL not in output
+    assert "<<<BOXI" not in output
+    assert "{" not in output

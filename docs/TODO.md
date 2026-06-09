@@ -6,11 +6,12 @@ Spec: `docs/SOUL_DEEPENING_SPEC.md`. Incremental on the working app, **no rebuil
 Latency-smart: ① piggyback (same reply call) ② background reflection ③ local math.
 Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
 
-- [ ] **SD-1 — Piggyback signal contract `[Claude→Cursor]`.** Extend
+- [x] **SD-1 — Piggyback signal contract `[Claude→Cursor]`.** Extend
   `StructuredAssistantResponse` with optional `signals` + tolerant parse
-  (`behavior/parser.py`); add output-protocol section to persona
-  (`memory/persona.py`). Done when: `signals` parsed when present, **never leaks**
-  to `content`/TTS, absent/malformed → today's behavior. Tests for all 3 cases.
+  (`behavior/parser.py`); streaming sentinel-strip (`main.py`); output-protocol
+  section to persona (`memory/persona.py`). Done: `signals` parsed when present,
+  **never leaks** to `content`/TTS/stream deltas; absent/malformed → today's behavior.
+  Tests in `test_behavior.py` (parser + `SignalStreamFilter`).
 - [ ] **SD-2 — Subjectivity kernel `[Claude]`.** New `relationship_state` singleton
   table (trust/closeness/familiarity/tension/last_meaningful_interaction_at); `trust`
   **moves** here (source of truth), `loneliness` **stays** in mood_state but is
