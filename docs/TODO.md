@@ -125,6 +125,22 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
   `OutputMode 0` (pure, Doubao brain, sub-second; soul = persona+memory-inject+transcript
   extraction) and `OutputMode 1` (hybrid, soul/DeepSeek as orchestrated LLM, ~2s). Keep current
   pipeline as fallback toggle. Auth App ID+Access Token (env). **Spec: `docs/V2_PHASE2c_SPEC.md`.**
+  - [x] Task 1 skeleton: `doubao_realtime_protocol.py` + `doubao_realtime_service.py` +
+    `CYBER_COMPANION_VOICE_MODE=realtime` path in `run_voice.py`; Boxi persona via `system_role`.
+  - [ ] Task 2 memory inject + transcript off-path extraction.
+  - [ ] Task 3 hybrid OutputMode 1 (`LLMConfig`).
+  - [ ] Task 4 toggle polish + live latency matrix (pure vs hybrid vs pipeline).
+- [ ] **V2 RTC — hybrid (OutputMode 1) over Volcengine RTC AIGC `[Claude→Cursor]`.** Lower-latency
+  + stable transport + emotion extension for the hybrid (soul-as-brain) path. Arch: RTC Web SDK
+  client (= future iPhone surface) + `StartVoiceChat` OpenAPI binds Doubao realtime (OutputMode 1)
+  + our custom LLM; **soul hosted as an OpenAI-compatible endpoint.** Reuse `volcengine/rtc-aigc-demo`.
+  Creds: RTC AppId/AppKey (have) + account **AK/SK** (needed for StartVoiceChat — pending).
+  - [ ] **Stage 1 — soul as OpenAI-compatible `/v1/chat/completions` endpoint** (`backend/realtime/
+    soul_llm_server.py`, wraps `CompanionBrain`; testable via curl, no new creds). **Spec:
+    `docs/V2_RTC_STAGE1_SPEC.md`.**
+  - [ ] Stage 2 — adapt rtc-aigc-demo (web client + orchestration; OutputMode 1; custom-LLM → Stage-1
+    endpoint via tunnel; AK/SK). Surface moves to browser (aligns with iPhone Capacitor box).
+  - [ ] Stage 3 — emotion-recognition extension → soul appraisal/kernel.
 - [ ] V2 Phase 4–9 — turn-taking polish, PixiJS room, room reactivity, actions, personal files, the box.
 
 ## Current Priority
