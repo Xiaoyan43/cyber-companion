@@ -3,11 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
+from backend.app.main import app
 from backend.app.memory.budget import BudgetConfig
 from backend.app.memory.context_builder import build_provider_context
 from backend.app.memory.database import utc_now_iso
-from backend.app.memory.store import MemoryStore, reset_memory_store
+from backend.app.memory.store import MemoryStore, get_memory_store, reset_memory_store
 from backend.app.providers.router import reset_provider_router
 from backend.app.reflection import jobs as reflection_jobs
 
@@ -24,6 +26,15 @@ def reset_singletons() -> None:
 @pytest.fixture
 def store(tmp_path: Path) -> MemoryStore:
     return MemoryStore(db_path=tmp_path / "memory-links.db")
+
+
+@pytest.fixture
+def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    repo_root = Path(__file__).resolve().parents[2]
+    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(repo_root / "config"))
+    monkeypatch.setenv("CYBER_COMPANION_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("CYBER_COMPANION_PROVIDER_MODE", "mock")
+    return TestClient(app)
 
 
 # --- Task 2: store methods -------------------------------------------------
@@ -242,3 +253,34 @@ def test_retrieval_link_expansion_respects_cap(store: MemoryStore) -> None:
     pulled_extras = [memory_id for memory_id in built.included_memory_ids if memory_id != ranked.id]
     assert len(pulled_extras) == 2
     assert ranked.id in built.included_memory_ids
+
+
+# --- Read-only GET /memory/links ------------------------------------------
+
+
+def test_list_memory_links_route_returns_one_logical_pair(client: TestClient) -> None:
+    store = get_memory_store()
+    project = store.create_memory(type="project", content="Acme platform migration")
+    job = store.create_memory(type="job_progress", content="Interview at Acme platform team")
+    store.add_memory_link(project.id, job.id)
+
+    response = client.get("/memory/links")
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert len(payload["links"]) == 1
+
+    link = payload["links"][0]
+    assert link["memory_id"] == project.id
+    assert link["related_memory_id"] == job.id
+    assert link["memory_type"] == "project"
+    assert link["related_type"] == "job_progress"
+    assert "Acme platform migration" in link["memory_content"]
+    assert "Interview at Acme platform team" in link["related_content"]
+    assert link["relation"] == "related"
+
+
+def test_list_memory_links_route_empty(client: TestClient) -> None:
+    response = client.get("/memory/links")
+    assert response.status_code == 200
+    assert response.json() == {"links": []}

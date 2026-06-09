@@ -175,6 +175,11 @@ Properties:
 - **`ON DELETE CASCADE`** on both FKs keeps links clean when a memory is deleted
   (`connect()` sets `PRAGMA foreign_keys = ON`).
 
+**Inspection API:** `GET /memory/links?limit=100` returns deduplicated logical pairs
+(`memory_id < related_memory_id`), each joined with both memories' `type` and a short
+`content` snippet (~80 chars). Read-only; mirrors `/memory/memories` GET style. Used by
+the soul-dashboard links panel; does not affect retrieval or the linker.
+
 ## Retrieval Policy
 
 Expired memories (`expires_at` in the past) are excluded from context recall;

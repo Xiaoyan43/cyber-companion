@@ -157,6 +157,19 @@ class RelationshipStateRecord:
 
 
 @dataclass(frozen=True)
+class MemoryLinkRecord:
+    id: int
+    memory_id: int
+    related_memory_id: int
+    relation: str
+    created_at: str
+    memory_type: str
+    memory_content: str
+    related_type: str
+    related_content: str
+
+
+@dataclass(frozen=True)
 class ReminderRecord:
     id: int
     created_at: str

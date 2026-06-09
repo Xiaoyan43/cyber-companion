@@ -461,20 +461,23 @@ button {
 
 .relationship-panel,
 .mood-panel,
-.memory-panel {
+.memory-panel,
+.memory-links-panel {
   border: 1px dashed #564d42;
   border-radius: 6px;
   padding: 10px;
 }
 
 .mood-panel,
-.memory-panel {
+.memory-panel,
+.memory-links-panel {
   margin-top: 8px;
 }
 
 .relationship-panel summary,
 .mood-panel summary,
-.memory-panel summary {
+.memory-panel summary,
+.memory-links-panel summary {
   cursor: pointer;
   color: #cfc4aa;
   font-size: 0.82rem;
@@ -483,7 +486,8 @@ button {
 
 .relationship-panel[open] summary,
 .mood-panel[open] summary,
-.memory-panel[open] summary {
+.memory-panel[open] summary,
+.memory-links-panel[open] summary {
   margin-bottom: 10px;
 }
 
@@ -624,4 +628,30 @@ button {
   font-size: 0.68rem;
   line-height: 1;
   padding: 2px 5px;
+}
+
+.memory-links-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.memory-link-row {
+  border: 1px solid #4a433a;
+  border-radius: 4px;
+  padding: 8px;
+  background: rgba(20, 18, 16, 0.35);
+  color: #f7f1df;
+  display: grid;
+  gap: 4px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.memory-link-arrow {
+  color: #a89b84;
+  font-size: 0.78rem;
+  text-align: center;
 }

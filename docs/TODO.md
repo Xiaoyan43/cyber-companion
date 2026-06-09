@@ -127,9 +127,8 @@ contract) — do not hand to Cursor without explicit approval + doc updates.
 - [x] Reload chat history from `/memory/messages`.
 - [x] Display last-turn token/cost metadata.
 - [x] Route empty submit through backend behavior decisions.
-- [ ] Memory links visualization in UI `[Claude]→Cursor` — read-only `GET /memory/links`
-  route + "Boxi 把这些联系起来了" panel. **Spec: `docs/MEMORY_LINKS_UI_SPEC.md`** (delegated
-  to Cursor). SD-5 links exist in DB but no list route yet.
+- [x] Memory links visualization in UI `[Claude]→Cursor` — read-only `GET /memory/links`
+  route + "Boxi 把这些联系起来了" panel. **Spec: `docs/MEMORY_LINKS_UI_SPEC.md`**.
 
 ### Provider Layer
 

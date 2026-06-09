@@ -131,6 +131,22 @@ class MemoryListResponse(BaseModel):
     memories: list[MemorySchema]
 
 
+class MemoryLinkSchema(BaseModel):
+    id: int
+    memory_id: int
+    related_memory_id: int
+    relation: str
+    created_at: str
+    memory_type: str
+    memory_content: str
+    related_type: str
+    related_content: str
+
+
+class MemoryLinkListResponse(BaseModel):
+    links: list[MemoryLinkSchema]
+
+
 class MoodStateSchema(BaseModel):
     updated_at: str
     mood: str

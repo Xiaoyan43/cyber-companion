@@ -24,6 +24,7 @@ import {
 } from "./chat/types";
 import { appendChatStreamDelta } from "./chat/streamRender";
 import { PixelCharacter } from "./components/PixelCharacter";
+import { MemoryLinksPanel } from "./components/MemoryLinksPanel";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { MoodPanel } from "./components/MoodPanel";
 import { RelationshipPanel } from "./components/RelationshipPanel";
@@ -601,6 +602,7 @@ function App() {
         <RelationshipPanel enabled={apiHealth.status === "ok"} />
         <MoodPanel enabled={apiHealth.status === "ok"} />
         <MemoryPanel enabled={apiHealth.status === "ok"} />
+        <MemoryLinksPanel enabled={apiHealth.status === "ok"} />
 
         {showAvatarDebug ? (
           <details className="state-debug" open>

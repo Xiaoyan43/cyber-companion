@@ -28,7 +28,13 @@ from backend.app.memory.summary_policy import maybe_update_conversation_summary
 from backend.app.reflection.runner import run_reflection_if_due
 from backend.app.memory.write_policy import maybe_write_memories_from_turn, record_turn_memories
 from backend.app.memory.usage_guard import evaluate_llm_budget_gate
-from backend.app.memory.database import MemoryRecord, MessageRecord, MoodStateRecord, RelationshipStateRecord
+from backend.app.memory.database import (
+    MemoryLinkRecord,
+    MemoryRecord,
+    MessageRecord,
+    MoodStateRecord,
+    RelationshipStateRecord,
+)
 from backend.app.memory.store import get_memory_store, reset_memory_store
 from backend.app.stt.exceptions import STTError
 from backend.app.stt.router import get_stt_router, reset_stt_router
@@ -50,6 +56,8 @@ from backend.app.schemas import (
     ErrorResponse,
     HealthResponse,
     MemoryCreateRequest,
+    MemoryLinkListResponse,
+    MemoryLinkSchema,
     MemoryListResponse,
     MemorySchema,
     MemoryUpdateRequest,
@@ -106,6 +114,20 @@ def _memory_to_schema(memory: MemoryRecord) -> MemorySchema:
         expires_at=memory.expires_at,
         source_message_id=memory.source_message_id,
         metadata=memory.metadata,
+    )
+
+
+def _memory_link_to_schema(link: MemoryLinkRecord) -> MemoryLinkSchema:
+    return MemoryLinkSchema(
+        id=link.id,
+        memory_id=link.memory_id,
+        related_memory_id=link.related_memory_id,
+        relation=link.relation,
+        created_at=link.created_at,
+        memory_type=link.memory_type,
+        memory_content=link.memory_content,
+        related_type=link.related_type,
+        related_content=link.related_content,
     )
 
 
@@ -260,6 +282,13 @@ def delete_memory(memory_id: int) -> dict[str, bool]:
     if not deleted:
         raise HTTPException(status_code=404, detail={"error": "Memory not found"})
     return {"deleted": True}
+
+
+@app.get("/memory/links", response_model=MemoryLinkListResponse)
+def list_memory_links(limit: int = 100) -> MemoryLinkListResponse:
+    store = get_memory_store()
+    links = store.list_memory_links(limit=limit)
+    return MemoryLinkListResponse(links=[_memory_link_to_schema(link) for link in links])
 
 
 @app.get("/memory/mood", response_model=MoodStateSchema)

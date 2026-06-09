@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchMemories, type MemorySchema } from "../api/memories";
+import { formatMemoryTypeLabel } from "../memory/typeLabels";
 
 type Props = {
   enabled: boolean;
@@ -15,17 +16,6 @@ const MEMORY_TYPE_ORDER = [
   "relationship_state",
   "conversation_summary",
 ] as const;
-
-const MEMORY_TYPE_LABELS: Record<string, string> = {
-  stable_profile: "画像",
-  job_progress: "求职进展",
-  reminder: "提醒",
-  project: "项目",
-  recent_event: "近况",
-  behavior_preference: "偏好",
-  relationship_state: "印象",
-  conversation_summary: "摘要",
-};
 
 const WRITER_LABELS: Record<string, string> = {
   llm: "llm",
@@ -84,7 +74,7 @@ function groupMemories(memories: MemorySchema[]): Array<{ type: string; label: s
 
     return {
       type,
-      label: MEMORY_TYPE_LABELS[type] ?? type,
+      label: formatMemoryTypeLabel(type),
       items,
     };
   });

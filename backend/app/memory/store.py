@@ -6,6 +6,7 @@ from typing import Any
 from backend.app.memory.database import (
     ConversationSummaryRecord,
     FileAccessLogRecord,
+    MemoryLinkRecord,
     MemoryRecord,
     MessageRecord,
     MoodStateRecord,
@@ -23,6 +24,15 @@ from backend.app.memory.database import (
     utc_now_iso,
 )
 from backend.app.memory.schema import MEMORY_TYPES
+
+_LINK_SNIPPET_MAX_LEN = 80
+
+
+def _clip_link_snippet(content: str, max_len: int = _LINK_SNIPPET_MAX_LEN) -> str:
+    trimmed = content.strip()
+    if len(trimmed) <= max_len:
+        return trimmed
+    return trimmed[: max_len - 1].rstrip() + "…"
 
 
 class MemoryStore:
@@ -354,6 +364,45 @@ class MemoryStore:
         with connect(self.db_path) as connection:
             row = connection.execute("SELECT COUNT(*) AS n FROM memory_links").fetchone()
         return int(row["n"]) if row else 0
+
+    def list_memory_links(self, limit: int = 100) -> list[MemoryLinkRecord]:
+        with connect(self.db_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    ml.id,
+                    ml.memory_id,
+                    ml.related_memory_id,
+                    ml.relation,
+                    ml.created_at,
+                    a.type AS memory_type,
+                    a.content AS memory_content,
+                    b.type AS related_type,
+                    b.content AS related_content
+                FROM memory_links ml
+                JOIN memories a ON a.id = ml.memory_id
+                JOIN memories b ON b.id = ml.related_memory_id
+                WHERE ml.memory_id < ml.related_memory_id
+                ORDER BY ml.id
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+
+        return [
+            MemoryLinkRecord(
+                id=int(row["id"]),
+                memory_id=int(row["memory_id"]),
+                related_memory_id=int(row["related_memory_id"]),
+                relation=str(row["relation"]),
+                created_at=str(row["created_at"]),
+                memory_type=str(row["memory_type"]),
+                memory_content=_clip_link_snippet(str(row["memory_content"])),
+                related_type=str(row["related_type"]),
+                related_content=_clip_link_snippet(str(row["related_content"])),
+            )
+            for row in rows
+        ]
 
     def get_mood_state(self) -> MoodStateRecord:
         with connect(self.db_path) as connection:

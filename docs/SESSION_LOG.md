@@ -2479,3 +2479,38 @@
   Writers seen: llm / rule_based / reflection. Key env-only; DB + script deleted.
 - SD-5b done & verified. **Soul deepening SD-1..SD-5b complete + real-DeepSeek validated.**
 - Reminder: DeepSeek key was pasted in chat — user should rotate it.
+
+## 2026-06-10 - Session 33 (Memory links read-only API + UI panel)
+
+本次完成：
+
+- **Memory links UI spec**（`docs/MEMORY_LINKS_UI_SPEC.md`）：`GET /memory/links` 只读路由
+  （逻辑对去重 + JOIN type/snippet）；`store.list_memory_links` + `MemoryLinkRecord`。
+- 前端：`memoryLinks.ts`、`MemoryLinksPanel.tsx`（「Boxi 把这些联系起来了」）、
+  `memory/typeLabels.ts`（与 MemoryPanel 共用中文 type 标签）；`App.tsx` 挂在 MemoryPanel 后。
+- 测试：`GET /memory/links` 返回 1 条逻辑连边 / 空库 `[]`；**213 passed** + tsc + build。
+
+下次接着做：
+
+- V2 重建 / 语音 backlog（streaming TTS、豆包连接复用等）。
+
+已知问题：
+
+- 连边面板仅在挂载时拉取一次（与关系/记忆/心情面板一致）。
+
+相关文件：
+
+- `backend/app/memory/{database,store}.py`、`backend/app/{main,schemas}.py`
+- `frontend/src/api/memoryLinks.ts`、`frontend/src/components/MemoryLinksPanel.tsx`
+- `frontend/src/memory/typeLabels.ts`、`frontend/src/App.tsx`、`frontend/src/styles.css`
+- `backend/tests/test_memory_links.py`
+- `docs/MEMORY_DESIGN.md`、`docs/TODO.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**213 passed** + tsc。
+- `npm run build:frontend`：通过。
+
+不要改动的边界：
+
+- 只读；未改 `memory_links` 表/契约、SD-5 linker、1-hop 检索、任何 SD 契约。
