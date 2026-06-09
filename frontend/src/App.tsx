@@ -24,6 +24,7 @@ import {
 } from "./chat/types";
 import { appendChatStreamDelta } from "./chat/streamRender";
 import { PixelCharacter } from "./components/PixelCharacter";
+import { RelationshipPanel } from "./components/RelationshipPanel";
 import { primeAudioPlayback } from "./voice/audioUnlock";
 import { usePushToTalk } from "./voice/usePushToTalk";
 import { useTextToSpeech } from "./voice/useTextToSpeech";
@@ -594,6 +595,8 @@ function App() {
         <PixelCharacter state={avatarState} />
 
         <p className="status-line">{statusText}</p>
+
+        <RelationshipPanel enabled={apiHealth.status === "ok"} />
 
         {showAvatarDebug ? (
           <details className="state-debug" open>

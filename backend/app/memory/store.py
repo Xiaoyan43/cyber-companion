@@ -9,10 +9,12 @@ from backend.app.memory.database import (
     MemoryRecord,
     MessageRecord,
     MoodStateRecord,
+    RelationshipStateRecord,
     ReminderRecord,
     _row_to_memory,
     _row_to_message,
     _row_to_mood,
+    _row_to_relationship,
     connect,
     dumps_json,
     init_database,
@@ -365,6 +367,61 @@ class MemoryStore:
                     updated.worry,
                     updated.trust,
                     updated.loneliness,
+                    dumps_json(updated.metadata),
+                ),
+            )
+        return updated
+
+    def get_relationship_state(self) -> RelationshipStateRecord:
+        with connect(self.db_path) as connection:
+            row = connection.execute("SELECT * FROM relationship_state WHERE id = 1").fetchone()
+        assert row is not None
+        return _row_to_relationship(row)
+
+    def update_relationship_state(
+        self,
+        *,
+        trust: float | None = None,
+        closeness: float | None = None,
+        familiarity: float | None = None,
+        tension: float | None = None,
+        last_meaningful_interaction_at: str | None = ...,  # type: ignore[assignment]
+        metadata: dict[str, Any] | None = None,
+    ) -> RelationshipStateRecord:
+        current = self.get_relationship_state()
+
+        def _clamp(value: float) -> float:
+            return max(0.0, min(1.0, value))
+
+        meaningful_at = current.last_meaningful_interaction_at
+        if last_meaningful_interaction_at is not ...:
+            meaningful_at = last_meaningful_interaction_at
+
+        updated = RelationshipStateRecord(
+            updated_at=utc_now_iso(),
+            trust=_clamp(trust if trust is not None else current.trust),
+            closeness=_clamp(closeness if closeness is not None else current.closeness),
+            familiarity=_clamp(familiarity if familiarity is not None else current.familiarity),
+            tension=_clamp(tension if tension is not None else current.tension),
+            last_meaningful_interaction_at=meaningful_at,
+            metadata=metadata if metadata is not None else current.metadata,
+        )
+
+        with connect(self.db_path) as connection:
+            connection.execute(
+                """
+                UPDATE relationship_state
+                SET updated_at = ?, trust = ?, closeness = ?, familiarity = ?,
+                    tension = ?, last_meaningful_interaction_at = ?, metadata_json = ?
+                WHERE id = 1
+                """,
+                (
+                    updated.updated_at,
+                    updated.trust,
+                    updated.closeness,
+                    updated.familiarity,
+                    updated.tension,
+                    updated.last_meaningful_interaction_at,
                     dumps_json(updated.metadata),
                 ),
             )

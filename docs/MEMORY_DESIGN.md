@@ -104,6 +104,30 @@ Fields:
 - `loneliness`
 - `metadata_json`
 
+### relationship_state
+
+Slow, persistent relationship singleton (source of truth for `trust` since SD-2).
+Momentary emotion stays in `mood_state`; `mood_state.trust` is vestigial/unread.
+
+Fields:
+
+- `id` (singleton, always 1)
+- `updated_at`
+- `trust` (default 0.5)
+- `closeness` (default 0.2)
+- `familiarity` (default 0.0, monotonic growth)
+- `tension` (default 0.0, decays toward 0)
+- `last_meaningful_interaction_at`
+- `metadata_json`
+
+`loneliness` remains in `mood_state` as a momentary emotion, but idle growth is
+re-sourced from `closeness` (low closeness → loneliness rises faster).
+
+The subjectivity kernel (`behavior/kernel.py`) applies clamped local math each turn:
+LLM appraisal/relationship deltas from SD-1 piggyback **suggest**; the kernel
+**decides** (`|delta| ≤ 0.1`, values clamped to `[0, 1]`). No extra LLM call.
+
+
 ### reminders
 
 Fields:
@@ -138,10 +162,11 @@ Each LLM call should include:
 1. System/persona prompt.
 2. Current behavior decision.
 3. Relevant long-term memories.
-4. Current mood/relationship state.
+4. Current mood state (`[Current mood]`) and relationship state (`[Relationship]`).
 5. Recent conversation summary.
-6. Last few raw turns only.
-7. Current user input or event.
+6. Optional `[Impression]` block when a `relationship_state` memory exists (SD-4 writes it).
+7. Last few raw turns only.
+8. Current user input or event.
 
 Do not include the full transcript unless the user explicitly asks for it and token budget allows.
 

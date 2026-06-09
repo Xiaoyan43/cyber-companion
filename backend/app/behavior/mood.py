@@ -1,11 +1,21 @@
-from backend.app.behavior.types import BehaviorDecision, ToneMode
-from backend.app.memory.database import MemoryRecord, MoodStateRecord
+from backend.app.behavior.types import ToneMode
+from backend.app.memory.database import MemoryRecord, MoodStateRecord, RelationshipStateRecord
 
 
-def choose_tone_mode(mood: MoodStateRecord, *, overwhelmed: bool) -> ToneMode:
+def choose_tone_mode(
+    mood: MoodStateRecord,
+    relationship: RelationshipStateRecord,
+    *,
+    overwhelmed: bool,
+) -> ToneMode:
     if overwhelmed or mood.worry >= 0.65 or mood.mood in {"sad", "worried"}:
         return "comfort"
-    if mood.annoyance >= 0.6 and mood.trust >= 0.4:
+    if (
+        mood.annoyance >= 0.6
+        and relationship.trust >= 0.4
+        and relationship.familiarity >= 0.3
+        and relationship.tension < 0.5
+    ):
         return "tease"
     return "normal"
 
@@ -23,7 +33,6 @@ def apply_user_message_mood_delta(
     annoyance = mood.annoyance
     boredom = mood.boredom
     worry = mood.worry
-    trust = mood.trust
     loneliness = mood.loneliness
     next_mood = mood.mood
 
@@ -39,12 +48,9 @@ def apply_user_message_mood_delta(
         worry = min(1.0, worry + 0.15)
         annoyance = max(0.0, annoyance - 0.12)
         next_mood = "worried"
-        trust = min(1.0, trust + 0.04)
     elif refused:
-        trust = max(0.0, trust - 0.05)
         next_mood = "angry"
     else:
-        trust = min(1.0, trust + 0.03)
         loneliness = max(0.0, loneliness - 0.04)
         boredom = max(0.0, boredom - 0.05)
         if next_mood == "idle":
@@ -57,16 +63,18 @@ def apply_user_message_mood_delta(
         annoyance=round(annoyance, 3),
         boredom=round(boredom, 3),
         worry=round(worry, 3),
-        trust=round(trust, 3),
+        trust=mood.trust,
         loneliness=round(loneliness, 3),
         metadata=dict(mood.metadata),
     )
 
 
-def apply_idle_tick_mood_delta(mood: MoodStateRecord) -> MoodStateRecord:
+def apply_idle_tick_mood_delta(mood: MoodStateRecord, *, closeness: float) -> MoodStateRecord:
     boredom = min(1.0, mood.boredom + 0.05)
-    loneliness = min(1.0, mood.loneliness + 0.03)
+    loneliness = min(1.0, mood.loneliness + 0.03 * (1.0 - closeness))
     energy = max(0.0, mood.energy - 0.02)
+    annoyance = _clamp01(mood.annoyance * 0.95)
+    worry = _clamp01(mood.worry * 0.95)
     next_mood = mood.mood
 
     if boredom >= 0.55 or loneliness >= 0.55:
@@ -78,13 +86,17 @@ def apply_idle_tick_mood_delta(mood: MoodStateRecord) -> MoodStateRecord:
         updated_at=mood.updated_at,
         mood=next_mood,
         energy=round(energy, 3),
-        annoyance=mood.annoyance,
+        annoyance=round(annoyance, 3),
         boredom=round(boredom, 3),
-        worry=mood.worry,
+        worry=round(worry, 3),
         trust=mood.trust,
         loneliness=round(loneliness, 3),
         metadata=dict(mood.metadata),
     )
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, value))
 
 
 def find_stale_job_memory(memories: list[MemoryRecord], *, stale_after_days: int = 7) -> MemoryRecord | None:

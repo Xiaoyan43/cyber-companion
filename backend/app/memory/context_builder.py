@@ -6,7 +6,13 @@ from datetime import datetime, timezone
 from backend.app.behavior.local_responses import behavior_tone_instruction
 from backend.app.behavior.types import BehaviorDecision
 from backend.app.memory.budget import BudgetConfig
-from backend.app.memory.database import ConversationSummaryRecord, MemoryRecord, MessageRecord, MoodStateRecord
+from backend.app.memory.database import (
+    ConversationSummaryRecord,
+    MemoryRecord,
+    MessageRecord,
+    MoodStateRecord,
+    RelationshipStateRecord,
+)
 from backend.app.memory.persona import load_persona_system_prompt
 from backend.app.memory.retrieval import is_expired, rank_memories, tokenize
 from backend.app.memory.store import MemoryStore
@@ -29,9 +35,24 @@ def _format_mood_block(mood: MoodStateRecord) -> str:
     return (
         "[Current mood]\n"
         f"mood={mood.mood}, energy={mood.energy:.2f}, annoyance={mood.annoyance:.2f}, "
-        f"boredom={mood.boredom:.2f}, worry={mood.worry:.2f}, trust={mood.trust:.2f}, "
+        f"boredom={mood.boredom:.2f}, worry={mood.worry:.2f}, "
         f"loneliness={mood.loneliness:.2f}"
     )
+
+
+def _format_relationship_block(rel: RelationshipStateRecord) -> str:
+    return (
+        "[Relationship]\n"
+        f"trust={rel.trust:.2f}, closeness={rel.closeness:.2f}, "
+        f"familiarity={rel.familiarity:.2f}, tension={rel.tension:.2f}"
+    )
+
+
+def _format_impression_block(store: MemoryStore) -> str | None:
+    memories = store.list_memories(type="relationship_state", limit=1)
+    if not memories:
+        return None
+    return f"[Impression]\n{memories[0].content}"
 
 
 def _format_memories_block(memories: list[MemoryRecord]) -> str:
@@ -93,6 +114,7 @@ def build_provider_context(
 ) -> BuiltContext:
     config = budget or BudgetConfig()
     mood = store.get_mood_state()
+    relationship = store.get_relationship_state()
     latest_summary = store.get_latest_conversation_summary()
     now_iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     active_memories = [
@@ -112,7 +134,14 @@ def build_provider_context(
     # provider. SQL boundary queries avoid loading the full messages table.
     recent_raw = store.list_recent_chat_messages(config.max_raw_turns)
 
-    system_sections = [load_persona_system_prompt(), _format_mood_block(mood)]
+    system_sections = [
+        load_persona_system_prompt(),
+        _format_mood_block(mood),
+        _format_relationship_block(relationship),
+    ]
+    impression_block = _format_impression_block(store)
+    if impression_block:
+        system_sections.append(impression_block)
     if behavior is not None:
         tone_instruction = behavior_tone_instruction(behavior.decision, behavior.tone_mode)
         if tone_instruction:

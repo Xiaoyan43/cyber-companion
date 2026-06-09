@@ -457,3 +457,52 @@ button {
     width: 100%;
   }
 }
+
+
+.relationship-panel {
+  border: 1px dashed #564d42;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.relationship-panel summary {
+  cursor: pointer;
+  color: #cfc4aa;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.relationship-panel[open] summary {
+  margin-bottom: 10px;
+}
+
+.relationship-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  font-size: 0.85rem;
+}
+
+.relationship-grid span {
+  display: block;
+  color: #a89b84;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.relationship-grid strong {
+  color: #f7f1df;
+}
+
+.relationship-copy,
+.relationship-impression {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #cfc4aa;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.relationship-impression {
+  color: #f7f1df;
+}

@@ -12,7 +12,7 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
   section to persona (`memory/persona.py`). Done: `signals` parsed when present,
   **never leaks** to `content`/TTS/stream deltas; absent/malformed → today's behavior.
   Tests in `test_behavior.py` (parser + `SignalStreamFilter`).
-- [ ] **SD-2 — Subjectivity kernel `[Claude]`.** New `relationship_state` singleton
+- [x] **SD-2 — Subjectivity kernel `[Claude]`.** New `relationship_state` singleton
   table (trust/closeness/familiarity/tension/last_meaningful_interaction_at); `trust`
   **moves** here (source of truth), `loneliness` **stays** in mood_state but is
   re-sourced from closeness/time-since-contact; appraisal-driven local math + decay;
@@ -20,7 +20,7 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
   **Additive table only — no `mood_state` ALTER/DROP** (no migration framework
   exists); seed singleton via `INSERT OR IGNORE`; optional one-time `trust` back-fill.
   **Update `docs/MEMORY_DESIGN.md`.**
-- [ ] **SD-2-UI — "Boxi 怎么看你" panel `[Cursor-ok]`.** Read-only panel showing
+- [x] **SD-2-UI — "Boxi 怎么看你" panel `[Cursor-ok]`.** Read-only panel showing
   relationship state (trust/closeness/familiarity/tension) + impression narrative.
   Numbers land with SD-2; impression text fills in after SD-4. Frontend-only.
 - [ ] **SD-3 — LLM memory extraction (M3) `[Claude]`.** Route `signals.memory[]`
@@ -158,7 +158,7 @@ contract) — do not hand to Cursor without explicit approval + doc updates.
 ### Maintenance
 
 - [x] Review FastAPI TestClient/httpx2 deprecation warning.
-- [ ] Fix stale `test_stt_status_route` `[Cursor]` (顺手修). It asserts
+- [x] Fix stale `test_stt_status_route` `[Cursor]` (顺手修). It asserts
   `allow_cloud_stt is False` but Session-26 `config/budget.json` committed it as
   `true` (walls off) → 1 red in `npm run check`. Proper fix: isolate the test's own
   `budget.json` in a tmp `CYBER_COMPANION_CONFIG_DIR` so it's deterministic,

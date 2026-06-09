@@ -59,8 +59,42 @@ def init_database(db_path: Path | None = None) -> Path:
             VALUES (1)
             """
         )
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO relationship_state (id)
+            VALUES (1)
+            """
+        )
+        _maybe_backfill_relationship_trust(connection)
 
     return path
+
+
+def _maybe_backfill_relationship_trust(connection: sqlite3.Connection) -> None:
+    existing = connection.execute(
+        "SELECT 1 FROM schema_meta WHERE key = 'relationship_trust_backfilled'"
+    ).fetchone()
+    if existing is not None:
+        return
+
+    mood_row = connection.execute("SELECT trust FROM mood_state WHERE id = 1").fetchone()
+    rel_row = connection.execute("SELECT trust FROM relationship_state WHERE id = 1").fetchone()
+    if mood_row is not None and rel_row is not None:
+        mood_trust = float(mood_row["trust"])
+        rel_trust = float(rel_row["trust"])
+        if abs(rel_trust - 0.5) < 1e-6 and abs(mood_trust - 0.5) > 1e-6:
+            connection.execute(
+                "UPDATE relationship_state SET trust = ? WHERE id = 1",
+                (mood_trust,),
+            )
+
+    connection.execute(
+        """
+        INSERT INTO schema_meta(key, value)
+        VALUES ('relationship_trust_backfilled', '1')
+        ON CONFLICT(key) DO NOTHING
+        """
+    )
 
 
 def dumps_json(value: Any) -> str:
@@ -108,6 +142,17 @@ class MoodStateRecord:
     worry: float
     trust: float
     loneliness: float
+    metadata: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class RelationshipStateRecord:
+    updated_at: str
+    trust: float
+    closeness: float
+    familiarity: float
+    tension: float
+    last_meaningful_interaction_at: str | None
     metadata: dict[str, Any]
 
 
@@ -180,5 +225,17 @@ def _row_to_mood(row: sqlite3.Row) -> MoodStateRecord:
         worry=float(row["worry"]),
         trust=float(row["trust"]),
         loneliness=float(row["loneliness"]),
+        metadata=loads_json(row["metadata_json"], {}),
+    )
+
+
+def _row_to_relationship(row: sqlite3.Row) -> RelationshipStateRecord:
+    return RelationshipStateRecord(
+        updated_at=row["updated_at"],
+        trust=float(row["trust"]),
+        closeness=float(row["closeness"]),
+        familiarity=float(row["familiarity"]),
+        tension=float(row["tension"]),
+        last_meaningful_interaction_at=row["last_meaningful_interaction_at"],
         metadata=loads_json(row["metadata_json"], {}),
     )

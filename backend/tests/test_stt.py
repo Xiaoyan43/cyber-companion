@@ -1,4 +1,5 @@
 import json
+import shutil
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -49,9 +50,24 @@ def reset_singletons() -> None:
 
 
 @pytest.fixture
-def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def isolated_config_dir(tmp_path: Path) -> Path:
     repo_root = Path(__file__).resolve().parents[2]
-    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(repo_root / "config"))
+    config_dir = tmp_path / "config"
+    shutil.copytree(repo_root / "config", config_dir)
+    budget_path = config_dir / "budget.json"
+    budget = json.loads(budget_path.read_text(encoding="utf-8"))
+    budget["allow_cloud_stt"] = False
+    budget_path.write_text(json.dumps(budget, indent=2) + "\n", encoding="utf-8")
+    return config_dir
+
+
+@pytest.fixture
+def client(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_config_dir: Path,
+) -> TestClient:
+    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(isolated_config_dir))
     monkeypatch.setenv("CYBER_COMPANION_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("CYBER_COMPANION_PROVIDER_MODE", "mock")
     monkeypatch.setenv("CYBER_COMPANION_STT_MODE", "mock")

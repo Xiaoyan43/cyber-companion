@@ -2011,3 +2011,49 @@
 
 - 未动 schema/config/budget/provider/file-gateway；未碰 SD-2 及以后。
 - `signals` 只 parse 不 apply；Boxi 毒舌 core persona 未改。
+## 2026-06-09 - Session 35 (Cursor：SD-2 Subjectivity kernel + SD-2-UI)
+
+本次完成：
+
+- **SD-2 Task 1 — schema/store**
+  - `relationship_state` 表（纯增量，`SCHEMA_VERSION=2`）；`RelationshipStateRecord` + store CRUD；init seed + 一次性 `mood_state.trust` backfill。
+- **SD-2 Task 2 — kernel math**
+  - `behavior/kernel.py` `apply_signals_to_kernel`（clamp ±0.1，best-effort）；`mood.py` 去掉 trust 变更；idle tick loneliness 按 closeness 重取源 + annoyance/worry 衰减。
+- **SD-2 Task 3 — wiring**
+  - `choose_tone_mode` 关系门控 tease；engine refused/overwhelmed 即时关系 nudge；`main.py` parse 后调 kernel（complete + stream）；`GET /memory/relationship`。
+- **SD-2 Task 4 — context**
+  - `[Relationship]` 总是注入；`[Impression]` 仅有 `relationship_state` 记忆时出现。
+- **SD-2 Task 5 — tests**
+  - `backend/tests/test_relationship_state.py`（12 用例）。
+- **SD-2 Task 6 — docs**
+  - `docs/MEMORY_DESIGN.md` 更新 emotion/relationship 拆分与 kernel 原则。
+- **SD-2-UI**
+  - 「Boxi 怎么看你」只读面板（`RelationshipPanel.tsx`）。
+- **Maintenance**
+  - `test_stt_status_route` 用 isolated tmp `budget.json`（`allow_cloud_stt: false`）。
+
+下次接着做：
+
+- **SD-3** — LLM memory extraction（消费 `signals.memory[]`）。
+
+已知问题：
+
+- 无。
+
+相关文件：
+
+- `backend/app/memory/schema.py`, `database.py`, `store.py`
+- `backend/app/behavior/kernel.py`, `mood.py`, `engine.py`
+- `backend/app/memory/context_builder.py`, `backend/app/main.py`, `backend/app/schemas.py`
+- `backend/tests/test_relationship_state.py`, `backend/tests/test_stt.py`
+- `frontend/src/api/relationship.ts`, `frontend/src/components/RelationshipPanel.tsx`
+- `docs/MEMORY_DESIGN.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**166 passed** + tsc 通过。
+
+不要改动的边界：
+
+- 未消费 `signals.memory[]`（SD-3）；未做后台反思层（SD-4）。
+- kernel 无额外 LLM；未 ALTER/DROP `mood_state`；Boxi 毒舌 core 未改。

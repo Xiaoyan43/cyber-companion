@@ -40,12 +40,13 @@ def evaluate_behavior(store: MemoryStore, event: BehaviorEvent) -> BehaviorDecis
 
 def _evaluate_user_message(store: MemoryStore, user_input: str) -> BehaviorDecision:
     mood = store.get_mood_state()
+    relationship = store.get_relationship_state()
     empty = is_empty_input(user_input)
     low_value = is_low_value_input(user_input)
     rambling = is_rambling(user_input)
     overwhelmed = mentions_overwhelmed(user_input)
     refused = matches_refuse_pattern(user_input)
-    tone_mode = choose_tone_mode(mood, overwhelmed=overwhelmed)
+    tone_mode = choose_tone_mode(mood, relationship, overwhelmed=overwhelmed)
 
     updated_mood = apply_user_message_mood_delta(
         mood,
@@ -61,7 +62,6 @@ def _evaluate_user_message(store: MemoryStore, user_input: str) -> BehaviorDecis
         annoyance=updated_mood.annoyance,
         boredom=updated_mood.boredom,
         worry=updated_mood.worry,
-        trust=updated_mood.trust,
         loneliness=updated_mood.loneliness,
         metadata=updated_mood.metadata,
     )
@@ -77,6 +77,10 @@ def _evaluate_user_message(store: MemoryStore, user_input: str) -> BehaviorDecis
         )
 
     if refused:
+        store.update_relationship_state(
+            tension=min(1.0, relationship.tension + 0.08),
+            trust=max(0.0, relationship.trust - 0.05),
+        )
         return BehaviorDecision(
             decision="refuse",
             avatar_state="angry",
@@ -118,6 +122,9 @@ def _evaluate_user_message(store: MemoryStore, user_input: str) -> BehaviorDecis
             reason="user_rambling",
             tone_mode=tone_mode,
         )
+
+    if overwhelmed:
+        store.update_relationship_state(trust=min(1.0, relationship.trust + 0.04))
 
     avatar_state = "thinking" if tone_mode == "normal" else "worried" if tone_mode == "comfort" else "idle"
     return BehaviorDecision(
@@ -161,7 +168,8 @@ def _evaluate_proactive_check(store: MemoryStore) -> BehaviorDecision:
 
 def _evaluate_idle_tick(store: MemoryStore) -> BehaviorDecision:
     mood = store.get_mood_state()
-    updated_mood = apply_idle_tick_mood_delta(mood)
+    relationship = store.get_relationship_state()
+    updated_mood = apply_idle_tick_mood_delta(mood, closeness=relationship.closeness)
     store.update_mood_state(
         mood=updated_mood.mood,
         energy=updated_mood.energy,

@@ -154,6 +154,16 @@ class MoodStateUpdateRequest(BaseModel):
     metadata: dict | None = None
 
 
+class RelationshipStateSchema(BaseModel):
+    updated_at: str
+    trust: float
+    closeness: float
+    familiarity: float
+    tension: float
+    last_meaningful_interaction_at: str | None
+    metadata: dict
+
+
 class ContextPreviewResponse(BaseModel):
     estimated_input_tokens: int
     included_memory_ids: list[int]

@@ -10,6 +10,7 @@ from starlette.responses import Response
 
 from backend.app.behavior.completion import build_budget_block_completion, build_local_completion
 from backend.app.behavior.engine import evaluate_behavior
+from backend.app.behavior.kernel import apply_signals_to_kernel
 from backend.app.behavior.parser import SignalStreamFilter, parse_structured_assistant_response
 from backend.app.behavior.types import BehaviorEvent
 from backend.app.cors import load_cors_origins
@@ -25,7 +26,7 @@ from backend.app.memory.chat_persistence import (
 from backend.app.memory.summary_policy import maybe_update_conversation_summary
 from backend.app.memory.write_policy import maybe_write_memories_from_turn
 from backend.app.memory.usage_guard import evaluate_llm_budget_gate
-from backend.app.memory.database import MemoryRecord, MessageRecord, MoodStateRecord
+from backend.app.memory.database import MemoryRecord, MessageRecord, MoodStateRecord, RelationshipStateRecord
 from backend.app.memory.store import get_memory_store, reset_memory_store
 from backend.app.stt.exceptions import STTError
 from backend.app.stt.router import get_stt_router, reset_stt_router
@@ -53,6 +54,7 @@ from backend.app.schemas import (
     MessageListResponse,
     MoodStateSchema,
     MoodStateUpdateRequest,
+    RelationshipStateSchema,
     ProviderStatusSchema,
     ProvidersStatusResponse,
     StoredMessageSchema,
@@ -102,6 +104,18 @@ def _memory_to_schema(memory: MemoryRecord) -> MemorySchema:
         expires_at=memory.expires_at,
         source_message_id=memory.source_message_id,
         metadata=memory.metadata,
+    )
+
+
+def _relationship_to_schema(rel: RelationshipStateRecord) -> RelationshipStateSchema:
+    return RelationshipStateSchema(
+        updated_at=rel.updated_at,
+        trust=rel.trust,
+        closeness=rel.closeness,
+        familiarity=rel.familiarity,
+        tension=rel.tension,
+        last_meaningful_interaction_at=rel.last_meaningful_interaction_at,
+        metadata=rel.metadata,
     )
 
 
@@ -250,6 +264,12 @@ def delete_memory(memory_id: int) -> dict[str, bool]:
 def get_mood_state() -> MoodStateSchema:
     store = get_memory_store()
     return _mood_to_schema(store.get_mood_state())
+
+
+@app.get("/memory/relationship", response_model=RelationshipStateSchema)
+def get_relationship_state() -> RelationshipStateSchema:
+    store = get_memory_store()
+    return _relationship_to_schema(store.get_relationship_state())
 
 
 @app.put("/memory/mood", response_model=MoodStateSchema)
@@ -645,6 +665,10 @@ def chat_complete(request: ChatCompleteRequest) -> ChatCompleteResponse:
                 mock=result.mock,
             )
             called_llm = True
+            try:
+                apply_signals_to_kernel(store, parsed.signals)
+            except Exception:
+                pass
     else:
         result = build_local_completion(decision, user_input=user_input)
         avatar_state = decision.avatar_state
@@ -743,6 +767,10 @@ def _finalize_streamed_turn(
         mock=mock,
     )
     parsed = parse_structured_assistant_response(result.content)
+    try:
+        apply_signals_to_kernel(store, parsed.signals)
+    except Exception:
+        pass
     final_avatar_state = parsed.avatar_state or avatar_state
     final_decision = parsed.decision or decision
     final_content = parsed.content
