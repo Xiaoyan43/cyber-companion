@@ -135,7 +135,7 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
   client (= future iPhone surface) + `StartVoiceChat` OpenAPI binds Doubao realtime (OutputMode 1)
   + our custom LLM; **soul hosted as an OpenAI-compatible endpoint.** Reuse `volcengine/rtc-aigc-demo`.
   Creds: RTC AppId/AppKey (have) + account **AK/SK** (needed for StartVoiceChat — pending).
-  - [ ] **Stage 1 — soul as OpenAI-compatible `/v1/chat/completions` endpoint** (`backend/realtime/
+  - [x] **Stage 1 — soul as OpenAI-compatible `/v1/chat/completions` endpoint** (`backend/realtime/
     soul_llm_server.py`, wraps `CompanionBrain`; testable via curl, no new creds). **Spec:
     `docs/V2_RTC_STAGE1_SPEC.md`.**
   - [ ] Stage 2 — adapt rtc-aigc-demo (web client + orchestration; OutputMode 1; custom-LLM → Stage-1

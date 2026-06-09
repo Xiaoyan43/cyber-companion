@@ -40,6 +40,17 @@ def test_voice_backend_toggle_accepts_streaming(monkeypatch) -> None:
     assert selected == "doubao_stream"
 
 
+def test_voice_mode_toggle_accepts_realtime(monkeypatch) -> None:
+    module = importlib.import_module("backend.realtime.run_voice")
+    monkeypatch.setenv("CYBER_COMPANION_VOICE_MODE", "realtime")
+    selected = module._voice_backend(
+        "CYBER_COMPANION_VOICE_MODE",
+        allowed={"pipeline", "realtime"},
+        default="pipeline",
+    )
+    assert selected == "realtime"
+
+
 def test_voice_backend_toggle_rejects_unknown(monkeypatch) -> None:
     module = importlib.import_module("backend.realtime.run_voice")
     monkeypatch.setenv("CYBER_COMPANION_VOICE_STT", "bogus")

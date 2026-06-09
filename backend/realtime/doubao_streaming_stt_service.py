@@ -48,6 +48,7 @@ INPUT_SAMPLE_RATE = 16_000
 
 ENV_API_KEY = "DOUBAO_API_KEY"
 ENV_RESOURCE_ID = "DOUBAO_ASR_RESOURCE_ID"
+SESSION_TIMEOUT_CODE = 45000081
 
 
 class DoubaoStreamingSTTService(STTService):
@@ -173,6 +174,10 @@ class DoubaoStreamingSTTService(STTService):
                 logger.debug(f"{self} error while closing websocket: {error}")
             self._websocket = None
 
+    async def _reconnect(self) -> None:
+        await self._disconnect()
+        await self._connect()
+
     async def _finish_stream(self) -> None:
         """Send the negative (last) packet so the server flushes the final result."""
         if self._connected and self._websocket:
@@ -210,7 +215,11 @@ class DoubaoStreamingSTTService(STTService):
 
         if response.is_error:
             logger.error(f"{self} server error {response.code}: {response.payload}")
-            await self.push_error(f"Doubao streaming ASR error {response.code}")
+            if response.code == SESSION_TIMEOUT_CODE:
+                logger.warning(f"{self} streaming session timed out — reconnecting")
+                await self._reconnect()
+            else:
+                await self.push_error(f"Doubao streaming ASR error {response.code}")
             return
 
         if response.code is not None and response.code != SUCCESS_CODE:

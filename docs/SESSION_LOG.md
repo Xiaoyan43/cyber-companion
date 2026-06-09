@@ -2813,3 +2813,152 @@
 不要改动的边界：
 
 - **未改 `backend/app/**`**、**`frontend/**`**；voice 指令仅在 realtime brain append。
+
+## 2026-06-10 - Session 40 (V2 half-duplex — drop the headphones)
+
+本次完成：
+
+- **Task 0 reuse 结论（Pipecat 1.3.0）：** 旧版 `STTMuteFilter` / `STTMuteConfig` **已移除**
+  （1.0 起 deprecated，现版无 `pipecat.processors.filters.stt_mute_filter`）。等价能力在
+  `pipecat.turns.user_mute.AlwaysUserMuteStrategy`（BotStarted/StoppedSpeaking 期间 mute）。
+  官方入口是 `LLMUserAggregatorParams.user_mute_strategies`；本 pipeline 无
+  `LLMUserAggregator`，故新增 **`HalfDuplexMuteProcessor`** 复用该 strategy + 镜像
+  `LLMUserAggregator._maybe_mute_frame` 的帧抑制表（未手搓 mute 状态机）。
+- **Task 1 half-duplex gating：** 共享 `HalfDuplexMuteGate` + 两处 processor（mic 前挡
+  `InputAudioRawFrame`/VAD 帧；STT 后挡 `Transcription`/`Interruption`）。Bot 说话期间
+  用户向帧丢弃；BotStopped 后 **resume guard** = `ASR_END_WINDOW_MS`（默认 300ms）滤掉尾 partial。
+- **Task 2 toggle：** `CYBER_COMPANION_VOICE_HALF_DUPLEX` 默认 **on**；`off` 恢复全双工 +
+  耳机 barge-in。启动日志打印 `half_duplex=on|off`。
+- **Task 3 jieba 预热：** `run_voice` 启动时 `tokenize("预热")` 一次，避免首轮 memory
+  rank 冷加载 ~1s。
+
+**外放前后对比（laptop 外置喇叭，无耳机）：**
+
+| | before（全双工 + 外放） | after（`half_duplex=on` 默认） |
+|---|---|---|
+| Boxi 自打断 | TTS 回声进 mic → VAD/STT → ~1 词后自我 `InterruptionFrame` 截断 | Bot 说话期 mute；整句播完再听 |
+| barge-in | 理论可（实际被回声误触发） | **关闭**（设计取舍；`HALF_DUPLEX=off`+耳机可开） |
+| 首轮 jieba | 首句可能多 ~1s | 启动预热，turn 1 ≈ 后续 |
+
+下次接着做：
+
+- 用户外放手动验：2–3 轮完整问答，确认无自打断、Bot 停后能正常接话；若 resume guard
+  裁切首字，把 `ASR_END_WINDOW_MS` 略降或 guard 单独 env。
+- V2 Phase 4 turn-taking / iPhone AEC 路径（真 full-duplex barge-in）。
+
+已知问题：
+
+- 本 session **未在 agent 环境做真实外放 mic 对话**（无可靠扬声器回路）；逻辑与 Pipecat
+  官方 mute 表对齐，需用户本地 confirm。
+- half-duplex 设计禁用 barge-in；要打断须 `CYBER_COMPANION_VOICE_HALF_DUPLEX=off` + 耳机。
+
+相关文件：
+
+- `backend/realtime/{half_duplex_mute_processor.py,voice_config.py,run_voice.py,README.md}`
+- `backend/tests/test_voice_config.py`
+- `docs/{TODO.md,SESSION_LOG.md,V2_HALF_DUPLEX_SPEC.md}`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**237 passed** + tsc green。
+
+不要改动的边界：
+
+- **未改 `backend/app/**`**、**`frontend/**`**；soul / V1 HTTP gate 未动。
+- jieba 仅 import `tokenize` 预热，未改 retrieval 实现。
+
+## 2026-06-10 - Session 32 (V2 Phase 2c Task 1)
+
+本次完成：
+
+- **V2 Phase 2c Task 1 — OutputMode 0 纯端到端骨架：**
+  - `backend/realtime/doubao_realtime_protocol.py`：Dialog WebSocket 二进制协议（event/session
+    帧 builder + parser），对照火山官方 doc 1594356 + `realtime_dialog` Python 示例。
+  - `backend/realtime/doubao_realtime_service.py`：`DoubaoRealtimeService` Pipecat processor —
+    mic PCM 上行（TaskRequest 200）、TTS PCM 24 kHz 下行（TTSResponse 352）、ASRInfo 打断、
+    逐轮延迟日志（`user_end→first_audio` / `first_asr→first_audio`）。
+  - Boxi 人设注入：`load_persona_system_prompt()` → `system_role`；`persona.json` name →
+    `bot_name`；tone 派生 `speaking_style`。
+  - `run_voice.py`：`CYBER_COMPANION_VOICE_MODE=realtime` 替换 STT+brain+TTS 链；
+    默认 `pipeline` 不变；`CYBER_COMPANION_VOICE_OUTPUT_MODE=1` 显式拒绝（Task 3 再做）。
+  - 鉴权 env：`DOUBAO_RT_APP_ID` + `DOUBAO_RT_ACCESS_TOKEN`；可选 `DOUBAO_RT_SPEAKER` /
+    `DOUBAO_RT_MODEL`（默认 O2.0 `1.2.1.1`）。
+- 测试：`test_doubao_realtime.py`（协议纯 stdlib）；`test_voice_config` / `test_realtime_voice`
+  加 mode toggle；realtime 仍 `importorskip`。
+
+**延迟对比表（设计目标 + 既有基线；live pure 待用户带 RT 凭证复测）：**
+
+| 模式 | 路径 | 典型 user_end→first_audio | 备注 |
+|---|---|---|---|
+| **pipeline（现有默认）** | VAD→STT finalize→DeepSeek→TTS | **~3.0–3.4 s** | Session 30 实测剖面：~1s STT + ~1.8s LLM + ~0.9s TTS |
+| **realtime pure（OutputMode 0）** | Dialog S2S 单 WS | **目标 sub-second** | 云端融合 ASR+LLM+TTS；日志键 `Doubao realtime latency:` |
+| **realtime hybrid（OutputMode 1）** | Dialog + 外部 LLM | **~2 s（目标）** | Task 3 未实现 |
+
+下次接着做：
+
+- 用户本地：`CYBER_COMPANION_VOICE_MODE=realtime` + `DOUBAO_RT_*` 跑 2–3 轮，填上表 pure 列实测 ms；
+  对比 pipeline 同句延迟。
+- V2 Phase 2c Task 2：memory context 注入 + transcript 离路径 `remember`。
+
+已知问题：
+
+- 本 session **未在 agent 环境做 live Dialog mic 对话**（`DOUBAO_RT_*` 未配置于 CI/agent）；
+  WS 握手 / 帧格式对齐官方示例，需用户带凭证验通。
+- realtime 模式不走 half-duplex gate（云端 VAD+barge-in）；外放回声行为待实机确认。
+- OutputMode 1 / `LLMConfig` hybrid 未实现。
+
+相关文件：
+
+- `backend/realtime/{doubao_realtime_protocol.py,doubao_realtime_service.py,run_voice.py,voice_config.py,README.md}`
+- `backend/tests/{test_doubao_realtime.py,test_voice_config.py,test_realtime_voice.py}`
+- `docs/{V2_PHASE2c_SPEC.md,TODO.md,SESSION_LOG.md,OPEN_SOURCE_REUSE.md}`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**248 passed** + tsc green（+11，含 Dialog 协议 6 例）。
+
+不要改动的边界：
+
+- **未改 `backend/app/**`**、**`frontend/**`**；soul 只读复用（`load_persona_system_prompt`）。
+- 现有 STT→brain→TTS pipeline 完整保留为默认 fallback。
+
+## 2026-06-10 - Session 33 (V2 RTC Stage 1 — Soul LLM server)
+
+本次完成：
+
+- **`backend/realtime/soul_llm_server.py`**：独立 FastAPI app，`POST /v1/chat/completions`
+  OpenAI 兼容（stream + non-stream）。取 `messages[]` 最新 user 文本 →
+  `CompanionBrain.stream_turn` → 只吐 signal-strip 后的口语文本 → 离路径
+  `remember()`（`asyncio.create_task` + `to_thread`）。
+- **鉴权**：`SOUL_LLM_API_KEY` Bearer；未设则 localhost/testclient only。
+- **Env**：`SOUL_LLM_HOST`（默认 127.0.0.1）、`SOUL_LLM_PORT`（8100）；`.env.example` +
+  `backend/realtime/README.md` curl 示例。
+- **测试** `test_soul_llm_server.py`（6 例）：mock provider stream/non-stream OpenAI 形、
+  trailer 剥离、Bearer 401、memory 落库。
+
+下次接着做：
+
+- V2 RTC Stage 2：rtc-aigc-demo 适配 + OutputMode 1 custom-LLM 指向本 endpoint（tunnel）。
+- 用户本地：`CYBER_COMPANION_PROVIDER_MODE=mock python -m backend.realtime.soul_llm_server`
+  + curl 验 stream/non-stream。
+
+已知问题：
+
+- 本 session 未做 live AIGC-RTC 联调（Stage 2 才验 Volcengine custom-LLM 契约）。
+- `remember()` 在 stream 结束后 fire-and-forget；极端慢盘可能略晚于 curl 返回。
+
+相关文件：
+
+- `backend/realtime/{soul_llm_server.py,README.md}`
+- `backend/tests/test_soul_llm_server.py`
+- `.env.example`
+- `docs/{V2_RTC_STAGE1_SPEC.md,TODO.md,SESSION_LOG.md}`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**254 passed** + tsc green（+6）。
+
+不要改动的边界：
+
+- **未改 `backend/app/**`**、**`frontend/**`**；`CompanionBrain` 只读复用。
+- V1 HTTP + Pipecat pipeline / Dialog S2S 路径未动。

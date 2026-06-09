@@ -402,4 +402,17 @@ Notes: Level 1 (reference). Framing re-implemented from the official protocol sp
   gzip-JSON config / audio-only frames / conditional sequence / error frames); endpoint
   `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel`, resource `volc.bigasr.sauc.duration`,
   new-console auth `X-Api-Key=DOUBAO_API_KEY`. Validated live (auth + interim/final transcription).
+
+Name: Volcengine Dialog / realtime S2S protocol (端到端实时语音大模型) — reference + sample
+URL: https://www.volcengine.com/docs/6561/1594356
+License: N/A (vendor API docs + public `realtime_dialog` Python/Go demo snippets)
+Version/commit: docs updated 2026.06.05; public `realtime_dialog.zip` sample (protocol.py helpers)
+Used for: V2 Phase 2c Task 1 — Dialog WebSocket S2S (OutputMode 0) in
+  `backend/realtime/doubao_realtime_protocol.py` and `doubao_realtime_service.py`.
+Local files: backend/realtime/doubao_realtime_protocol.py, backend/realtime/doubao_realtime_service.py,
+  backend/realtime/run_voice.py
+Notes: Level 1 (reference). Framing adapted from the official `realtime_dialog` sample
+  (`generate_header` / `parse_response` shape); endpoint `wss://openspeech.bytedance.com/api/v3/realtime/dialogue`,
+  resource `volc.speech.dialog`, auth `X-Api-App-ID` + `X-Api-Access-Key` via env
+  (`DOUBAO_RT_APP_ID`, `DOUBAO_RT_ACCESS_TOKEN`). Not the RTC SDK.
 ```

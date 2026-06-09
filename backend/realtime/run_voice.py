@@ -2,6 +2,9 @@
 
 Run: ``python -m backend.realtime.run_voice`` (see ``backend/realtime/README.md``).
 Not part of the V1 HTTP gate; soul wiring is V2 Phase 3.
+
+``CYBER_COMPANION_VOICE_MODE=realtime`` swaps the STT+brain+TTS chain for Doubao Dialog
+S2S (OutputMode 0). Default ``pipeline`` keeps the existing path.
 """
 
 from __future__ import annotations
@@ -83,7 +86,62 @@ def _build_tts(tts_backend: str) -> tuple[object, int]:
     return DoubaoTTSService(), SAMPLE_RATE
 
 
-async def main() -> None:
+async def _main_realtime() -> None:
+    from pipecat.pipeline.pipeline import Pipeline
+    from pipecat.pipeline.worker import PipelineParams, PipelineWorker
+    from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
+    from pipecat.workers.runner import WorkerRunner
+
+    from backend.realtime.doubao_realtime_service import (
+        DoubaoRealtimeService,
+        INPUT_SAMPLE_RATE as RT_INPUT_RATE,
+        OUTPUT_SAMPLE_RATE,
+    )
+    from backend.realtime.voice_config import (
+        ENV_VOICE_MODE,
+        ENV_VOICE_OUTPUT_MODE,
+        load_voice_mode,
+        load_voice_output_mode,
+    )
+
+    output_mode = load_voice_output_mode()
+    if output_mode != 0:
+        raise SystemExit(
+            f"{ENV_VOICE_OUTPUT_MODE}=1 (hybrid) is not implemented yet — use 0 for pure S2S."
+        )
+
+    _require_env("DOUBAO_RT_APP_ID")
+    _require_env("DOUBAO_RT_ACCESS_TOKEN")
+
+    transport = LocalAudioTransport(
+        LocalAudioTransportParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+        )
+    )
+    realtime = DoubaoRealtimeService()
+    pipeline = Pipeline([transport.input(), realtime, transport.output()])
+
+    worker = PipelineWorker(
+        pipeline,
+        params=PipelineParams(
+            enable_metrics=True,
+            enable_usage_metrics=True,
+            audio_in_sample_rate=RT_INPUT_RATE,
+            audio_out_sample_rate=OUTPUT_SAMPLE_RATE,
+        ),
+    )
+    runner = WorkerRunner(handle_sigint=False if sys.platform == "win32" else True)
+
+    logger.info(
+        f"Voice realtime ready (mode={load_voice_mode()}, output_mode={output_mode}) — "
+        "Doubao Dialog S2S; cloud VAD + barge-in. Use headphones. Ctrl+C to exit."
+    )
+    await runner.add_workers(worker)
+    await runner.run()
+
+
+async def _main_pipeline() -> None:
     _require_env("DEEPSEEK_API_KEY")
 
     # Default stays flash `doubao` until streaming is validated against a live mic
@@ -104,18 +162,24 @@ async def main() -> None:
     from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
     from pipecat.workers.runner import WorkerRunner
 
+    from backend.app.memory.retrieval import tokenize
     from backend.app.memory.store import get_memory_store
     from backend.realtime.companion_brain import CompanionBrain
     from backend.realtime.companion_brain_processor import CompanionBrainProcessor
+    from backend.realtime.half_duplex_mute_processor import HalfDuplexMuteGate, HalfDuplexMuteProcessor
     from backend.realtime.vad_processor import SileroVADProcessor
     from backend.realtime.voice_config import (
         ENV_ASR_END_WINDOW_MS,
+        ENV_HALF_DUPLEX,
         ENV_MAX_TOKENS,
         ENV_VAD_STOP_SECS,
         load_asr_end_window_ms,
+        load_half_duplex_enabled,
         load_vad_stop_secs,
         load_voice_max_tokens,
     )
+
+    tokenize("预热")
 
     transport = LocalAudioTransport(
         LocalAudioTransportParams(
@@ -130,22 +194,29 @@ async def main() -> None:
     voice_max_tokens = load_voice_max_tokens()
     vad_stop_secs = load_vad_stop_secs()
     asr_end_window_ms = load_asr_end_window_ms()
+    half_duplex = load_half_duplex_enabled()
 
     store = get_memory_store()
     brain = CompanionBrain(store, max_output_tokens=voice_max_tokens)
     vad = SileroVADProcessor(stop_secs=vad_stop_secs)
     brain_processor = CompanionBrainProcessor(brain)
 
-    pipeline = Pipeline(
-        [
-            transport.input(),
-            vad,
-            stt,
-            brain_processor,
-            tts,
-            transport.output(),
-        ]
-    )
+    pipeline_steps: list[object] = [transport.input()]
+    if half_duplex:
+        mute_gate = HalfDuplexMuteGate(resume_guard_ms=asr_end_window_ms)
+        pipeline_steps.extend(
+            [
+                HalfDuplexMuteProcessor(mute_gate, role="input"),
+                vad,
+                stt,
+                HalfDuplexMuteProcessor(mute_gate, role="stt_out"),
+            ]
+        )
+    else:
+        pipeline_steps.extend([vad, stt])
+    pipeline_steps.extend([brain_processor, tts, transport.output()])
+
+    pipeline = Pipeline(pipeline_steps)
 
     worker = PipelineWorker(
         pipeline,
@@ -160,19 +231,40 @@ async def main() -> None:
     runner = WorkerRunner(handle_sigint=False if sys.platform == "win32" else True)
 
     logger.info(
-        f"Voice brain ready (STT={stt_backend}, TTS={tts_backend}) — speak into the mic; "
-        "use headphones to avoid echo. Ctrl+C to exit."
+        f"Voice pipeline ready (STT={stt_backend}, TTS={tts_backend}, "
+        f"half_duplex={'on' if half_duplex else 'off'}) — speak into the mic; "
+        + (
+            "external speakers OK (no barge-in while Boxi speaks). "
+            if half_duplex
+            else "use headphones to avoid echo / enable barge-in. "
+        )
+        + "Ctrl+C to exit."
     )
     logger.info(
         "Voice tuning: "
         f"{ENV_VAD_STOP_SECS}={vad_stop_secs}, "
         f"{ENV_ASR_END_WINDOW_MS}={asr_end_window_ms}, "
-        f"{ENV_MAX_TOKENS}={voice_max_tokens}; "
+        f"{ENV_MAX_TOKENS}={voice_max_tokens}, "
+        f"{ENV_HALF_DUPLEX}={'on' if half_duplex else 'off'}; "
         "smart_turn=off (no LLMUserAggregator in pipeline — VAD-only endpointing)"
     )
 
     await runner.add_workers(worker)
     await runner.run()
+
+
+async def main() -> None:
+    from backend.realtime.voice_config import ENV_VOICE_MODE
+
+    voice_mode = _voice_backend(
+        ENV_VOICE_MODE,
+        allowed={"pipeline", "realtime"},
+        default="pipeline",
+    )
+    if voice_mode == "realtime":
+        await _main_realtime()
+    else:
+        await _main_pipeline()
 
 
 if __name__ == "__main__":

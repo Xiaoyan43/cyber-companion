@@ -29,6 +29,13 @@ DEFAULT_VOICE_MAX_TOKENS = 200
 ENV_VAD_STOP_SECS = "CYBER_COMPANION_VOICE_VAD_STOP_SECS"
 ENV_ASR_END_WINDOW_MS = "CYBER_COMPANION_VOICE_ASR_END_WINDOW_MS"
 ENV_MAX_TOKENS = "CYBER_COMPANION_VOICE_MAX_TOKENS"
+ENV_HALF_DUPLEX = "CYBER_COMPANION_VOICE_HALF_DUPLEX"
+ENV_VOICE_MODE = "CYBER_COMPANION_VOICE_MODE"
+ENV_VOICE_OUTPUT_MODE = "CYBER_COMPANION_VOICE_OUTPUT_MODE"
+
+DEFAULT_HALF_DUPLEX = True
+DEFAULT_VOICE_MODE = "pipeline"
+DEFAULT_VOICE_OUTPUT_MODE = 0
 
 
 def load_vad_stop_secs() -> float:
@@ -41,3 +48,35 @@ def load_asr_end_window_ms() -> int:
 
 def load_voice_max_tokens() -> int:
     return _env_int(ENV_MAX_TOKENS, DEFAULT_VOICE_MAX_TOKENS)
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name, "").strip().lower()
+    if not raw:
+        return default
+    if raw in {"1", "true", "on", "yes"}:
+        return True
+    if raw in {"0", "false", "off", "no"}:
+        return False
+    raise ValueError(f"{name} must be one of: on, off, true, false, 1, 0")
+
+
+def load_half_duplex_enabled() -> bool:
+    return _env_bool(ENV_HALF_DUPLEX, DEFAULT_HALF_DUPLEX)
+
+
+def load_voice_mode() -> str:
+    raw = os.getenv(ENV_VOICE_MODE, DEFAULT_VOICE_MODE).strip().lower()
+    if raw not in {"pipeline", "realtime"}:
+        raise ValueError(f"{ENV_VOICE_MODE} must be one of: pipeline, realtime")
+    return raw
+
+
+def load_voice_output_mode() -> int:
+    raw = os.getenv(ENV_VOICE_OUTPUT_MODE, "").strip()
+    if not raw:
+        return DEFAULT_VOICE_OUTPUT_MODE
+    mode = int(raw)
+    if mode not in {0, 1}:
+        raise ValueError(f"{ENV_VOICE_OUTPUT_MODE} must be 0 (pure) or 1 (hybrid)")
+    return mode
