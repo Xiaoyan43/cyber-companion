@@ -87,7 +87,9 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
   (`backend/realtime/` skeleton reusing the soul) + declare Pipecat/PixiJS deps
   (no install) + reuse ledger + layout docs. V1 stays runnable. **Spec:
   `docs/V2_PHASE0_SPEC.md`.**
-- [ ] V2 Phase 1 — Pipecat voice skeleton (mic→VAD→STT→DeepSeek→TTS→speaker, interruptible).
+- [ ] **V2 Phase 1 — Pipecat voice skeleton `[Claude→Cursor]`.** mic→VAD→STT→DeepSeek→TTS→speaker,
+  interruptible; standalone `backend/realtime/run_voice.py`, V1 untouched; placeholder STT/TTS OK
+  (Doubao streaming = Phase 2; soul = Phase 3). **Spec: `docs/V2_PHASE1_SPEC.md`.**
 - [ ] V2 Phase 2 — Doubao streaming STT/TTS as Pipecat services.
 - [ ] V2 Phase 3 — Companion Brain (soul in the LLM slot).
 - [ ] V2 Phase 4–9 — turn-taking, PixiJS room, room reactivity, actions, personal files, the box.
