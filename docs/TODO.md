@@ -1,5 +1,41 @@
 # TODO
 
+## Soul Deepening (Claude spec 2026-06-09 → Cursor implements → Claude reviews)
+
+Spec: `docs/SOUL_DEEPENING_SPEC.md`. Incremental on the working app, **no rebuild**.
+Latency-smart: ① piggyback (same reply call) ② background reflection ③ local math.
+Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
+
+- [ ] **SD-1 — Piggyback signal contract `[Claude→Cursor]`.** Extend
+  `StructuredAssistantResponse` with optional `signals` + tolerant parse
+  (`behavior/parser.py`); add output-protocol section to persona
+  (`memory/persona.py`). Done when: `signals` parsed when present, **never leaks**
+  to `content`/TTS, absent/malformed → today's behavior. Tests for all 3 cases.
+- [ ] **SD-2 — Subjectivity kernel `[Claude]`.** New `relationship_state` singleton
+  table (trust/closeness/familiarity/tension/last_meaningful_interaction_at); `trust`
+  **moves** here (source of truth), `loneliness` **stays** in mood_state but is
+  re-sourced from closeness/time-since-contact; appraisal-driven local math + decay;
+  `[Relationship]`/`[Impression]` context blocks; tone factors relationship.
+  **Additive table only — no `mood_state` ALTER/DROP** (no migration framework
+  exists); seed singleton via `INSERT OR IGNORE`; optional one-time `trust` back-fill.
+  **Update `docs/MEMORY_DESIGN.md`.**
+- [ ] **SD-2-UI — "Boxi 怎么看你" panel `[Cursor-ok]`.** Read-only panel showing
+  relationship state (trust/closeness/familiarity/tension) + impression narrative.
+  Numbers land with SD-2; impression text fills in after SD-4. Frontend-only.
+- [ ] **SD-3 — LLM memory extraction (M3) `[Claude]`.** Route `signals.memory[]`
+  through existing dedup pipeline (`write_memories_from_signals`); keep regex M2 as
+  fallback; `writer="llm"` tag; lightweight metadata links.
+- [ ] **SD-4 — Background reflection layer `[Claude]`.** Turn-counter trigger
+  (`reflection_every_n_turns`); jobs: memory consolidation/evolution, impression
+  formation (`relationship_state` memory type), LLM conversation summary. Run via
+  `BackgroundTasks` off the response path; single-flight; config-gated
+  (`enable_reflection`); failure-isolated.
+- [ ] **SD-5 (optional) — Memory links + top-down retrieval `[Claude]`.**
+  `memory_links` table + category-first retrieval. **Update `docs/MEMORY_DESIGN.md`.**
+- [ ] **SD config knobs `[Cursor-ok]`.** Add `llm_memory_extraction`,
+  `enable_reflection`, `reflection_every_n_turns`, `llm_summary` to
+  `BudgetConfig` + `config/budget*.json` with safe defaults.
+
 ## Current Priority
 
 - [x] Create a checkpoint commit for the current Phase 2-10 MVP batch after user approval.
