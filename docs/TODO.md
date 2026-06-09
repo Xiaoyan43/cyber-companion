@@ -112,7 +112,15 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
   `end_window` 800 + smart_turn) + Boxi rambling 3–4 sentences × ~1.5–2s sequential TTS (= the
   "builds up"). Fix: one-sentence voice instruction + `max_output_tokens≈200`; tighten
   turn-finalize (env-overridable). **Spec: `docs/V2_VOICE_LATENCY_SPEC.md`.**
-- [ ] V2 Phase 4–9 — turn-taking, PixiJS room, room reactivity, actions, personal files, the box.
+  **Done + profiled (Session 30):** terse replies (spoken_chars ~26–55, signals intact);
+  `build_provider_context` warm = **9 ms** (not the bottleneck — compact 811-tok context
+  confirmed). Remaining ~1.8s `finalize→first_text` = DeepSeek-to-first-sentence (inherent
+  floor). No cheap latency win left.
+- [ ] **V2 Half-duplex — drop the headphones `[Claude→Cursor]`.** Mute STT/VAD while Boxi
+  speaks (reuse Pipecat `STTMuteFilter` if present) so speaker echo can't self-interrupt;
+  toggle `CYBER_COMPANION_VOICE_HALF_DUPLEX` (default on; off = barge-in + headphones).
+  Folds in jieba pre-warm (kills the first-turn cold load). **Spec: `docs/V2_HALF_DUPLEX_SPEC.md`.**
+- [ ] V2 Phase 4–9 — turn-taking polish, PixiJS room, room reactivity, actions, personal files, the box.
 
 ## Current Priority
 
