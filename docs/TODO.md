@@ -78,6 +78,20 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
   `enable_reflection`, `reflection_every_n_turns`, `llm_summary` (SD-4) in
   `BudgetConfig` + `config/budget*.json`.
 
+## V2 Rebuild (Claude specs → Cursor builds → Claude reviews)
+
+Source: `docs/ARCHITECTURE_V2.md` + `docs/REBUILD_ROADMAP.md`. Keep the soul; build
+hardware-ready (brain/surface split). One phase = one checkpoint.
+
+- [ ] **V2 Phase 0 — Foundation `[Claude→Cursor]`.** Brain/surface seam
+  (`backend/realtime/` skeleton reusing the soul) + declare Pipecat/PixiJS deps
+  (no install) + reuse ledger + layout docs. V1 stays runnable. **Spec:
+  `docs/V2_PHASE0_SPEC.md`.**
+- [ ] V2 Phase 1 — Pipecat voice skeleton (mic→VAD→STT→DeepSeek→TTS→speaker, interruptible).
+- [ ] V2 Phase 2 — Doubao streaming STT/TTS as Pipecat services.
+- [ ] V2 Phase 3 — Companion Brain (soul in the LLM slot).
+- [ ] V2 Phase 4–9 — turn-taking, PixiJS room, room reactivity, actions, personal files, the box.
+
 ## Current Priority
 
 - [x] Create a checkpoint commit for the current Phase 2-10 MVP batch after user approval.
