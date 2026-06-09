@@ -23,7 +23,7 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
 - [x] **SD-2-UI — "Boxi 怎么看你" panel `[Cursor-ok]`.** Read-only panel showing
   relationship state (trust/closeness/familiarity/tension) + impression narrative.
   Numbers land with SD-2; impression text fills in after SD-4. Frontend-only.
-- [ ] **SD-3 — LLM memory extraction (M3) `[Claude]`.** Route `signals.memory[]`
+- [x] **SD-3 — LLM memory extraction (M3) `[Claude]`.** Route `signals.memory[]`
   through existing dedup pipeline (`write_memories_from_signals` +
   `record_turn_memories` orchestrator); keep regex M2 as fallback; `writer="llm"`
   tag; `llm_memory_extraction` knob. Cross-type linking moved to SD-5. Spec:
@@ -35,9 +35,9 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
   (`enable_reflection`); failure-isolated.
 - [ ] **SD-5 (optional) — Memory links + top-down retrieval `[Claude]`.**
   `memory_links` table + category-first retrieval. **Update `docs/MEMORY_DESIGN.md`.**
-- [ ] **SD config knobs `[Cursor-ok]`.** Add `llm_memory_extraction`,
-  `enable_reflection`, `reflection_every_n_turns`, `llm_summary` to
-  `BudgetConfig` + `config/budget*.json` with safe defaults.
+- [ ] **SD config knobs `[Cursor-ok]`.** `llm_memory_extraction` done (SD-3). Still
+  need `enable_reflection`, `reflection_every_n_turns`, `llm_summary` (SD-4) in
+  `BudgetConfig` + `config/budget*.json`.
 
 ## Current Priority
 

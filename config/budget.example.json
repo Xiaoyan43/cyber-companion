@@ -9,6 +9,7 @@
   "summary_batch_size": 6,
   "behavior_tick_retention": 200,
   "auto_memory_write": true,
+  "llm_memory_extraction": true,
   "allow_reasoning_model": false,
   "allow_cloud_stt": false,
   "allow_cloud_tts": false

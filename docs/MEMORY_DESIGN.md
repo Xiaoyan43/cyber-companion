@@ -189,13 +189,23 @@ Avoid writing:
 
 Every memory write should include `importance` and `confidence`.
 
-## Auto-Write From Conversation (M2, rule-based MVP)
+## Auto-Write From Conversation (M2 rule-based + M3 LLM signals)
 
-After each `/chat/complete` turn, `maybe_write_memories_from_turn` may create or
-update memories when the user message matches conservative local rules (no extra
-LLM call). Gated by `auto_memory_write` in budget config (default `true`).
+After each LLM reply turn, `record_turn_memories` picks **one** write path per turn
+(gated by `auto_memory_write`):
 
-Current triggers:
+- **M3 (LLM extraction, SD-3):** when `llm_memory_extraction` is true and the reply
+  carries a non-empty `signals.memory[]`, validated items persist via
+  `write_memories_from_signals` with `metadata.writer="llm"`. Same dedup pipeline as
+  M2 (`_persist_candidate`); at most 5 items per turn; type must be in `MEMORY_TYPES`;
+  importance/confidence clamped to `[0, 1]`; confidence floor 0.6.
+- **M2 (regex fallback):** when signals are absent/empty or the knob is off,
+  `maybe_write_memories_from_turn` runs the conservative local rules below (no extra
+  LLM call). Tags `metadata.writer="rule_based"`.
+
+Non-LLM paths (local decision, streaming budget-block) still call regex M2 directly.
+
+M2 triggers:
 
 - explicit remember cues (`记住`, `记得`, `remind me`, …) → `reminder`
 - self-intro cues (`我叫`, `I am`, …) → `stable_profile`

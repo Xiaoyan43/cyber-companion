@@ -9,6 +9,8 @@ from backend.app.memory.store import MemoryStore, reset_memory_store
 from backend.app.memory.write_policy import (
     extract_memory_candidates,
     maybe_write_memories_from_turn,
+    record_turn_memories,
+    write_memories_from_signals,
 )
 from backend.app.providers.router import reset_provider_router
 
@@ -167,3 +169,193 @@ def test_chat_complete_triggers_auto_memory_write(client: TestClient) -> None:
     memories = client.get("/memory/memories", params={"type": "reminder"}).json()["memories"]
     assert len(memories) == 1
     assert "今晚要改简历" in memories[0]["content"]
+
+
+def test_write_memories_from_signals_persists_llm_writer(store: MemoryStore) -> None:
+    user_message = store.create_message(role="user", content="随便聊聊")
+
+    written = write_memories_from_signals(
+        store,
+        [
+            {
+                "type": "job_progress",
+                "content": "Rejected by Company X on 2026-06-09",
+                "importance": 0.7,
+                "confidence": 0.9,
+                "tags": ["job-search"],
+            }
+        ],
+        source_message_id=user_message.id,
+    )
+
+    assert len(written) == 1
+    assert written[0].type == "job_progress"
+    assert written[0].metadata["writer"] == "llm"
+    assert "Company X" in written[0].content
+
+
+def test_validate_signal_memory_rejects_unknown_type(store: MemoryStore) -> None:
+    assert (
+        write_memories_from_signals(
+            store,
+            [{"type": "garbage", "content": "should not persist", "confidence": 0.9}],
+            source_message_id=None,
+        )
+        == []
+    )
+
+
+def test_validate_signal_memory_rejects_low_confidence(store: MemoryStore) -> None:
+    assert (
+        write_memories_from_signals(
+            store,
+            [{"type": "job_progress", "content": "Low confidence fact", "confidence": 0.4}],
+            source_message_id=None,
+        )
+        == []
+    )
+
+
+def test_validate_signal_memory_clamps_importance_and_confidence(store: MemoryStore) -> None:
+    written = write_memories_from_signals(
+        store,
+        [
+            {
+                "type": "recent_event",
+                "content": "Clamped importance and confidence",
+                "importance": 5,
+                "confidence": 2,
+            }
+        ],
+        source_message_id=None,
+    )
+
+    assert len(written) == 1
+    assert written[0].importance == 1.0
+    assert written[0].confidence == 1.0
+
+
+def test_signal_memory_dedup_updates_in_place(store: MemoryStore) -> None:
+    store.create_memory(
+        type="job_progress",
+        content="Rejected by Company X on 2026-06-09",
+        tags=["job-search"],
+        importance=0.6,
+        confidence=0.7,
+    )
+
+    written = write_memories_from_signals(
+        store,
+        [
+            {
+                "type": "job_progress",
+                "content": "Rejected by Company X on 2026-06-09",
+                "importance": 0.8,
+                "confidence": 0.9,
+            }
+        ],
+        source_message_id=None,
+    )
+
+    assert len(written) == 1
+    assert len(store.list_memories(type="job_progress", limit=10)) == 1
+    assert written[0].metadata["writer"] == "llm"
+
+
+def test_write_memories_from_signals_caps_at_five(store: MemoryStore) -> None:
+    items = [
+        {
+            "type": "recent_event",
+            "content": f"Signal memory item number {index}",
+            "confidence": 0.9,
+        }
+        for index in range(8)
+    ]
+
+    written = write_memories_from_signals(store, items, source_message_id=None)
+
+    assert len(written) == 5
+
+
+def test_record_turn_memories_picks_m3_over_regex(store: MemoryStore) -> None:
+    user_message = store.create_message(role="user", content="嗯")
+
+    written = record_turn_memories(
+        store,
+        user_input="嗯",
+        signals={
+            "memory": [
+                {
+                    "type": "stable_profile",
+                    "content": "User prefers concise bullet replies",
+                    "confidence": 0.85,
+                }
+            ]
+        },
+        source_message_id=user_message.id,
+        budget=BudgetConfig(llm_memory_extraction=True),
+    )
+
+    assert len(written) == 1
+    assert written[0].type == "stable_profile"
+    assert written[0].metadata["writer"] == "llm"
+    assert "concise bullet" in written[0].content
+
+
+def test_record_turn_memories_falls_back_to_regex_m2(store: MemoryStore) -> None:
+    written = record_turn_memories(
+        store,
+        user_input="记住明天改简历",
+        signals=None,
+        source_message_id=None,
+        budget=BudgetConfig(llm_memory_extraction=True),
+    )
+
+    assert len(written) == 1
+    assert written[0].type == "reminder"
+    assert written[0].metadata["writer"] == "rule_based"
+
+
+def test_record_turn_memories_respects_llm_knob_off(store: MemoryStore) -> None:
+    written = record_turn_memories(
+        store,
+        user_input="嗯",
+        signals={
+            "memory": [
+                {
+                    "type": "stable_profile",
+                    "content": "Only from signals, not regex",
+                    "confidence": 0.9,
+                }
+            ]
+        },
+        source_message_id=None,
+        budget=BudgetConfig(llm_memory_extraction=False),
+    )
+
+    assert written == []
+
+
+def test_record_turn_memories_respects_auto_memory_write_gate(store: MemoryStore) -> None:
+    budget = BudgetConfig(auto_memory_write=False)
+
+    assert (
+        record_turn_memories(
+            store,
+            user_input="记住明天改简历",
+            signals={"memory": [{"type": "reminder", "content": "From signals", "confidence": 0.9}]},
+            source_message_id=None,
+            budget=budget,
+        )
+        == []
+    )
+    assert (
+        record_turn_memories(
+            store,
+            user_input="记住明天改简历",
+            signals=None,
+            source_message_id=None,
+            budget=budget,
+        )
+        == []
+    )

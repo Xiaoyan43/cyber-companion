@@ -2057,3 +2057,46 @@
 
 - 未消费 `signals.memory[]`（SD-3）；未做后台反思层（SD-4）。
 - kernel 无额外 LLM；未 ALTER/DROP `mood_state`；Boxi 毒舌 core 未改。
+
+## 2026-06-09 - Session 36 (Cursor：SD-3 LLM memory extraction M2→M3)
+
+本次完成：
+
+- **SD-3 Task 1 — `write_policy.py`**
+  - `_persist_candidate(..., writer=)`；`_validate_signal_memory`（type 白名单 + clamp + clip + ≥0.6 门槛）。
+  - `write_memories_from_signals`（cap 5，`writer="llm"`）；`record_turn_memories` 编排器（M3 或 M2，respect `auto_memory_write`）。
+- **SD-3 Task 2 — config**
+  - `BudgetConfig.llm_memory_extraction`（默认 true）；`config/budget.json` + `budget.example.json`。
+- **SD-3 Task 3 — `main.py`**
+  - `/chat/complete`：`reply_signals` 捕获 + `record_turn_memories`（try/except）。
+  - `_finalize_streamed_turn`：`record_turn_memories(signals=parsed.signals)`。
+  - budget-block / local 分支仍用 `maybe_write_memories_from_turn`。
+- **SD-3 Task 4 — tests**
+  - `test_memory_write_policy.py` +10 用例（M3 写入、拒绝、clamp、dedup、cap、编排、gate）。
+- **Docs**
+  - `docs/MEMORY_DESIGN.md` Auto-Write 段更新 M2/M3 说明。
+
+下次接着做：
+
+- **SD-4** — background reflection layer（`enable_reflection` 等 knob + 后台任务）。
+
+已知问题：
+
+- 无。
+
+相关文件：
+
+- `backend/app/memory/write_policy.py`, `budget.py`
+- `backend/app/main.py`（两处 LLM 写入点）
+- `config/budget.json`, `config/budget.example.json`
+- `backend/tests/test_memory_write_policy.py`
+- `docs/MEMORY_DESIGN.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**176 passed** + tsc 通过。
+
+不要改动的边界：
+
+- 每轮只走 M3 或 M2 一条路径；未删 `extract_memory_candidates`。
+- 无 linking（SD-5）、无反思层（SD-4）、无 schema 改动。

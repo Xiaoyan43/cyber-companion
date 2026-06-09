@@ -24,7 +24,7 @@ from backend.app.memory.chat_persistence import (
     should_persist_local_behavior_line,
 )
 from backend.app.memory.summary_policy import maybe_update_conversation_summary
-from backend.app.memory.write_policy import maybe_write_memories_from_turn
+from backend.app.memory.write_policy import maybe_write_memories_from_turn, record_turn_memories
 from backend.app.memory.usage_guard import evaluate_llm_budget_gate
 from backend.app.memory.database import MemoryRecord, MessageRecord, MoodStateRecord, RelationshipStateRecord
 from backend.app.memory.store import get_memory_store, reset_memory_store
@@ -612,6 +612,7 @@ def chat_complete(request: ChatCompleteRequest) -> ChatCompleteResponse:
     )
     final_decision = decision.decision
     called_llm = False
+    reply_signals: dict | None = None
 
     if decision.should_call_llm:
         # Resolve the target model first so the spend brake can also veto pricier
@@ -651,6 +652,7 @@ def chat_complete(request: ChatCompleteRequest) -> ChatCompleteResponse:
                 ) from error
 
             parsed = parse_structured_assistant_response(result.content)
+            reply_signals = parsed.signals
             avatar_state = parsed.avatar_state or (
                 "talking" if decision.decision in {"reply", "interrupt"} else decision.avatar_state
             )
@@ -682,12 +684,16 @@ def chat_complete(request: ChatCompleteRequest) -> ChatCompleteResponse:
         should_call_llm=called_llm,
     )
     user_message_id = saved_ids[0] if user_input.strip() and saved_ids else None
-    maybe_write_memories_from_turn(
-        store,
-        user_input=user_input,
-        source_message_id=user_message_id,
-        budget=budget,
-    )
+    try:
+        record_turn_memories(
+            store,
+            user_input=user_input,
+            signals=reply_signals,
+            source_message_id=user_message_id,
+            budget=budget,
+        )
+    except Exception:
+        pass
     maybe_update_conversation_summary(store, budget=budget)
 
     return ChatCompleteResponse(
@@ -791,12 +797,16 @@ def _finalize_streamed_turn(
         should_call_llm=should_call_llm,
     )
     user_message_id = saved_ids[0] if user_input.strip() and saved_ids else None
-    maybe_write_memories_from_turn(
-        store,
-        user_input=user_input,
-        source_message_id=user_message_id,
-        budget=budget,
-    )
+    try:
+        record_turn_memories(
+            store,
+            user_input=user_input,
+            signals=parsed.signals,
+            source_message_id=user_message_id,
+            budget=budget,
+        )
+    except Exception:
+        pass
     maybe_update_conversation_summary(store, budget=budget)
     return ChatCompletionResult(
         provider=result.provider,

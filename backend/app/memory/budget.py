@@ -16,6 +16,7 @@ class BudgetConfig:
     summary_batch_size: int = 6
     behavior_tick_retention: int = 200
     auto_memory_write: bool = True
+    llm_memory_extraction: bool = True
     allow_cloud_stt: bool = False
     allow_cloud_tts: bool = False
     # Spend brakes. <= 0 disables the corresponding cap.
@@ -50,6 +51,7 @@ def load_budget_config(config_dir: Path | None = None) -> BudgetConfig:
         summary_batch_size=int(payload.get("summary_batch_size", 6)),
         behavior_tick_retention=int(payload.get("behavior_tick_retention", 200)),
         auto_memory_write=bool(payload.get("auto_memory_write", True)),
+        llm_memory_extraction=bool(payload.get("llm_memory_extraction", True)),
         allow_cloud_stt=bool(payload.get("allow_cloud_stt", False)),
         allow_cloud_tts=bool(payload.get("allow_cloud_tts", False)),
         monthly_usd_limit=float(payload.get("monthly_usd_limit", 10.0)),

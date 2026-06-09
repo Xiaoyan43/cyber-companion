@@ -7,12 +7,14 @@ from backend.app.behavior.rules import is_low_value_input
 from backend.app.memory.budget import BudgetConfig
 from backend.app.memory.database import MemoryRecord
 from backend.app.memory.retrieval import tokenize
+from backend.app.memory.schema import MEMORY_TYPES
 from backend.app.memory.store import MemoryStore
 
 # Writes below this confidence are dropped. Explicit user cues (remember, name,
 # imperative preference) sit at >= 0.75; inferred project cues stay at 0.55 so
 # they do not auto-persist without stronger signals.
 _MIN_WRITE_CONFIDENCE = 0.6
+_MAX_SIGNAL_MEMORIES_PER_TURN = 5
 
 _REMEMBER_PATTERN = re.compile(
     r"(?:记住|记得|别忘了|提醒[我这]?|remind me(?: to)?|remember (?:that|to))\s*(.+)",
@@ -71,6 +73,43 @@ def _clip_content(text: str, *, limit: int = 200) -> str:
     if len(clipped) <= limit:
         return clipped
     return clipped[: limit - 3] + "..."
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
+def _as_float(value: object, default: float = 0.0) -> float:
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _validate_signal_memory(raw: object) -> MemoryWriteCandidate | None:
+    if not isinstance(raw, dict):
+        return None
+    mem_type = raw.get("type")
+    if mem_type not in MEMORY_TYPES:
+        return None
+    content = _clip_content(str(raw.get("content", "")))
+    if len(content) < 4:
+        return None
+    importance = _clamp01(_as_float(raw.get("importance"), 0.5))
+    confidence = _clamp01(_as_float(raw.get("confidence"), 0.5))
+    tags_raw = raw.get("tags", [])
+    tags: tuple[str, ...] = ()
+    if isinstance(tags_raw, list):
+        tags = tuple(str(tag) for tag in tags_raw if isinstance(tag, str))[:6]
+    return MemoryWriteCandidate(
+        type=str(mem_type),
+        content=content,
+        importance=importance,
+        confidence=confidence,
+        tags=tags,
+    )
 
 
 def _is_similar_content(left: str, right: str) -> bool:
@@ -245,6 +284,7 @@ def _persist_candidate(
     candidate: MemoryWriteCandidate,
     *,
     source_message_id: int | None,
+    writer: str = "rule_based",
 ) -> MemoryRecord:
     existing = _find_similar_memory(store, candidate.type, candidate.content)
     if existing is None:
@@ -255,7 +295,7 @@ def _persist_candidate(
             importance=candidate.importance,
             confidence=candidate.confidence,
             source_message_id=source_message_id,
-            metadata={"writer": "rule_based"},
+            metadata={"writer": writer},
         )
 
     return store.update_memory(
@@ -264,7 +304,62 @@ def _persist_candidate(
         tags=list(candidate.tags),
         importance=max(existing.importance, candidate.importance),
         confidence=max(existing.confidence, candidate.confidence),
-        metadata={**existing.metadata, "writer": "rule_based", "updated_from_turn": True},
+        metadata={**existing.metadata, "writer": writer, "updated_from_turn": True},
+    )
+
+
+def write_memories_from_signals(
+    store: MemoryStore,
+    signal_memories: list,
+    *,
+    source_message_id: int | None,
+    budget: BudgetConfig | None = None,
+) -> list[MemoryRecord]:
+    config = budget or BudgetConfig()
+    if not config.auto_memory_write:
+        return []
+
+    written: list[MemoryRecord] = []
+    for raw in signal_memories[:_MAX_SIGNAL_MEMORIES_PER_TURN]:
+        candidate = _validate_signal_memory(raw)
+        if candidate is None or candidate.confidence < _MIN_WRITE_CONFIDENCE:
+            continue
+        written.append(
+            _persist_candidate(
+                store,
+                candidate,
+                source_message_id=source_message_id,
+                writer="llm",
+            )
+        )
+    return written
+
+
+def record_turn_memories(
+    store: MemoryStore,
+    *,
+    user_input: str,
+    signals: dict | None,
+    source_message_id: int | None,
+    budget: BudgetConfig | None = None,
+) -> list[MemoryRecord]:
+    config = budget or BudgetConfig()
+    if not config.auto_memory_write:
+        return []
+    if config.llm_memory_extraction and isinstance(signals, dict):
+        sig_mem = signals.get("memory")
+        if isinstance(sig_mem, list) and sig_mem:
+            return write_memories_from_signals(
+                store,
+                sig_mem,
+                source_message_id=source_message_id,
+                budget=config,
+            )
+    return maybe_write_memories_from_turn(
+        store,
+        user_input=user_input,
+        source_message_id=source_message_id,
+        budget=config,
     )
 
 
