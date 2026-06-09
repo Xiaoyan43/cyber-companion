@@ -23,14 +23,27 @@ Session 26 for the full reasoning. TL;DR:
   latency-smart: sync = piggyback structured signals on the one reply call; heavy
   reflection = background; trivial = local.
 
-**NEXT TASK (new window starts here):** deep-dive memU + the "subjectivity kernel"
-(persistent emotion + relationship dynamics) + awesome-affective-computing, then
-write a **soul-deepening spec** (LLM-driven memory extraction / emotion+relationship
-state / a background reflection layer), incremental on the working app — no rebuild
-yet. Then Claude spec → Cursor implements → Claude reviews.
+**SOUL DEEPENING — DONE (Session 27).** `docs/SOUL_DEEPENING_SPEC.md` + per-phase
+briefs `docs/SD{1,1b,1c,2,3,3b,4,5}_SPEC.md`. Shipped + reviewed + checkpointed:
+SD-1 (piggyback signal contract), SD-2 (subjectivity kernel: emotion vs relationship
+split), SD-3 (LLM memory extraction M2→M3), SD-4 (background reflection layer),
+SD-1b + SD-1c (made the model actually emit the `<<<BOXI_SIGNALS>>>` trailer).
+**Verified on real DeepSeek:** trailer fires, `trust`/`closeness` move for real
+(0.5→0.63 / 0.2→0.36), reflection writes a real impression, zero leak. 192 tests + tsc.
 
-> There is uncommitted work (the V2 docs, budget walls off, S3 TTS revert). Run
-> `git status` and checkpoint as appropriate before new work.
+**NEXT TASK (new window starts here):**
+1. **SD-3b** (`docs/SD3b_SPEC.md`) — small follow-up the smoke found: when the LLM
+   emits `memory[]` items that all fail validation, `record_turn_memories` writes
+   nothing and skips the regex M2 fallback → factual memories get dropped. Fix the
+   fallback + enumerate valid memory types in the protocol. Then re-smoke.
+2. Then **SD-5** (optional, `docs/SD5_SPEC.md`) — memory links + 1-hop retrieval.
+3. Or pivot to **V2 rebuild** (`docs/REBUILD_ROADMAP.md`: Pipecat voice + PixiJS room
+   + Capacitor iPhone shell) — the soul is now deep enough.
+
+> Provider: DeepSeek works; key lives only in env var `DEEPSEEK_API_KEY` (never
+> committed). `providers.json` absent → falls back to `providers.example.json`
+> (deepseek default). Real smokes: stage key in a temp file, delete after.
+> Working tree is clean; everything checkpointed.
 
 ---
 

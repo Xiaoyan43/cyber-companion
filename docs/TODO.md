@@ -49,6 +49,12 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
   persisted/replayed) in `context_builder.build_provider_context`. A trailing system
   message does NOT work. **Spec: `docs/SD1c_SPEC.md`.** Highest priority (pairs with
   SD-1b to actually make signals flow).
+- [ ] **SD-3b — M2 fallback when M3 writes nothing + valid memory types `[Claude]`.**
+  SD-1c payoff smoke: signals now flow (trust 0.5→0.63, closeness 0.2→0.36 ✅) but
+  factual memories vanished — `record_turn_memories` commits to M3 when `memory[]` is
+  non-empty and never falls back to M2, so LLM items that fail validation (type ∉
+  whitelist) drop the turn's write. Fix: fall back to M2 when M3 yields nothing;
+  enumerate allowed memory types in `OUTPUT_PROTOCOL`. **Spec: `docs/SD3b_SPEC.md`.**
 - [ ] **SD-5 (optional) — Memory links + top-down retrieval `[Claude]`.**
   `memory_links` table + deterministic cross-type linker (in reflection) + 1-hop
   retrieval expansion + consolidation candidate polish. **Spec ready:

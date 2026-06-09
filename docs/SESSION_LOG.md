@@ -2251,3 +2251,38 @@
 不要改动的边界：
 
 - 仅改 context_builder + 测试；提醒 provider-only，绝不入库/重放累积；parser/stream/kernel/写入管线未动。
+
+## 2026-06-09 - Session 27 (Claude：真·DeepSeek 联调 + SD-1b/1c 验收 + SD-3b 发现)
+
+本次完成：
+
+- **真·DeepSeek 联调（用户提供 key，仅经临时文件、用后即删，未入库/未提交）。** 三轮诊断定位「信号不流动」根因：
+  1. 初测：回复零泄漏、人设在线、SD-4 反思真写出 LLM 印象、familiarity 随轮上涨；但 trust/closeness 冻结、记忆全是 regex M2 → 模型几乎不吐 `<<<BOXI_SIGNALS>>>` trailer（~0–1/3）。
+  2. A/B：trailer 缺失非排序问题；是「omit the trailer」逃生口 + 角色扮演沉浸。强制+单样例 → 直调 4/5。→ **SD-1b**（Cursor 实现 + Claude 验收，`a278d64`）。
+  3. SD-1b 复测仍 0：根因更深 —— 持久化 `parsed.content`（剥 trailer）并回放这些**无 trailer 的 assistant 历史**，模型照猫画虎。实测：有历史 0/5、无历史 3/5、尾随 system 提醒 0/5、**提醒挂当前 user 轮 3/5**。→ **SD-1c**（Cursor 实现 + Claude 验收，`d7f10e2`）。
+- **SD-1c 收效复测（真 DeepSeek，6 轮）：信号真流动** —— trust 0.5→0.63、closeness 0.2→0.36、last_meaningful 已置、loneliness→0、worry 回落；全程零泄漏。灵魂从「接好线」变「活了」。
+- **新发现 → SD-3b（spec `docs/SD3b_SPEC.md`）：** trailer 现在会带 `memory[]`，但 `record_turn_memories` 见非空 `memory[]` 即提交 M3、不再回退 M2；LLM 项全部校验失败（type 不在白名单等）时 M3 写 0 且 M2 被跳过 → 该轮事实记忆丢失（复测事实记忆为 0，仅剩反思印象）。`list_memories` 不滤 expired，确认是「从未写入」非「归档隐藏」。修法：M3 空结果回退 M2 + protocol 枚举合法 memory type。
+
+下次接着做（建议开新会话，从 docs/HANDOFF.md 顶部接起）：
+
+- 先 **SD-3b**（`docs/SD3b_SPEC.md`）→ 再 smoke 验「事实记忆回来 + 信号仍流动」。
+- 然后 **SD-5**（可选）或转 **V2 重建**（`docs/REBUILD_ROADMAP.md`）。
+
+已知问题：
+
+- trailer 触发 ~3/5（M2 兜底覆盖漏网轮）。嫌低的升级路径：回放带 trailer 的历史，或抽取转 Tier-② 后台调用。
+- SD-3b 未做前，吐了 `memory[]` 但校验失败的轮会丢事实记忆。
+
+相关文件：
+
+- `docs/SD1b_SPEC.md`、`docs/SD1c_SPEC.md`、`docs/SD3b_SPEC.md`（新）、`docs/HANDOFF.md`（顶部已更新）
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**192 passed** + tsc 通过。
+- 真 DeepSeek：SD-1c 后 trust/closeness/loneliness 真实移动、零泄漏；事实记忆缺失 → SD-3b。
+
+不要改动的边界：
+
+- key 只走环境变量/临时文件，绝不入库或写进任何文件。
+- 灵魂额外 LLM 不上等待路径；M2 正则保留作兜底；Boxi 毒舌人设不变。
