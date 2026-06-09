@@ -365,8 +365,10 @@ Recommended order: **SD-1 → SD-2 → SD-3 → SD-4**, SD-5 later. SD-1 is the 
   background), `memory/budget.py` + `config/budget*.json` (knobs), tests,
   `docs/MEMORY_DESIGN.md`. No schema change (uses existing `schema_meta`).
   Detailed brief: `docs/SD4_SPEC.md`.
-- **SD-5:** `memory/schema.py` (+`memory_links`), `memory/retrieval.py` (top-down),
-  `docs/MEMORY_DESIGN.md`.
+- **SD-5:** `memory/schema.py` (+`memory_links`), `memory/store.py` (link
+  accessors), `reflection/jobs.py` (deterministic linker + consolidation polish),
+  `memory/context_builder.py` (1-hop retrieval expansion), tests,
+  `docs/MEMORY_DESIGN.md`. Detailed brief: `docs/SD5_SPEC.md`.
 
 ---
 

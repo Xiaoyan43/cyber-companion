@@ -34,7 +34,9 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
   `BackgroundTasks` off the response path; single-flight; config-gated
   (`enable_reflection`); failure-isolated. Spec: `docs/SD4_SPEC.md`.
 - [ ] **SD-5 (optional) — Memory links + top-down retrieval `[Claude]`.**
-  `memory_links` table + category-first retrieval. **Update `docs/MEMORY_DESIGN.md`.**
+  `memory_links` table + deterministic cross-type linker (in reflection) + 1-hop
+  retrieval expansion + consolidation candidate polish. **Spec ready:
+  `docs/SD5_SPEC.md`** (Claude). Update `docs/MEMORY_DESIGN.md` on implement.
 - [x] **SD config knobs `[Cursor-ok]`.** `llm_memory_extraction` (SD-3);
   `enable_reflection`, `reflection_every_n_turns`, `llm_summary` (SD-4) in
   `BudgetConfig` + `config/budget*.json`.

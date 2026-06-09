@@ -2144,3 +2144,38 @@
 不要改动的边界：
 
 - 无 schema/DDL 改动；无 linking（SD-5）；consolidation 不 merge/不升 importance；同步路径不调 LLM；反思异常不进请求路径；`reflecting` finally 必释放。
+
+## 2026-06-09 - Session 27 (Claude：灵魂深化 SD-1..SD-4 spec+验收 + SD-5 spec + 联调 smoke)
+
+本次完成：
+
+- 按 Session 26 转向，产出**灵魂深化总方案** `docs/SOUL_DEEPENING_SPEC.md`（三层延迟智能放置：① piggyback ② 后台反思 ③ 本地数学），并逐阶段写实现级 spec：`SD1_SPEC.md`（piggyback 信号契约，流式安全 sentinel trailer）、`SD2_SPEC.md`（主体性内核，情绪/关系拆分）、`SD3_SPEC.md`（LLM 记忆抽取 M2→M3）、`SD4_SPEC.md`（后台反思层）、`SD5_SPEC.md`（记忆连边+一跳检索，可选，待实现）。
+- 走完 **Claude spec → Cursor 实现 → Claude 验收** 四轮：SD-1（9b93b6e）、SD-2（3b942da）、SD-3（5faf351）、SD-4（552a08f）全部验收通过并 checkpoint。每轮按各自 spec 的 Done criteria 审 diff。
+- 顺手让 Cursor 修了 Session-26 遗留的 `test_stt_status_route`（隔离测试自带 budget.json）。
+- **联调 smoke（mock provider，无真 DeepSeek key）**：uvicorn 起服务，7 轮 /chat/complete 确认 ① 信号 trailer 零泄漏；② relationship 持久化、familiarity 0→0.07（内核每 LLM 轮 +0.01）；③ 反思在第 6 轮触发（`turns_since_reflection` 归零再 +1=1、`last_reflected_message_id=12`、`reflecting=0` 已释放）、服务跨阈值不崩；④ M2 回退去重写出单条 job_progress。
+
+下次接着做：
+
+- 二选一：**(a)** 配置真 DeepSeek key 做真·联调（验证 appraisal→trust/closeness 真实移动、signals.memory M3、impression 文本填入 `[Impression]`）；**(b)** 实现 **SD-5**（`docs/SD5_SPEC.md` 已就绪）；或 **(c)** 灵魂已够深，转 V2 重建（`docs/REBUILD_ROADMAP.md`：Pipecat 语音 + PixiJS 房间 + Capacitor iPhone 壳）。
+
+已知问题：
+
+- 本环境无 `config/providers.json` 且 env 无 DeepSeek key → 真·LLM 路径（appraisal/M3/impression 文本）未实跑，仅 187 单测确定性覆盖 + mock 联调覆盖机制。
+- 反思花费暂未受预算闸约束（墙关着；`jobs.py` 留 `# TODO(SD-later): gate reflection spend`）。
+
+相关文件：
+
+- 方案/规格：`docs/SOUL_DEEPENING_SPEC.md`、`docs/SD1_SPEC.md`..`docs/SD5_SPEC.md`
+- 实现：`backend/app/behavior/{parser,kernel,mood,engine}.py`、`backend/app/memory/{schema,database,store,write_policy,context_builder,summary_policy,budget}.py`、`backend/app/reflection/`、`backend/app/main.py`、`config/budget*.json`、`frontend` 关系面板
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**187 passed** + tsc 通过（含 SD-1..SD-4 全部新测）。
+- mock 联调 smoke：见“本次完成”④。
+
+不要改动的边界：
+
+- 灵魂额外 LLM 调用绝不上用户等待路径（同步只 piggyback，重活后台）。
+- 预算墙保持关闭但保留旋钮；schema 改动须更 `docs/MEMORY_DESIGN.md`。
+- 后台反思 best-effort、永不破坏对话；`reflecting` finally 必释放。
+- Boxi 毒舌人设不变；不发全量历史；LLM 输出只当数据。
