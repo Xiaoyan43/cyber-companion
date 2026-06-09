@@ -358,10 +358,13 @@ Recommended order: **SD-1 → SD-2 → SD-3 → SD-4**, SD-5 later. SD-1 is the 
   `memory/budget.py` + `config/budget*.json` (`llm_memory_extraction` knob),
   `backend/app/main.py` (orchestrator at the two LLM write sites only), tests,
   `docs/MEMORY_DESIGN.md` (M3 note). Detailed brief: `docs/SD3_SPEC.md`.
-- **SD-4:** new `backend/app/reflection/` module (trigger + jobs),
-  `memory/summary_policy.py` (LLM summary builder behind `llm_summary`),
-  `backend/app/main.py` (enqueue `BackgroundTasks`), `memory/budget.py` (knobs),
-  `config/budget.json` + `config/budget.example.json`.
+- **SD-4:** new `backend/app/reflection/` package (`runner.py` + `jobs.py`),
+  `memory/store.py` (`schema_meta` accessors + atomic `claim_reflection` +
+  `note_llm_turn`), `memory/summary_policy.py` (defer-to-reflection guard behind
+  `llm_summary`), `backend/app/main.py` (`BackgroundTasks` / `StreamingResponse`
+  background), `memory/budget.py` + `config/budget*.json` (knobs), tests,
+  `docs/MEMORY_DESIGN.md`. No schema change (uses existing `schema_meta`).
+  Detailed brief: `docs/SD4_SPEC.md`.
 - **SD-5:** `memory/schema.py` (+`memory_links`), `memory/retrieval.py` (top-down),
   `docs/MEMORY_DESIGN.md`.
 
