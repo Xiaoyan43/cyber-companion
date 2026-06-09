@@ -82,57 +82,54 @@ is a string concat, not an LLM summary. These are the four things we deepen.
 
 ---
 
-## 3. The piggyback contract (the central interface change)
+## 3. The piggyback contract (sentinel-delimited trailer)
 
-Extend the assistant's structured JSON. **`content` stays the only user-facing
-field**; everything else is internal signal that must **never leak to display or TTS**.
+> **Why not a JSON wrapper.** `/chat/stream` (`main.py:745`, `:905`) forwards deltas
+> to live text + TTS *as they arrive*. Wrapping the reply in `{"content": ...}` would
+> stream raw JSON tokens into the UI and the speaker. So the reply is emitted as
+> **plain text first**, then a **single-line signals trailer** after a fixed
+> sentinel. `content` is never inside JSON — it's the text before the sentinel.
 
-**Today:**
-```json
-{ "content": "...", "avatar_state": "happy", "decision": "reply" }
+**Format the model emits:**
+```
+行吧，被拒一次而已，又不是世界末日。简历那段我们再砍两句。
+<<<BOXI_SIGNALS>>>
+{"avatar_state":"worried","decision":"reply","appraisal":{"valence":-0.4,"arousal":0.5,"goal_relevance":0.8,"note":"rejected by a company, frustrated"},"relationship":{"trust":0.04,"closeness":0.03,"tension":-0.02},"memory":[{"type":"job_progress","content":"Rejected by Company X on 2026-06-09","importance":0.7,"confidence":0.9,"tags":["job-search"]}]}
 ```
 
-**Extended (additive — every new field optional):**
-```json
-{
-  "content": "行吧，被拒一次而已，又不是世界末日。简历那段我们再砍两句。",
-  "avatar_state": "worried",
-  "decision": "reply",
-  "signals": {
-    "appraisal": {
-      "valence": -0.4,
-      "arousal": 0.5,
-      "goal_relevance": 0.8,
-      "note": "user got rejected by a company, frustrated"
-    },
-    "relationship": { "trust": 0.04, "closeness": 0.03, "tension": -0.02 },
-    "memory": [
-      { "type": "job_progress", "content": "Rejected by Company X on 2026-06-09",
-        "importance": 0.7, "confidence": 0.9, "tags": ["job-search"] }
-    ]
-  }
-}
-```
+- **`content`** = everything *before* the sentinel (trimmed). The only user-facing
+  field — displayed, persisted, spoken.
+- **Trailer** = sentinel line + exactly one **single-line** JSON object. Fields
+  `avatar_state`, `decision`, `appraisal`, `relationship`, `memory` — **all optional**.
+- **Sentinel** = `<<<BOXI_SIGNALS>>>` (ASCII; reliably reproduced; never occurs in a
+  natural reply). Define once as `SIGNALS_SENTINEL`.
 
-Rules:
-- **Tolerant parsing.** `signals` absent → fall back to regex M2 + local-heuristic
-  appraisal (today's behavior). `signals` malformed → ignore signals, keep
-  `content`. A model that forgets the wrapper entirely → `content = raw text`
-  (parser already does this). **The chat must never break because the model didn't
-  emit clean JSON.**
-- **Bounded deltas.** `relationship.*` and any emotion deltas are **clamped** by the
-  kernel (`|delta| ≤ 0.1`/turn) — the LLM *suggests*, the kernel *decides*. The LLM
-  cannot yank trust to 1.0.
-- **No leakage.** Extend `StructuredAssistantResponse` with an optional
-  `signals: dict | None`. `content` is what's persisted/displayed/spoken.
-- **Persona instructs the format.** Add a compact "output protocol" section to the
-  system prompt (in `memory/persona.py` or a new context section) describing the
-  JSON. Keep it short; do not bloat every turn.
+### Parsing rules (tolerant — chat must NEVER break)
+- **No sentinel** → whole text is `content`, no signals (today's behavior exactly).
+- **Sentinel + valid JSON** → `content` = pre-sentinel text; populate `signals`.
+- **Sentinel + malformed/partial JSON** → `content` = pre-sentinel text; drop
+  signals. Never show the sentinel or JSON to the user.
+- **Bounded deltas.** kernel clamps `relationship.*` / emotion deltas (`|delta| ≤
+  0.1`) — the LLM *suggests*, the kernel *decides*. It cannot yank trust to 1.0.
 
-> Robustness fallback (Open Question Q1): if DeepSeek proves unreliable at emitting
-> JSON every turn, demote memory/appraisal extraction from Tier ① piggyback to a
-> Tier ② background call (cheap model, off the response path). Spec piggyback-first;
-> keep the code path swappable.
+### Streaming (critical — the live-text/TTS leak)
+- Keep a tail buffer the length of the sentinel; only forward text that can no longer
+  be the *start of a forming* sentinel.
+- On sentinel detection, **stop forwarding deltas**; keep accumulating into
+  `accumulated_text` for the final parse, emit nothing more to the client.
+- After stream end, parse `accumulated_text`; `content` (pre-sentinel) matches what
+  was streamed. Frontend live text + TTS therefore never see the trailer.
+
+### Code shape
+- Extend `StructuredAssistantResponse` (`behavior/parser.py`) with optional
+  `signals: dict | None`; switch the parser to sentinel-split (keep the legacy
+  whole-string-JSON branch as a secondary fallback so old behavior still parses).
+- Add the persona **output-protocol** section: "reply naturally; then on a new line
+  emit `<<<BOXI_SIGNALS>>>` and one single-line JSON with these fields; never put the
+  sentinel elsewhere; text before the sentinel is what the user sees." Keep it short.
+
+> Q1 fallback: if the model is unreliable at the trailer, demote extraction to a
+> Tier ② background call; the tolerant parser already degrades gracefully.
 
 ---
 
@@ -343,9 +340,11 @@ Recommended order: **SD-1 → SD-2 → SD-3 → SD-4**, SD-5 later. SD-1 is the 
 
 ## 11. Concrete file touch-list (for Cursor, per phase)
 
-- **SD-1:** `behavior/parser.py` (extend `StructuredAssistantResponse` + tolerant
-  parse), `memory/persona.py` (output-protocol section), tests
-  `backend/tests/test_*parser*`.
+- **SD-1:** `behavior/parser.py` (sentinel split + `signals` field +
+  `SIGNALS_SENTINEL`), `memory/persona.py` (output-protocol section),
+  `backend/app/main.py` (streaming sentinel-strip in the `/chat/stream` delta loop;
+  `/chat/complete` already rebuilds content from `parsed.content`), tests in
+  `backend/tests/test_behavior.py`. Detailed brief: `docs/SD1_SPEC.md`.
 - **SD-2:** `memory/schema.py` (+`relationship_state` table), `memory/database.py`
   (+`RelationshipStateRecord`), `memory/store.py` (get/update relationship),
   `behavior/mood.py` (split + appraisal math + decay), `memory/context_builder.py`
