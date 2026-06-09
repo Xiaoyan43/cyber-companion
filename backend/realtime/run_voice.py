@@ -63,6 +63,12 @@ def _build_stt(stt_backend: str):
             compute_type="int8",
         )
 
+    if stt_backend == "doubao_stream":
+        from backend.realtime.doubao_streaming_stt_service import DoubaoStreamingSTTService
+
+        _require_env("DOUBAO_API_KEY")
+        return DoubaoStreamingSTTService()
+
     from backend.realtime.doubao_stt_service import DoubaoFlashSTTService
 
     _require_env("DOUBAO_API_KEY")
@@ -85,9 +91,11 @@ def _build_tts(tts_backend: str) -> tuple[object, int]:
 async def main() -> None:
     _require_env("DEEPSEEK_API_KEY")
 
+    # Default stays flash `doubao` until streaming is validated against a live mic
+    # (Phase 2b done-criteria #2); switch via CYBER_COMPANION_VOICE_STT=doubao_stream.
     stt_backend = _voice_backend(
         "CYBER_COMPANION_VOICE_STT",
-        allowed={"whisper", "doubao"},
+        allowed={"whisper", "doubao", "doubao_stream"},
         default="doubao",
     )
     tts_backend = _voice_backend(

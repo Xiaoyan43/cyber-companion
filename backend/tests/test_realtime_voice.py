@@ -29,6 +29,28 @@ def test_doubao_stt_service_imports() -> None:
     assert module.INPUT_SAMPLE_RATE == 16_000
 
 
+def test_voice_backend_toggle_accepts_streaming(monkeypatch) -> None:
+    module = importlib.import_module("backend.realtime.run_voice")
+    monkeypatch.setenv("CYBER_COMPANION_VOICE_STT", "doubao_stream")
+    selected = module._voice_backend(
+        "CYBER_COMPANION_VOICE_STT",
+        allowed={"whisper", "doubao", "doubao_stream"},
+        default="doubao",
+    )
+    assert selected == "doubao_stream"
+
+
+def test_voice_backend_toggle_rejects_unknown(monkeypatch) -> None:
+    module = importlib.import_module("backend.realtime.run_voice")
+    monkeypatch.setenv("CYBER_COMPANION_VOICE_STT", "bogus")
+    with pytest.raises(SystemExit):
+        module._voice_backend(
+            "CYBER_COMPANION_VOICE_STT",
+            allowed={"whisper", "doubao", "doubao_stream"},
+            default="doubao",
+        )
+
+
 @pytest.mark.skipif(sys.platform != "darwin", reason="macOS `say` placeholder TTS")
 def test_mac_say_tts_can_construct() -> None:
     from backend.realtime.mac_say_tts import MacSayTTSService

@@ -95,10 +95,13 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
   `DoubaoFlashSTTService` (reuses `DoubaoASRProvider`) — streaming WS ASR deferred to Phase 2b.
   Env toggles `CYBER_COMPANION_VOICE_STT` / `CYBER_COMPANION_VOICE_TTS`; Whisper/mac_say kept as
   fallbacks. **Spec: `docs/V2_PHASE2_SPEC.md`.**
-- [ ] **V2 Phase 2b — Doubao streaming WS ASR `[Claude→Cursor]`.** Continuous `STTService`
-  over Doubao BigASR streaming WebSocket (interim+final frames) → removes the flash
-  post-release wait. Keep flash as fallback toggle; implement against official Volcengine
-  streaming docs/SDK (binary framing). **Spec: `docs/V2_PHASE2b_SPEC.md`.**
+- [x] **V2 Phase 2b — Doubao streaming WS ASR `[Claude→Cursor]`.** `DoubaoStreamingSTTService`
+  (continuous `STTService`) over the official Volcengine BigASR streaming WebSocket
+  (`wss://.../api/v3/sauc/bigmodel`, resource `volc.bigasr.sauc.duration`, new-console `X-Api-Key`);
+  interim+final frames; binary framing in `doubao_streaming_protocol.py` (per docs 6561/1354869 +
+  public `sauc_python` demo). Toggle `CYBER_COMPANION_VOICE_STT=doubao_stream`; flash kept as
+  fallback. Protocol + transcription validated live. **Spec: `docs/V2_PHASE2b_SPEC.md`.**
+  Default stays flash pending live-mic acceptance (done-criteria #2) → then flip default to streaming.
 - [ ] V2 Phase 3 — Companion Brain (soul in the LLM slot).
 - [ ] V2 Phase 4–9 — turn-taking, PixiJS room, room reactivity, actions, personal files, the box.
 

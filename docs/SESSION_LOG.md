@@ -2642,3 +2642,62 @@
 
 - 未改 `backend/app/**`、`frontend/**`；pipecat 未进 V1 gate。
 - Soul/behavior/memory 接线留 Phase 3。
+
+## 2026-06-10 - Session 37 (V2 Phase 2b — Doubao streaming WS ASR)
+
+本次完成：
+
+- **协议来源**：照官方「火山引擎 大模型流式语音识别 API」文档（doc 6561/1354869）+ 公开
+  `sauc_python` demo（`generate_header`/`parse_response`）实现，**未照搬 spec 协议细节**。
+  端点 `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel`（双向流式），资源
+  `volc.bigasr.sauc.duration`（env `DOUBAO_ASR_RESOURCE_ID` 可覆盖），新版控制台鉴权
+  `X-Api-Key=DOUBAO_API_KEY`（+ `X-Api-Resource-Id`/`X-Api-Request-Id`/`X-Api-Connect-Id`）。
+- `backend/realtime/doubao_streaming_protocol.py`：纯 stdlib 二进制帧 builder/parser
+  （4B header / gzip-JSON full client request / gzip-PCM audio-only / 条件 sequence / error 帧）。
+- `backend/realtime/doubao_streaming_stt_service.py`：`DoubaoStreamingSTTService`（连续
+  `STTService`，非 segmented）。`start` 建连 + 发 full client request + 起接收协程；`run_stt`
+  每帧发音频（不阻塞）；接收协程 push `InterimTranscriptionFrame`（partial）/`TranscriptionFrame`
+  （`definite`/末包 final，`result_type:single` 避免跨轮累积）；`stop` 发末包 flush + 干净关闭。
+- `run_voice.py`：新增 `CYBER_COMPANION_VOICE_STT=doubao_stream` 档；**默认仍 flash `doubao`**，
+  待真机麦验收后再翻默认。保留顶部 OpenBLAS 线程序列化修复。
+- 依赖：`backend/requirements-realtime.txt` 显式声明 `websockets>=12.0`（pipecat 已传递带入 16.0）。
+- 测试：`backend/tests/test_doubao_streaming.py`（协议 builder/parser 纯 stdlib 往返 + 错误帧 +
+  服务 importorskip）；`test_realtime_voice.py` 加 toggle 选择测试。
+
+下次接着做：
+
+- 用户戴耳机用 `CYBER_COMPANION_VOICE_STT=doubao_stream` 真机麦验收（done-criteria #2）→ 通过则把
+  `run_voice.py` 默认 STT 翻成 `doubao_stream`。
+- V2 Phase 3 — Companion Brain soul 接线。
+
+已知问题：
+
+- 默认仍是 flash；streaming 已**离线**验证（合成语音）但未经真实 mic + Silero VAD 全链路人工验收。
+- `bigmodel` 双向流式不支持 `language` 字段（仅 nostream 支持）→ 未传 language，靠模型自适应中英文/方言。
+- 外接音箱回声未修；测试请戴耳机（Phase 2 边界不变）。
+
+相关文件：
+
+- `backend/realtime/{doubao_streaming_protocol.py,doubao_streaming_stt_service.py,run_voice.py}`
+- `backend/requirements-realtime.txt`
+- `backend/tests/{test_doubao_streaming.py,test_realtime_voice.py}`
+- `docs/{TODO.md,OPEN_SOURCE_REUSE.md}`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**230 passed**（+10）+ tsc green；realtime 仍 importorskip。
+- **流式 WS 离线实测**（用了官方协议/无 SDK，纯自写 framing + `websockets` 客户端）：
+  - 静音 5×200ms：建连成功（拿到 `X-Tt-Logid`），逐包 full server response，末包 `is_last=True`。
+  - 合成语音「你好，我是被困在盒子里的小人。」：interim `你好…` 边说边出，**final 正确**，
+    首字延迟约 **1.97s（流中途出字）**。
+  - `run_voice STT=doubao_stream` 启动烟测：pipeline ready + WS 在 start 时建连（logid 已打印），Ctrl+C 干净退出。
+- **流式 vs flash 延迟对比**：
+  - **Flash（Phase 2）**：整段录音在“说完之后”才发出 → 段末 ~1–2s 云端 RTT（post-release 等待，用户能感知）。
+  - **Streaming（Phase 2b）**：边说边传，partial 在说话中途就返回，final 基本在停顿瞬间到达 →
+    去掉了 post-release 等待，明显更快、可上屏。
+  - **CPU/风扇**：与 Phase 2 一致（无本地 Whisper 推理）。
+
+不要改动的边界：
+
+- 未改 `backend/app/**`（V1 flash 适配器 `backend/app/stt/doubao.py` 原样保留）、`frontend/**`；pipecat 未进 V1 gate。
+- flash STT 作为 fallback toggle 保留；Soul 接线留 Phase 3。

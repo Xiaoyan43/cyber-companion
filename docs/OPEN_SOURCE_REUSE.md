@@ -383,4 +383,23 @@ Version/commit: (Phase 9 — not yet installed)
 Used for: Native iOS wrapper for the iPhone-as-box surface (mic + AEC + background audio).
 Local files: frontend/ (Phase 9)
 Notes: Level 2 (iPhone surface wrapper). Pattern borrowed from AIRI Stage Pocket; Phase 9.
+
+Name: websockets
+URL: https://github.com/python-websockets/websockets
+License: BSD-3-Clause
+Version/commit: >=12.0 (declared in backend/requirements-realtime.txt; 16.0 installed transitively via pipecat)
+Used for: Async client for the Doubao streaming ASR WebSocket (Phase 2b).
+Local files: backend/requirements-realtime.txt, backend/realtime/doubao_streaming_stt_service.py
+Notes: Level 2 (dependency). asyncio-native; not in V1 requirements.txt.
+
+Name: Volcengine BigASR streaming protocol (火山引擎 大模型流式语音识别) — reference only
+URL: https://www.volcengine.com/docs/6561/1354869
+License: N/A (vendor API docs + public demo snippets; no code copied verbatim)
+Version/commit: docs updated 2026.05.29; public `sauc_python` demo helpers (generate_header/parse_response)
+Used for: Phase 2b binary WebSocket framing in backend/realtime/doubao_streaming_protocol.py.
+Local files: backend/realtime/doubao_streaming_protocol.py, backend/realtime/doubao_streaming_stt_service.py
+Notes: Level 1 (reference). Framing re-implemented from the official protocol spec (4-byte header /
+  gzip-JSON config / audio-only frames / conditional sequence / error frames); endpoint
+  `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel`, resource `volc.bigasr.sauc.duration`,
+  new-console auth `X-Api-Key=DOUBAO_API_KEY`. Validated live (auth + interim/final transcription).
 ```
