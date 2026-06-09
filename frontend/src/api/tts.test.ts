@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { buildTtsStreamUrl, probeTtsStream } from "./tts";
+import { buildTtsStreamUrl, evaluateTtsSpeech } from "./tts";
 
 describe("buildTtsStreamUrl", () => {
   it("encodes Chinese text and optional query params", () => {
@@ -17,48 +17,36 @@ describe("buildTtsStreamUrl", () => {
   });
 });
 
-describe("probeTtsStream", () => {
+describe("evaluateTtsSpeech", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("returns skip for HTTP 204", async () => {
+  it("returns should_speak from evaluate endpoint", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
-        status: 204,
-        ok: false,
-        body: { cancel: vi.fn().mockResolvedValue(undefined) },
-      }),
-    );
-
-    await expect(probeTtsStream("http://127.0.0.1:8000/tts/stream?text=hi")).resolves.toBe("skip");
-  });
-
-  it("returns ok for HTTP 200 and cancels the probe body", async () => {
-    const cancel = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        status: 200,
         ok: true,
-        body: { cancel },
+        json: async () => ({ should_speak: true, reason: "short reply" }),
       }),
     );
 
-    await expect(probeTtsStream("http://127.0.0.1:8000/tts/stream?text=hi")).resolves.toBe("ok");
-    expect(cancel).toHaveBeenCalledOnce();
+    await expect(
+      evaluateTtsSpeech({ text: "你好", decision: "reply" }),
+    ).resolves.toEqual({ should_speak: true, reason: "short reply" });
   });
 
-  it("returns error for HTTP 5xx", async () => {
+  it("throws when evaluate endpoint fails", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
-        status: 503,
         ok: false,
+        status: 503,
       }),
     );
 
-    await expect(probeTtsStream("http://127.0.0.1:8000/tts/stream?text=hi")).resolves.toBe("error");
+    await expect(evaluateTtsSpeech({ text: "你好" })).rejects.toThrow(
+      "TTS evaluate failed with HTTP 503",
+    );
   });
 });

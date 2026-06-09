@@ -103,6 +103,13 @@ contract) — do not hand to Cursor without explicit approval + doc updates.
 - [x] Add TTS adapter placeholder.
 - [x] Define selective speech policy.
 - [x] Voice V1: local TTS via macOS `say` (`MacSayTTSProvider`, `config/tts.json`).
+- [x] Voice V2: local STT via faster-whisper (`FasterWhisperProvider`, base model, PyAV decode).
+- [x] Cloud TTS: 火山/豆包 adapter (`DoubaoTTSProvider`, cloud-gated by `allow_cloud_tts`).
+- [ ] Voice output: strip stage-direction parentheticals from spoken text (Option A, `textForSpeech`) `[Cursor]`.
+- [ ] Latency: reuse 豆包 adapter HTTP connection (persistent httpx client + keep-alive) `[Cursor]`.
+- [ ] Latency: streaming TTS backend — 豆包 streaming synth + GET `/tts/stream` (MP3 chunks) `[Claude spec → Cursor]`.
+- [ ] Latency: streaming TTS frontend — progressive `<audio>` playback; MUST preserve avatar/TTS race fix `[Cursor]`.
+- [ ] Voice cost tracking + per-day/month brake for cloud TTS/STT (parallels S3; not yet covered) `[Claude]`.
 
 ### Documentation
 

@@ -76,6 +76,25 @@ trimming context is NOT the lever — streaming is.
 
 ## Slice S3 — Frontend: sentence-chunked TTS queue (audio starts ~first sentence)
 
+> ⚠️ REVERTED (2026-06-08). S3 was implemented and then rolled back. The
+> sentence queue was correct and race-safe, but it was a **net negative for this
+> product**: Boxi's spoken replies are capped at ~120 chars by the selective
+> speech policy, so they are only 1–2 short sentences. Chunking such a short
+> reply gave ~no "early start" benefit, while adding (a) an audible gap after
+> every 句号 because each sentence is a separate Doubao request (per-request
+> startup latency), and (b) an extra `/tts/evaluate` round-trip before the first
+> sentence. Net result for users: choppier audio, not faster.
+>
+> **Lesson:** sentence-chunked TTS only pays off for LONG (multi-paragraph)
+> replies. For a terse persona with short, capped replies, synthesize the whole
+> reply as ONE continuous Doubao stream on `done` (smooth) — keep S1+S2 (live
+> text) but NOT S3. The DeepSeek generation time (~1.4–2 s) is the floor for
+> time-to-first-audio on short replies; you cannot beat it without bidirectional
+> streaming TTS (feed LLM tokens into a streaming TTS input), which is not worth
+> the complexity here. Revisit S3 only if Boxi ever produces long-form replies.
+
+The original (now-reverted) S3 plan, kept for reference:
+
 - As deltas arrive, accumulate into a buffer; when a sentence boundary is hit
   (。！？!?…\n or a max-length cap), cut a chunk, run Option A stripping, and
   enqueue it to a TTS playback queue.

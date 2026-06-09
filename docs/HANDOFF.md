@@ -1,6 +1,40 @@
 # Handoff For Claude Code And Cursor
 
-## Current State
+## ⚠️ DIRECTION CHANGED — Session 26 (read this first)
+
+The project pivoted to a **V2 rebuild** with a clear vision. New source-of-truth:
+**`docs/ARCHITECTURE_V2.md`** + **`docs/REBUILD_ROADMAP.md`**. See `docs/SESSION_LOG.md`
+Session 26 for the full reasoning. TL;DR:
+
+- **Two cores:** ① full-duplex real-time voice (on memory + personality) ② "person
+  in a box" = a 2.5D PixiJS pixel room. Hardware end-goal: old **iPhone SE2 + 3D
+  shell** as the box (iPhone = surface; brain runs on the Mac; cloud only for
+  DeepSeek/Doubao).
+- **Base decision:** Pipecat (voice) + KEEP our Python soul + PixiJS pixel room.
+  AIRI / Open-LLM-VTuber / OpenAvatarChat = references only, not forks. Steal:
+  Capacitor-iOS, `@ricky0123/vad-web`, Open-LLM-VTuber's echo-cancellation,
+  emotion→expression mapping.
+- **PRIORITY = SOUL FIRST** (user's 80/20: memory + proactive + emotion = ~80% of
+  emotional value; real-time voice = ~20%). The whole VTuber field skips the soul;
+  we already have its scaffolding. So deepen memory/proactive/emotion on the
+  current working app FIRST; voice/box rebuild comes after.
+- **Budget walls are OFF** (`config/budget.json`: monthly=0, daily=0,
+  reasoning=true). Extra LLM calls for the soul are welcome, but place them
+  latency-smart: sync = piggyback structured signals on the one reply call; heavy
+  reflection = background; trivial = local.
+
+**NEXT TASK (new window starts here):** deep-dive memU + the "subjectivity kernel"
+(persistent emotion + relationship dynamics) + awesome-affective-computing, then
+write a **soul-deepening spec** (LLM-driven memory extraction / emotion+relationship
+state / a background reflection layer), incremental on the working app — no rebuild
+yet. Then Claude spec → Cursor implements → Claude reviews.
+
+> There is uncommitted work (the V2 docs, budget walls off, S3 TTS revert). Run
+> `git status` and checkpoint as appropriate before new work.
+
+---
+
+## Current State (pre-pivot reference)
 
 Baseline checkpoint: commit `5005731` (Phase 2–10 MVP batch including behavior ticks, CORS, Vite 6, tick persistence). **Policy: one slice → one checkpoint commit; do not accumulate uncommitted work.**
 

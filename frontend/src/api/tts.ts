@@ -53,21 +53,33 @@ export function buildTtsStreamUrl(payload: {
   return `${apiBaseUrl}/tts/stream?${params.toString()}`;
 }
 
-export type TtsStreamProbeResult = "ok" | "skip" | "error";
+export type TTSEvaluateResponse = {
+  should_speak: boolean;
+  reason: string;
+};
 
-export async function probeTtsStream(
-  url: string,
-  signal?: AbortSignal,
-): Promise<TtsStreamProbeResult> {
-  const response = await fetch(url, { method: "GET", signal });
-  if (response.status === 204) {
-    return "skip";
-  }
+export async function evaluateTtsSpeech(payload: {
+  text: string;
+  decision?: string;
+  avatarState?: string;
+  force?: boolean;
+}): Promise<TTSEvaluateResponse> {
+  const response = await fetch(`${apiBaseUrl}/tts/evaluate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      text: payload.text,
+      decision: payload.decision,
+      avatar_state: payload.avatarState,
+      force: payload.force ?? false,
+    }),
+  });
+
   if (!response.ok) {
-    return "error";
+    throw new Error(`TTS evaluate failed with HTTP ${response.status}`);
   }
-  await response.body?.cancel();
-  return "ok";
+
+  return (await response.json()) as TTSEvaluateResponse;
 }
 
 export async function fetchTtsStatus(): Promise<TTSStatusResponse> {

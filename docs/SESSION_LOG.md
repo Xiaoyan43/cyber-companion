@@ -1929,3 +1929,42 @@
 不要改动的边界：
 
 - 未改 `/stt/transcribe` 契约；`faster_whisper` / mock / `CYBER_COMPANION_STT_MODE=mock` 保留。
+
+## 2026-06-09 - Session 26 (Claude：架构转向 V2 重建 + 灵魂优先)
+
+本次完成：
+
+- 与用户对齐全貌与两个核心：① 全双工实时对话（记忆+人格之上）② 盒中小人（2.5D 像素房间，屏=玻璃）。硬件终局：旧 iPhone SE2 + 3D 打印壳当“盒子”（iPhone=壳/surface，大脑在 Mac，云端只放 DeepSeek/豆包）。
+- 调研开源同类（Open-LLM-VTuber / Project AIRI / Soul of Waifu / OpenAvatarChat / super-agent-party / memU 等）并做基座决策。
+- 写了两份**新源头文档**：`docs/ARCHITECTURE_V2.md`（目标架构）+ `docs/REBUILD_ROADMAP.md`（9 阶段路线）。
+- 关键决策（已写进 ARCHITECTURE_V2）：基座 = Pipecat（语音）+ 保留 Python 灵魂 + PixiJS 像素房间（自建）；AIRI 等只当参考不 fork（Vue/TS/xsAI，基于它要重写灵魂、像素非即插即用）；iPhone surface 用 Capacitor；脑/壳 WebSocket 分离。狠抄：Capacitor-iOS、`@ricky0123/vad-web`、Open-LLM-VTuber 的回声消除/无耳机打断、情绪→表情映射。
+- **战略转向（用户选 1）：灵魂优先。** 洞见：记忆+主动+情绪 ≈ 80% 情绪价值，实时语音 ≈ 20%。调研证实整条 VTuber 赛道都在卷 20%、几乎不做 80%，而我们已有 80% 脚手架（memory/behavior 含 proactive/mood）。故先把灵魂做深，语音+盒子作为之后沉浸层。
+- 预算墙全关（`config/budget.json`：monthly=0、daily=0、allow_reasoning_model=true）。用户固定大额套餐，不怕烧 API。
+- 灵魂设计共识：**可额外烧 LLM**，但按延迟智能放置 —— ① 同步=让那一次回复调用顺便吐结构化信号（情绪/记忆/关系）；② 后台=反思/做梦（整理记忆、演进关系叙事、形成印象，延迟零）；③ 高频琐碎留本地。最大三处收益：LLM 记忆抽取（M2 升级）、LLM 情绪/关系更新、后台反思层。
+
+下次接着做（新窗口从这里起）：
+
+- **深挖 memU + “subjectivity kernel”（持久情绪+关系动态+零额外 LLM，疑似用户说的 Resonant）+ awesome-affective-computing**，产出一份“灵魂深化”实现方案：LLM 驱动但延迟智能放置，升级 记忆抽取 / 情绪+关系状态 / 新增后台反思层。在现有能跑的 app 上小步迭代，**不重建**。出完按规矩 Claude spec → Cursor 实现 → Claude 验收。
+- 之后才进 V2 重建（Pipecat 语音 + PixiJS 房间 + Capacitor iPhone 壳），照 `docs/REBUILD_ROADMAP.md`。
+
+已知问题：
+
+- 一批**未提交**改动：`config/budget.json`（墙关了）、`config/tts.json`、`docs/PHASE_STREAMING.md`（S3 撤回说明）、`docs/TODO.md`、`frontend/src/api/tts.*`、新增 `docs/ARCHITECTURE_V2.md` / `docs/REBUILD_ROADMAP.md`。新窗口先 `git status` 确认、视情况 checkpoint。
+- S3（句级 TTS）已撤回（短回复反而卡；改回整段一次流式）。语音延迟现状：松手→豆包 ASR ~2.7s（文件识别，准但不快）→DeepSeek ~1.5s→TTS。真·快需流式 ASR（留 V2 语音阶段）。
+
+相关文件：
+
+- `docs/ARCHITECTURE_V2.md`（**新源头**）、`docs/REBUILD_ROADMAP.md`
+- `config/budget.json`（墙已关）、`docs/PHASE_STREAMING.md`（S3 撤回）
+- 灵魂层（留用核心）：`backend/app/memory/`、`backend/app/behavior/`、persona/provider/file-gateway
+
+测试结果：
+
+- 本会话以架构/调研/文档为主，未改后端逻辑（仅改 `config/budget.json` + 文档）。上次 Cursor 记录 `npm run check` = 148 后端测试 + tsc 通过。
+
+不要改动的边界：
+
+- 灵魂层是 V2 保留核心，深化不推倒。
+- 预算墙保持关闭（用户选择），但保留配置旋钮以便日后重启。
+- 灵魂的额外 LLM 调用**别放在“用户等回复”的关键路径上**（同步只用 piggyback，重活后台）。
+- 先做灵魂，语音+盒子是之后阶段。

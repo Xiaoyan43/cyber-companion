@@ -1,6 +1,6 @@
 {
-  "monthly_usd_limit": 10,
-  "daily_llm_turn_limit": 200,
+  "monthly_usd_limit": 0,
+  "daily_llm_turn_limit": 0,
   "max_input_tokens_per_turn": 4000,
   "max_output_tokens_per_turn": 300,
   "max_user_input_tokens": 1500,
@@ -9,7 +9,7 @@
   "summary_batch_size": 6,
   "behavior_tick_retention": 200,
   "auto_memory_write": true,
-  "allow_reasoning_model": false,
-  "allow_cloud_stt": false,
+  "allow_reasoning_model": true,
+  "allow_cloud_stt": true,
   "allow_cloud_tts": true
 }

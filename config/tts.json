@@ -15,7 +15,7 @@
     },
     "doubao": {
       "enabled": true,
-      "model": "BV700_streaming",
+      "model": "zh_female_cancan_uranus_bigtts",
       "cloud": true
     },
     "openai_tts": {
