@@ -113,3 +113,5 @@ curl -N http://127.0.0.1:8100/v1/chat/completions \
 With `SOUL_LLM_API_KEY` set, add `-H "Authorization: Bearer $SOUL_LLM_API_KEY"`.
 Only the **latest user message** is passed to the soul; inbound history is ignored.
 Spoken deltas strip `<<<BOXI_SIGNALS>>>`; memory writes run off-path via `remember()`.
+
+**RTC Stage 2 (browser demo):** see `docs/RTC_DEMO_SETUP.md` + `scripts/soul_tunnel.sh`.

@@ -413,6 +413,15 @@ Local files: backend/realtime/doubao_realtime_protocol.py, backend/realtime/doub
   backend/realtime/run_voice.py
 Notes: Level 1 (reference). Framing adapted from the official `realtime_dialog` sample
   (`generate_header` / `parse_response` shape); endpoint `wss://openspeech.bytedance.com/api/v3/realtime/dialogue`,
-  resource `volc.speech.dialog`, auth `X-Api-App-ID` + `X-Api-Access-Key` via env
+  resource `volc.speech.dialog`,   auth `X-Api-App-ID` + `X-Api-Access-Key` via env
   (`DOUBAO_RT_APP_ID`, `DOUBAO_RT_ACCESS_TOKEN`). Not the RTC SDK.
+
+Name: Volcengine rtc-aigc-demo (reference harness only — not vendored)
+URL: https://github.com/volcengine/rtc-aigc-demo
+License: BSD-3-Clause
+Version/commit: main @ 2025–2026 (v1.6.0 web + Server proxy)
+Used for: V2 RTC Stage 2 — adjacent clone for validating OutputMode 0/1 + StartVoiceChat;
+  runbook in `docs/RTC_DEMO_SETUP.md`.
+Local files: docs/RTC_DEMO_SETUP.md, scripts/soul_tunnel.sh
+Notes: Level 1 (reference). Clone outside repo; configure `Server/scenes/*.json` only in the clone.
 ```

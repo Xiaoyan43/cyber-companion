@@ -2962,3 +2962,41 @@
 
 - **未改 `backend/app/**`**、**`frontend/**`**；`CompanionBrain` 只读复用。
 - V1 HTTP + Pipecat pipeline / Dialog S2S 路径未动。
+
+## 2026-06-10 - Session 34 (V2 RTC Stage 2 — demo runbook + tunnel)
+
+本次完成：
+
+- **`docs/RTC_DEMO_SETUP.md`**：Stage 2a/2b 跑通手册——邻目录 clone
+  `volcengine/rtc-aigc-demo`、填 RTC/IAM/Doubao 实时 creds、OutputMode 0→1 切换、
+  `LLMConfig.CustomLLM` 字段对照 [6348/2123348](https://www.volcengine.com/docs/6348/2123348) /
+  [6348/1558163](https://www.volcengine.com/docs/6348/1558163)、troubleshooting。
+- **`scripts/soul_tunnel.sh`**：起 `soul_llm_server` + cloudflared（默认）或 ngrok，打印公网
+  `/v1/chat/completions` URL 供 demo JSON 粘贴。
+- **`.env.example`**：新增 `VOLC_RTC_*`、`VOLC_ACCESS_KEY`/`VOLC_SECRET_KEY`、`SOUL_TUNNEL_PROVIDER`。
+- **`soul_llm_server.py` 未改**——云端 server-to-server 调 Bearer 即可，无需 CORS。
+
+下次接着做：
+
+- **用户手动 2a**：按 runbook 跑 pure RTC（OutputMode 0），确认 sub-second + barge-in。
+- **用户手动 2b**：tunnel + OutputMode 1 + CustomLLM → 验跨轮 memory + 延迟对比。
+- V2 RTC Stage 3 — emotion extension → soul kernel。
+
+已知问题：
+
+- 本 session **未做 live rtc-aigc-demo 联调**（需用户 RTC/IAM/RT 凭证 + 浏览器 mic）。
+- `S2SConfig` 具体 JSON 以控制台「接入 API」粘贴为准；runbook 给骨架 + 字段表。
+
+相关文件：
+
+- `docs/{RTC_DEMO_SETUP.md,V2_RTC_STAGE2_SPEC.md,TODO.md,SESSION_LOG.md,OPEN_SOURCE_REUSE.md}`
+- `scripts/soul_tunnel.sh`
+- `.env.example`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**254 passed** + tsc green（无代码测试变更）。
+
+不要改动的边界：
+
+- **未改 `backend/app/**`**、**`frontend/**`**、**未 vendor demo**。

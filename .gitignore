@@ -3,6 +3,12 @@
 .env.*
 !.env.example
 
+# Downloaded credential files — never commit (Volcengine/cloud console dumps)
+AccessKey*.txt
+AccessKey*.csv
+*ak_sk*
+*secret*.txt
+
 # Python
 __pycache__/
 *.py[cod]

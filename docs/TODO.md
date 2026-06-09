@@ -139,10 +139,10 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
     soul_llm_server.py`, wraps `CompanionBrain`). **Real-DeepSeek smoke PASS (Session 30):** OpenAI
     shape (stream+non-stream), zero trailer leak, **memory recall across turns** (Boxi recalled
     "Acme"). **Spec: `docs/V2_RTC_STAGE1_SPEC.md`.**
-  - [ ] **Stage 2 — OutputMode-1 over RTC, validated via official demo `[Claude→Cursor]`.** 2a run
-    `rtc-aigc-demo` as-is (pure, prove RTC+creds); 2b → OutputMode 1 + custom-LLM = Stage-1 endpoint
-    (via tunnel). Don't fork the demo; repo gets runbook + tunnel helper only. IAM AK/SK complete.
-    **Spec: `docs/V2_RTC_STAGE2_SPEC.md`.**
+  - [ ] **Stage 2 — OutputMode-1 over RTC, validated via official demo `[Claude→Cursor]`.**
+    Repo side done: `docs/RTC_DEMO_SETUP.md`, `scripts/soul_tunnel.sh`, `.env.example` RTC/IAM vars.
+    **User manual:** 2a pure RTC (OutputMode 0); 2b OutputMode 1 + custom-LLM = Stage-1 endpoint
+    (via tunnel). Don't fork the demo. **Spec: `docs/V2_RTC_STAGE2_SPEC.md`.**
   - [ ] Stage 3 — emotion-recognition extension → soul appraisal/kernel.
 - [ ] V2 Phase 4–9 — turn-taking polish, PixiJS room, room reactivity, actions, personal files, the box.
 
