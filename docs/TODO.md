@@ -78,7 +78,8 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
   companion — and the same weakness degrades Chinese **keyword retrieval ranking**
   (`score_memory` token match). Fix: CJK bigram (or jieba) segmentation in `tokenize`
   so cross-type linking + keyword recall actually fire on Chinese. Touches retrieval —
-  `[Claude]`-class. Re-smoke links after.
+  `[Claude]`-class but **delegated to Cursor via spec**. Decision: jieba (MIT) + graceful
+  fallback; linker ratio 0.34→0.25. **Spec: `docs/SD5b_SPEC.md`.** Claude re-smokes after.
 - [x] **SD config knobs `[Cursor-ok]`.** `llm_memory_extraction` (SD-3);
   `enable_reflection`, `reflection_every_n_turns`, `llm_summary` (SD-4) in
   `BudgetConfig` + `config/budget*.json`.
