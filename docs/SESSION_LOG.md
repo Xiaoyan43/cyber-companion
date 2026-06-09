@@ -2468,3 +2468,14 @@
 
 - 未改 `memory_links` 表/契约、SD-5 一跳扩展、`context_builder` SD-1..4 行为。
 - 确定性 only；英文路径与 dedup 套件保持绿色。
+
+## 2026-06-10 - Session 28b (Claude: SD-5b diff review + Chinese re-smoke)
+
+- Reviewed Cursor SD-5b diff (`8a25c37`): jieba lazy-import + fallback, ASCII+CJK
+  segments, stopword filter, ratio 0.25, 4 new tests. Faithful to spec, diff confined.
+  Full gate green (211 + tsc; jieba 0.42.1).
+- **Real-DeepSeek re-smoke PASS:** 6-turn Chinese chat → `memory_links` = 4 rows
+  (2 logical), e.g. `job_progress`↔`recent_event` sharing Acme/项目. Pre-jieba: 0.
+  Writers seen: llm / rule_based / reflection. Key env-only; DB + script deleted.
+- SD-5b done & verified. **Soul deepening SD-1..SD-5b complete + real-DeepSeek validated.**
+- Reminder: DeepSeek key was pasted in chat — user should rotate it.

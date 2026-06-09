@@ -72,7 +72,8 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
 - [x] **SD-5b — CJK-aware tokenizer for linker + retrieval `[Claude]` (done @ this commit).**
   jieba segmentation in `retrieval.tokenize` (lazy import + fallback); linker ratio
   0.34→0.25; Chinese recall + cross-type link unit tests. **Spec: `docs/SD5b_SPEC.md`.**
-  Real-DeepSeek re-smoke (`memory_links > 0` on Chinese) remains a Claude step.
+  **Claude re-smoke PASS (Session 28b):** Chinese 6-turn smoke now forms 2 logical
+  `memory_links` (was 0 pre-jieba) — `job_progress`↔`recent_event` sharing Acme/项目.
 - [x] **SD config knobs `[Cursor-ok]`.** `llm_memory_extraction` (SD-3);
   `enable_reflection`, `reflection_every_n_turns`, `llm_summary` (SD-4) in
   `BudgetConfig` + `config/budget*.json`.
