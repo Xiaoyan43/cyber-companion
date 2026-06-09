@@ -136,10 +136,13 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
   + our custom LLM; **soul hosted as an OpenAI-compatible endpoint.** Reuse `volcengine/rtc-aigc-demo`.
   Creds: RTC AppId/AppKey (have) + account **AK/SK** (needed for StartVoiceChat — pending).
   - [x] **Stage 1 — soul as OpenAI-compatible `/v1/chat/completions` endpoint** (`backend/realtime/
-    soul_llm_server.py`, wraps `CompanionBrain`; testable via curl, no new creds). **Spec:
-    `docs/V2_RTC_STAGE1_SPEC.md`.**
-  - [ ] Stage 2 — adapt rtc-aigc-demo (web client + orchestration; OutputMode 1; custom-LLM → Stage-1
-    endpoint via tunnel; AK/SK). Surface moves to browser (aligns with iPhone Capacitor box).
+    soul_llm_server.py`, wraps `CompanionBrain`). **Real-DeepSeek smoke PASS (Session 30):** OpenAI
+    shape (stream+non-stream), zero trailer leak, **memory recall across turns** (Boxi recalled
+    "Acme"). **Spec: `docs/V2_RTC_STAGE1_SPEC.md`.**
+  - [ ] **Stage 2 — OutputMode-1 over RTC, validated via official demo `[Claude→Cursor]`.** 2a run
+    `rtc-aigc-demo` as-is (pure, prove RTC+creds); 2b → OutputMode 1 + custom-LLM = Stage-1 endpoint
+    (via tunnel). Don't fork the demo; repo gets runbook + tunnel helper only. IAM AK/SK complete.
+    **Spec: `docs/V2_RTC_STAGE2_SPEC.md`.**
   - [ ] Stage 3 — emotion-recognition extension → soul appraisal/kernel.
 - [ ] V2 Phase 4–9 — turn-taking polish, PixiJS room, room reactivity, actions, personal files, the box.
 
