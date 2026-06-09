@@ -158,3 +158,8 @@ contract) — do not hand to Cursor without explicit approval + doc updates.
 ### Maintenance
 
 - [x] Review FastAPI TestClient/httpx2 deprecation warning.
+- [ ] Fix stale `test_stt_status_route` `[Cursor]` (顺手修). It asserts
+  `allow_cloud_stt is False` but Session-26 `config/budget.json` committed it as
+  `true` (walls off) → 1 red in `npm run check`. Proper fix: isolate the test's own
+  `budget.json` in a tmp `CYBER_COMPANION_CONFIG_DIR` so it's deterministic,
+  rather than flipping the assertion to match the mutable live config.

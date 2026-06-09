@@ -346,9 +346,13 @@ Recommended order: **SD-1 → SD-2 → SD-3 → SD-4**, SD-5 later. SD-1 is the 
   `/chat/complete` already rebuilds content from `parsed.content`), tests in
   `backend/tests/test_behavior.py`. Detailed brief: `docs/SD1_SPEC.md`.
 - **SD-2:** `memory/schema.py` (+`relationship_state` table), `memory/database.py`
-  (+`RelationshipStateRecord`), `memory/store.py` (get/update relationship),
-  `behavior/mood.py` (split + appraisal math + decay), `memory/context_builder.py`
-  (`[Relationship]`/`[Impression]` blocks), `docs/MEMORY_DESIGN.md`.
+  (+`RelationshipStateRecord` + seed/back-fill), `memory/store.py` (get/update
+  relationship), `behavior/mood.py` (split + decay) + new `behavior/kernel.py`
+  (`apply_signals_to_kernel`), `behavior/engine.py` (tone + relationship nudges),
+  `backend/app/main.py` (kernel wiring + `GET /memory/relationship`), `schemas.py`
+  (+`RelationshipStateSchema`), `memory/context_builder.py`
+  (`[Relationship]`/`[Impression]` blocks), frontend "Boxi 怎么看你" panel, tests,
+  `docs/MEMORY_DESIGN.md`. Detailed brief: `docs/SD2_SPEC.md`.
 - **SD-3:** `memory/write_policy.py` (+`write_memories_from_signals`, keep regex),
   `backend/app/main.py` (route signals after persist), tests.
 - **SD-4:** new `backend/app/reflection/` module (trigger + jobs),
