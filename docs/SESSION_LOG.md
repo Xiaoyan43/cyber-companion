@@ -2551,3 +2551,94 @@
 不要改动的边界：
 
 - 未改 `backend/app/main.py`、soul 模块、V1 frontend；未 `pip install pipecat`、未装 PixiJS。
+
+## 2026-06-10 - Session 35 (V2 Phase 1 — Pipecat voice skeleton)
+
+本次完成：
+
+- **V2 Phase 1 checkpoint**：`backend/realtime/run_voice.py` — Pipecat **1.3.0** 本地音频管线
+  （`LocalAudioTransport` → `WhisperSTTService` faster-whisper `base` → `OpenAILLMService`
+  DeepSeek → `MacSayTTSService` macOS `say` 占位 TTS），`SileroVADAnalyzer` 打断。
+  API 起手自官方 `examples/getting-started/06a-voice-agent-local.py`（`PipelineWorker` +
+  `WorkerRunner` + `LLMContextAggregatorPair`），非 spec 臆造类名。
+- `backend/realtime/mac_say_tts.py` 占位 TTS；`backend/requirements-realtime.txt` 扩充
+  （pyaudio、faster-whisper、onnxruntime 1.23.2 workaround、numpy pin）。
+- `backend/tests/test_realtime_voice.py`（`pytest.importorskip`）；README「Run the voice skeleton」段。
+
+下次接着做：
+
+- V2 Phase 2 — Doubao streaming STT/TTS as Pipecat services。
+- 用户本地 mic 全链路验收（speak → voice reply → interrupt）。
+
+已知问题：
+
+- 外接音箱 + 笔记本：打断 best-effort（half-duplex），与 ARCHITECTURE_V2 预期一致。
+- `pipecat-ai` 声明 `onnxruntime~=1.24.3` 在 macOS x86_64 不可用，用 1.23.2。
+- numba 曾把 numpy 升到 2.2.6 致 scipy 损坏；`requirements-realtime.txt` 已 pin `numpy<2.3`。
+
+相关文件：
+
+- `backend/realtime/{run_voice.py,mac_say_tts.py,README.md}`
+- `backend/requirements-realtime.txt`
+- `backend/tests/test_realtime_voice.py`
+- `docs/TODO.md`、`docs/OPEN_SOURCE_REUSE.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**218 passed** + tsc。
+- `python -m backend.realtime.run_voice` 启动烟测：Whisper 加载 + pipeline ready（~7s），
+  Ctrl+C 干净退出；**全链路 mic 对话 + 打断需用户本地对着麦验收**（agent 环境无真实 mic 交互）。
+
+不要改动的边界：
+
+- 未改 `backend/app/**`、`frontend/**`；pipecat 未进 `requirements.txt` / V1 gate。
+- Soul/behavior/memory 接线留 Phase 3；`CompanionBrain` stub 未动。
+
+## 2026-06-10 - Session 36 (V2 Phase 2 — Doubao TTS + flash STT)
+
+本次完成：
+
+- **Task 0**：Pipecat **1.3.0** 无 Volcengine/Doubao/ByteDance 内置 STT/TTS service
+  （`pipecat.services` 模块列表无匹配项）→ 自建 Pipecat wrapper。
+- **Task 1**：`backend/realtime/doubao_tts_service.py` — `DoubaoTTSService` 驱动现有
+  `DoubaoTTSProvider.synthesize_stream`，PCM **24 kHz**，`asyncio.to_thread` 不阻塞事件循环。
+- **Task 2（staged fallback）**：`backend/realtime/doubao_stt_service.py` — `DoubaoFlashSTTService`
+  复用 `DoubaoASRProvider` 整段 flash ASR（VAD 段末一次 HTTP）；**streaming WS ASR 留 Phase 2b**。
+- **Task 3**：`run_voice.py` 默认 `CYBER_COMPANION_VOICE_STT=doubao` /
+  `CYBER_COMPANION_VOICE_TTS=doubao`；`whisper` / `mac_say` 可 env 回退；输出采样率随 TTS 后端
+  （Doubao 24 kHz / say 22050 Hz）。
+
+下次接着做：
+
+- **V2 Phase 2b** — Doubao streaming WebSocket ASR（降 post-release 等待）。
+- 用户戴耳机全链路验收（speak → 灿灿 TTS → interrupt）。
+- V2 Phase 3 — Companion Brain soul 接线。
+
+已知问题：
+
+- Flash STT 仍是 VAD 段末一次性识别 → 说完话后仍有云端 RTT（比 streaming 慢，但已无本地 Whisper CPU）。
+- 外接音箱回声未修；Phase 2 测试请戴耳机。
+- Pipecat 1.3.0 无 Doubao 官方 service，wrapper 需随 API 变动维护。
+
+相关文件：
+
+- `backend/realtime/{doubao_tts_service.py,doubao_stt_service.py,run_voice.py,README.md}`
+- `backend/tests/test_realtime_voice.py`
+- `docs/TODO.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**220 passed** + tsc。
+- Doubao API 烟测：TTS「你好」→ 3 chunks / 56300 bytes PCM；ASR 静音段 → 预期 `No speech detected`。
+- `run_voice` 启动：Doubao 默认 **~3.5s** ready（无 Whisper 模型加载）；对比 `whisper+mac_say` **~5.1s**。
+- **延迟/CPU 前后对比（定性 + 启动实测）**：
+  - Phase 1：本地 Whisper `base` 每次识别 CPU 飙高、风扇转；启动含模型加载 ~7s。
+  - Phase 2：STT/TTS 全云端，idle 无 faster-whisper 推理；启动 ~3.5s；段末 flash ASR 仍有
+    ~1–2s 云端 RTT（待 2b streaming 消除 post-release 等待）。
+- **全链路 mic 对话 + 戴耳机验收**：agent 无真实 mic 交互，需用户本地对着麦跑
+  `python -m backend.realtime.run_voice`。
+
+不要改动的边界：
+
+- 未改 `backend/app/**`、`frontend/**`；pipecat 未进 V1 gate。
+- Soul/behavior/memory 接线留 Phase 3。

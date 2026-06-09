@@ -1,4 +1,19 @@
 # V2 realtime brain deps — installed in Phase 1, not by the V1 gate.
 # Do not add these to requirements.txt; keep the V1 install path unchanged.
+#
+# Install (from repo root, inside .venv):
+#   brew install portaudio          # macOS — needed to build/use PyAudio
+#   pip install -r backend/requirements-realtime.txt
+#
+# Pipecat 1.3.0 pins onnxruntime~=1.24.3, which may be unavailable on some
+# platforms (e.g. macOS x86_64). onnxruntime==1.23.2 is a known workaround.
+#
+# Extras covered here: local (PyAudio), whisper (faster-whisper), openai (DeepSeek),
+# silero (built-in VAD — uses onnxruntime).
 
 pipecat-ai==1.3.0
+pyaudio~=0.2.14
+faster-whisper~=1.2.1
+python-dotenv>=1.0.0
+onnxruntime==1.23.2
+numpy>=1.26.0,<2.3

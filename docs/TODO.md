@@ -90,11 +90,12 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
 - [x] **V2 Phase 1 — Pipecat voice skeleton `[Claude→Cursor]`.** mic→VAD→STT→DeepSeek→TTS→speaker,
   interruptible; standalone `backend/realtime/run_voice.py`, V1 untouched; placeholder STT/TTS OK
   (Doubao streaming = Phase 2; soul = Phase 3). **Spec: `docs/V2_PHASE1_SPEC.md`.**
-- [ ] **V2 Phase 2 — Doubao streaming STT/TTS as Pipecat services `[Claude→Cursor]`.**
-  Move voice I/O to Doubao cloud → kills local-Whisper CPU/fans + post-release latency.
-  TTS port is easy (existing `synthesize_stream`); streaming WS ASR is the hard part
-  (staged fallback: TTS + flash STT first if WS slips → Phase 2b). Echo/half-duplex is the
-  next slice (test with headphones). **Spec: `docs/V2_PHASE2_SPEC.md`.**
+- [x] **V2 Phase 2 — Doubao streaming STT/TTS as Pipecat services `[Claude→Cursor]`.**
+  TTS = `DoubaoTTSService` (PCM 24 kHz, `synthesize_stream`); STT = **flash fallback**
+  `DoubaoFlashSTTService` (reuses `DoubaoASRProvider`) — streaming WS ASR deferred to Phase 2b.
+  Env toggles `CYBER_COMPANION_VOICE_STT` / `CYBER_COMPANION_VOICE_TTS`; Whisper/mac_say kept as
+  fallbacks. **Spec: `docs/V2_PHASE2_SPEC.md`.**
+- [ ] **V2 Phase 2b — Doubao streaming WS ASR** (replace flash one-shot STT for lower latency).
 - [ ] V2 Phase 3 — Companion Brain (soul in the LLM slot).
 - [ ] V2 Phase 4–9 — turn-taking, PixiJS room, room reactivity, actions, personal files, the box.
 

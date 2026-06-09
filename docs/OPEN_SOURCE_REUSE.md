@@ -358,7 +358,7 @@ License: BSD-2-Clause
 Version/commit: 1.3.0 (pinned in backend/requirements-realtime.txt)
 Used for: V2 realtime voice pipeline (frame-processor, interruption, transport-agnostic).
 Local files: backend/requirements-realtime.txt, backend/realtime/ (Phase 1+)
-Notes: Level 4 (base voice). Declared Phase 0; install in Phase 1 — not in V1 requirements.txt.
+Notes: Level 4 (base voice). Declared Phase 0; installed Phase 1 via `backend/requirements-realtime.txt` — not in V1 requirements.txt. macOS x86_64 may need `onnxruntime==1.23.2` workaround (1.24.3 unavailable).
 
 Name: PixiJS
 URL: https://pixijs.com/
