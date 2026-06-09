@@ -19,7 +19,9 @@ OUTPUT_PROTOCOL = (
     "Keys: avatar_state(idle/happy/sad/angry/sleepy/thinking/talking/worried/annoyed/silent),\n"
     "decision, appraisal{valence -1..1, arousal 0..1, goal_relevance 0..1, note},\n"
     "relationship{trust,closeness,tension deltas -0.1..0.1},\n"
-    "memory[{type,content,importance 0..1,confidence 0..1,tags}]. "
+    "memory[{type,content,importance 0..1,confidence 0..1,tags}] — type MUST be one of:\n"
+    "stable_profile, recent_event, emotion_state, project, job_progress, reminder,\n"
+    "relationship_state, behavior_preference. "
     "Put <<<BOXI_SIGNALS>>> nowhere else."
 )
 

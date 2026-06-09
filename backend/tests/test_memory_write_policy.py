@@ -316,6 +316,66 @@ def test_record_turn_memories_falls_back_to_regex_m2(store: MemoryStore) -> None
     assert written[0].metadata["writer"] == "rule_based"
 
 
+def test_record_turn_memories_falls_back_when_all_llm_items_invalid(store: MemoryStore) -> None:
+    written = record_turn_memories(
+        store,
+        user_input="记住明天改简历",
+        signals={
+            "memory": [
+                {"type": "bogus", "content": "Invalid type should be rejected", "confidence": 0.9}
+            ]
+        },
+        source_message_id=None,
+        budget=BudgetConfig(llm_memory_extraction=True),
+    )
+
+    assert len(written) == 1
+    assert written[0].type == "reminder"
+    assert written[0].metadata["writer"] == "rule_based"
+
+
+def test_record_turn_memories_valid_m3_does_not_also_run_regex(store: MemoryStore) -> None:
+    written = record_turn_memories(
+        store,
+        user_input="我叫张伟",
+        signals={
+            "memory": [
+                {
+                    "type": "stable_profile",
+                    "content": "User prefers concise bullet replies",
+                    "confidence": 0.85,
+                }
+            ]
+        },
+        source_message_id=None,
+        budget=BudgetConfig(llm_memory_extraction=True),
+    )
+
+    assert len(written) == 1
+    assert written[0].metadata["writer"] == "llm"
+    assert "concise bullet" in written[0].content
+    # The regex M2 path (which would have written a "User profile: 张伟" stable_profile)
+    # must not run when M3 already wrote something.
+    assert len(store.list_memories(type="stable_profile", limit=10)) == 1
+
+
+def test_record_turn_memories_invalid_m3_and_no_regex_writes_nothing(store: MemoryStore) -> None:
+    written = record_turn_memories(
+        store,
+        user_input="嗯",
+        signals={
+            "memory": [
+                {"type": "bogus", "content": "Invalid type should be rejected", "confidence": 0.9}
+            ]
+        },
+        source_message_id=None,
+        budget=BudgetConfig(llm_memory_extraction=True),
+    )
+
+    assert written == []
+    assert store.list_memories(limit=10) == []
+
+
 def test_record_turn_memories_respects_llm_knob_off(store: MemoryStore) -> None:
     written = record_turn_memories(
         store,

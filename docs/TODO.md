@@ -49,12 +49,15 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
   persisted/replayed) in `context_builder.build_provider_context`. A trailing system
   message does NOT work. **Spec: `docs/SD1c_SPEC.md`.** Highest priority (pairs with
   SD-1b to actually make signals flow).
-- [ ] **SD-3b — M2 fallback when M3 writes nothing + valid memory types `[Claude]`.**
+- [~] **SD-3b — M2 fallback when M3 writes nothing + valid memory types `[Claude]`.**
+  Code + tests + gate landed (Session 28, 195 backend tests + tsc green); **Done
+  criterion #2 (real-DeepSeek re-smoke) still pending — env has no `DEEPSEEK_API_KEY`.**
   SD-1c payoff smoke: signals now flow (trust 0.5→0.63, closeness 0.2→0.36 ✅) but
-  factual memories vanished — `record_turn_memories` commits to M3 when `memory[]` is
-  non-empty and never falls back to M2, so LLM items that fail validation (type ∉
-  whitelist) drop the turn's write. Fix: fall back to M2 when M3 yields nothing;
-  enumerate allowed memory types in `OUTPUT_PROTOCOL`. **Spec: `docs/SD3b_SPEC.md`.**
+  factual memories vanished — `record_turn_memories` committed to M3 when `memory[]` is
+  non-empty and never fell back to M2, so LLM items that fail validation (type ∉
+  whitelist) dropped the turn's write. Fix: M3 empty → fall through to regex M2
+  (`write_policy.py`); enumerate the 8 allowed memory types in `OUTPUT_PROTOCOL`
+  (`persona.py`); `MEMORY_DESIGN.md` Auto-Write note updated. **Spec: `docs/SD3b_SPEC.md`.**
 - [ ] **SD-5 (optional) — Memory links + top-down retrieval `[Claude]`.**
   `memory_links` table + deterministic cross-type linker (in reflection) + 1-hop
   retrieval expansion + consolidation candidate polish. **Spec ready:

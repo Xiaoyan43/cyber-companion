@@ -349,12 +349,17 @@ def record_turn_memories(
     if config.llm_memory_extraction and isinstance(signals, dict):
         sig_mem = signals.get("memory")
         if isinstance(sig_mem, list) and sig_mem:
-            return write_memories_from_signals(
+            written = write_memories_from_signals(
                 store,
                 sig_mem,
                 source_message_id=source_message_id,
                 budget=config,
             )
+            if written:
+                return written
+            # Every LLM memory item was rejected (type not whitelisted, content
+            # too short, or confidence below threshold). Fall through to the regex
+            # M2 path so the turn does not silently lose its memory write.
     return maybe_write_memories_from_turn(
         store,
         user_input=user_input,
