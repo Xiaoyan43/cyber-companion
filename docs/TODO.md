@@ -49,9 +49,13 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
   persisted/replayed) in `context_builder.build_provider_context`. A trailing system
   message does NOT work. **Spec: `docs/SD1c_SPEC.md`.** Highest priority (pairs with
   SD-1b to actually make signals flow).
-- [~] **SD-3b — M2 fallback when M3 writes nothing + valid memory types `[Claude]`.**
-  Code + tests + gate landed (Session 28, 195 backend tests + tsc green); **Done
-  criterion #2 (real-DeepSeek re-smoke) still pending — env has no `DEEPSEEK_API_KEY`.**
+- [x] **SD-3b — M2 fallback when M3 writes nothing + valid memory types `[Claude]` (done @ Session 28).**
+  Code + tests + gate landed (195 tests + tsc); **Done criterion #2 PASSED on real
+  DeepSeek** (Session 28, 7-turn smoke): zero-leak ✅, signals flowed
+  (trust 0.50→0.52 / closeness 0.20→0.22 / familiarity 0→0.07 / tension 0→0.17),
+  **7 factual memories persisted with `writer="llm"`** (M3 validated — profile/project/
+  job_progress/reminder), SD-4 impression written, reflection fired. The vanished-facts
+  regression is fixed.
   SD-1c payoff smoke: signals now flow (trust 0.5→0.63, closeness 0.2→0.36 ✅) but
   factual memories vanished — `record_turn_memories` committed to M3 when `memory[]` is
   non-empty and never fell back to M2, so LLM items that fail validation (type ∉
@@ -65,6 +69,16 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
   consolidation candidate set restricted to `FACTUAL_MEMORY_TYPES`. `docs/MEMORY_DESIGN.md`
   updated. 207 backend tests + tsc green (+12 `test_memory_links.py`). Spec:
   `docs/SD5_SPEC.md`.
+- [ ] **SD-5b — CJK-aware tokenizer for linker + retrieval `[Claude]`.** Real-DeepSeek
+  Session 28 smoke: SD-5 linker formed **0 links** on Chinese memories. Root cause:
+  `retrieval.tokenize` (`TOKEN_PATTERN = [\w一-鿿]+`) only splits on
+  whitespace/punctuation, so unsegmented Chinese collapses a whole clause into ONE token
+  (e.g. `张伟的副业项目叫acme`) that never overlaps across memories. The mechanism is
+  correct + unit-tested (passes on English), but is a near no-op for this Chinese-first
+  companion — and the same weakness degrades Chinese **keyword retrieval ranking**
+  (`score_memory` token match). Fix: CJK bigram (or jieba) segmentation in `tokenize`
+  so cross-type linking + keyword recall actually fire on Chinese. Touches retrieval —
+  `[Claude]`-class. Re-smoke links after.
 - [x] **SD config knobs `[Cursor-ok]`.** `llm_memory_extraction` (SD-3);
   `enable_reflection`, `reflection_every_n_turns`, `llm_summary` (SD-4) in
   `BudgetConfig` + `config/budget*.json`.

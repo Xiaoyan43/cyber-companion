@@ -2305,24 +2305,33 @@
   `context_builder` 一跳扩展（加性、capped `max(2, max_memories_per_turn//2)`、过期天然跳过）。
   `MEMORY_DESIGN.md` 三处更新。+12 测试（`test_memory_links.py`）。
 
+**真·DeepSeek 验收追加（用户提供 key，env-only，smoke 后即删 DB+脚本，未入库）：**
+
+- 7 轮 in-process TestClient 真机 smoke。**SD-3b Done criterion #2 = PASS：**
+  ① 零泄漏（7 轮 content 无 `<<<BOXI_SIGNALS>>>`）；② 信号流动 trust 0.50→0.52 /
+  closeness 0.20→0.22 / familiarity 0→0.07 / tension 0→0.17；③ **7 条事实记忆 `writer="llm"`**
+  落库（M3 校验通过：project=Acme、reminder=周五面试、job_progress、多条 recent_event），
+  正是 SD-3b 要救的「事实记忆消失」回归已修复；④ SD-4 反思写出真实印象叙事
+  （`writer=reflection`）；⑤ 反思触发 `last_reflected_message_id=12`。
+- **新发现 → SD-5b（已记入 TODO，`[Claude]`）：** SD-5 linker 在中文上形成 **0 链**。根因
+  `retrieval.tokenize` 只按空白/标点分词，无中文分词 → 整句塌成单 token
+  （`张伟的副业项目叫acme`），跨记忆永不重叠。机制本身正确（英文单测通过），但对中文近乎 no-op；
+  同样削弱中文关键词检索。修复留 SD-5b（CJK bigram/jieba 分词）。
+
 下次接着做：
 
-- **SD-3b Done criterion #2（真·DeepSeek 复测）仍欠**：本环境无 `DEEPSEEK_API_KEY` 且无
-  `config/providers.json`，跑不了真机 smoke。用户提供 key（env 或临时文件，smoke 后删）后，
-  跑 ~6 轮 `/chat/complete` 验证 ① 信号继续流动（trust/closeness 移动）② 至少一条事实记忆落库
-  （校验通过→`writer="llm"`，否则回退→`writer="rule_based"`）③ SD-5 反思后 `memory_links` 有边、
-  检索带出 1-hop。灵魂深化 SD-1..SD-5 全部实现完毕。
+- **SD-5b** — CJK-aware tokenizer（linker + 检索都受益），修完再复测中文连边。`[Claude]`。
 - 之后可转 **V2 重建**（`docs/REBUILD_ROADMAP.md`：Pipecat 语音 + PixiJS 房间 + Capacitor iPhone 壳）。
-- Cursor 下一步前端小切片：见本会话给出的「Cursor 任务」（SD-2-UI 关系面板接入 SD-5 印象/连边可视化，
-  或语音 backlog 的 `textForSpeech` 去括号）。
+- Cursor 下一步前端小切片：见本会话给出的「Cursor 任务」（只读「Boxi 的记忆」面板，
+  现有 `GET /memory/memories`，纯前端）。连边可视化需先加只读 `GET /memory/links` 路由（`[Claude]`，已记 backlog）。
 
 已知问题：
 
-- SD-3b/SD-5 仅单测 + 机制覆盖；真·LLM 路径（appraisal→trust、M3 写入、impression 文本、实际连边）
-  未在真 DeepSeek 上跑过。
+- 真机已验 SD-1c/SD-2/SD-3b/SD-4；SD-5 连边因中文分词在真机上为 0（见 SD-5b）。
 - 反思花费仍未受预算闸约束（墙关着；`jobs.py` 留 `# TODO(SD-later): gate reflection spend`）。
 - linker 的一跳扩展并入单个 `[Relevant memories]` section，packer 仍是整块取舍（既有行为）：极端 token
   紧张时整块（核心+扩展）一起被丢，扩展逻辑本身从不移除已选记忆。
+- **安全：本次 DeepSeek key 在对话中以明文粘贴 — 建议用户轮换/吊销该 key。**
 
 相关文件：
 
@@ -2335,6 +2344,7 @@
 
 - SD-3b 后：`PYTHON_BIN=.venv/bin/python npm run check` **195 passed** + tsc。
 - SD-5 后：`PYTHON_BIN=.venv/bin/python npm run check` **207 passed** + tsc。
+- 真机 DeepSeek 7 轮 smoke：SD-3b Done #2 PASS（零泄漏 + 信号移动 + 7 条 `writer="llm"` 事实记忆 + 印象）。
 
 不要改动的边界：
 
