@@ -24,6 +24,7 @@ import {
 } from "./chat/types";
 import { appendChatStreamDelta } from "./chat/streamRender";
 import { PixelCharacter } from "./components/PixelCharacter";
+import { MemoryPanel } from "./components/MemoryPanel";
 import { RelationshipPanel } from "./components/RelationshipPanel";
 import { primeAudioPlayback } from "./voice/audioUnlock";
 import { usePushToTalk } from "./voice/usePushToTalk";
@@ -597,6 +598,7 @@ function App() {
         <p className="status-line">{statusText}</p>
 
         <RelationshipPanel enabled={apiHealth.status === "ok"} />
+        <MemoryPanel enabled={apiHealth.status === "ok"} />
 
         {showAvatarDebug ? (
           <details className="state-debug" open>

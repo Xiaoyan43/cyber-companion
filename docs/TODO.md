@@ -118,6 +118,8 @@ contract) — do not hand to Cursor without explicit approval + doc updates.
 - [x] Reload chat history from `/memory/messages`.
 - [x] Display last-turn token/cost metadata.
 - [x] Route empty submit through backend behavior decisions.
+- [ ] Memory links visualization in UI `[Claude]` — needs read-only `GET /memory/links`
+  endpoint (SD-5 links exist in DB but no list route yet).
 
 ### Provider Layer
 

@@ -2342,3 +2342,43 @@
 - 反思 best-effort、永不破坏对话路径；`reflecting` finally 必释放。
 - SD-5：增量表、确定性 linker（无 LLM）、一跳 capped 加性检索、linking/consolidation 仅 factual 类型。
 - Boxi 毒舌人设不变；不发全量历史；LLM 输出只当数据。
+
+## 2026-06-10 - Session 29 (Cursor：只读「Boxi 的记忆」面板)
+
+本次完成：
+
+- 纯前端切片：新增 `frontend/src/api/memories.ts`（`fetchMemories` → `GET /memory/memories`）与
+  `frontend/src/components/MemoryPanel.tsx`。
+- 折叠 `<details>` 面板，受 `apiHealth.status === "ok"` gating；按 type 分组展示（中文标题）、
+  每条显示 content + importance 百分比 + writer 徽章（llm / 规则 / 反思）；前端过滤 `expires_at` 已过期条目。
+- `App.tsx` 挂在 `RelationshipPanel` 旁；`styles.css` 复用/扩展 relationship-panel 像素风格。
+- `docs/TODO.md` 追加 memory links 可视化 backlog（需 `[Claude]` 新增只读 `/memory/links` 路由）。
+
+下次接着做：
+
+- SD-3b Done criterion #2（真·DeepSeek 复测，需用户提供 key）。
+- Memory links 可视化（待 `/memory/links` 只读路由）。
+- 或 V2 重建 / 语音 backlog（`textForSpeech` 去括号等）。
+
+已知问题：
+
+- 面板不展示 memory_links 连边（无 GET 端点，刻意排除）。
+- `/memory/memories` 仍返回过期条目，面板侧自行过滤与检索口径对齐。
+
+相关文件：
+
+- `frontend/src/api/memories.ts`
+- `frontend/src/components/MemoryPanel.tsx`
+- `frontend/src/App.tsx`
+- `frontend/src/styles.css`
+- `docs/TODO.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**207 passed** + tsc。
+- `npm run build:frontend`：通过。
+
+不要改动的边界：
+
+- 无后端改动；不改 provider / memory schema / behavior contract / file permission policy。
+- 只读，无编辑/删除记忆写操作。

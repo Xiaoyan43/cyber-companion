@@ -459,20 +459,27 @@ button {
 }
 
 
-.relationship-panel {
+.relationship-panel,
+.memory-panel {
   border: 1px dashed #564d42;
   border-radius: 6px;
   padding: 10px;
 }
 
-.relationship-panel summary {
+.memory-panel {
+  margin-top: 8px;
+}
+
+.relationship-panel summary,
+.memory-panel summary {
   cursor: pointer;
   color: #cfc4aa;
   font-size: 0.82rem;
   font-weight: 700;
 }
 
-.relationship-panel[open] summary {
+.relationship-panel[open] summary,
+.memory-panel[open] summary {
   margin-bottom: 10px;
 }
 
@@ -505,4 +512,67 @@ button {
 
 .relationship-impression {
   color: #f7f1df;
+}
+
+.memory-copy {
+  margin: 0;
+  color: #cfc4aa;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.memory-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.memory-group-title {
+  margin: 0 0 6px;
+  color: #a89b84;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.memory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.memory-item {
+  border: 1px solid #4a433a;
+  border-radius: 4px;
+  padding: 8px;
+  background: rgba(20, 18, 16, 0.35);
+}
+
+.memory-content {
+  margin: 0 0 6px;
+  color: #f7f1df;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.memory-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.memory-importance {
+  color: #a89b84;
+  font-size: 0.72rem;
+}
+
+.memory-writer-badge {
+  border: 1px solid #6a5f4f;
+  border-radius: 3px;
+  color: #cfc4aa;
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 2px 5px;
 }
