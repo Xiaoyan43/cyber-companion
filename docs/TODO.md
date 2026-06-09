@@ -41,7 +41,7 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
   the system message (`context_builder.py`); raise `max_output_tokens_per_turn`
   300→600 so the trailer isn't truncated. **Spec: `docs/SD1b_SPEC.md`.** Highest
   priority — without it SD-2/SD-3's live value is dormant.
-- [ ] **SD-1c — Trailer reminder on the current user turn `[Claude]`.** SD-1b
+- [x] **SD-1c — Trailer reminder on the current user turn `[Claude]`.** SD-1b
   re-smoke found the strengthened protocol still emits 0 in the real chat path: we
   replay trailer-stripped assistant history, so the model mimics "no trailer" and
   ignores the system instruction. Validated fix (0/5→3/5): append a short

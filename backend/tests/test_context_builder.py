@@ -3,7 +3,10 @@ from pathlib import Path
 import pytest
 
 from backend.app.memory.budget import BudgetConfig
-from backend.app.memory.context_builder import build_provider_context
+from backend.app.memory.context_builder import (
+    _TRAILER_REMINDER,
+    build_provider_context,
+)
 from backend.app.memory.persona import OUTPUT_PROTOCOL, load_persona_system_prompt
 from backend.app.memory.retrieval import rank_memories, score_memory
 from backend.app.memory.store import MemoryStore
@@ -45,6 +48,32 @@ def test_context_builder_system_message_ends_with_protocol_once(store: MemorySto
     assert system.endswith(OUTPUT_PROTOCOL.lstrip("\n")) or OUTPUT_PROTOCOL in system
 
 
+def test_provider_user_message_ends_with_trailer_reminder(store: MemoryStore) -> None:
+    built = build_provider_context(store, user_input="hello")
+    user_message = built.messages[-1].content
+
+    assert user_message.startswith("hello")
+    assert user_message.endswith(_TRAILER_REMINDER)
+    assert "<<<BOXI_SIGNALS>>>" in user_message
+
+
+def test_trailer_reminder_not_in_replayed_history(store: MemoryStore) -> None:
+    store.create_message(role="user", content="prior user turn")
+    store.create_message(role="assistant", content="prior assistant reply")
+
+    built = build_provider_context(store, user_input="new turn")
+
+    for message in built.messages[1:-1]:
+        assert _TRAILER_REMINDER not in message.content
+        assert "系统提醒" not in message.content
+
+
+def test_build_provider_context_does_not_mutate_user_input(store: MemoryStore) -> None:
+    user_input = "hello there"
+    build_provider_context(store, user_input=user_input)
+    assert user_input == "hello there"
+
+
 def test_rank_memories_prefers_job_progress_for_resume_query(store: MemoryStore) -> None:
     store.create_memory(type="stable_profile", content="User likes concise replies.", importance=0.8)
     job_memory = store.create_memory(
@@ -65,7 +94,7 @@ def test_context_builder_uses_default_budget_when_omitted(store: MemoryStore) ->
 
     built = build_provider_context(store, user_input="follow up")
 
-    assert built.messages[-1].content == "follow up"
+    assert built.messages[-1].content == f"follow up{_TRAILER_REMINDER}"
     assert built.estimated_input_tokens <= BudgetConfig().max_input_tokens_per_turn
     assert len(built.included_message_ids) <= BudgetConfig().max_raw_turns
 
@@ -100,7 +129,7 @@ def test_context_builder_limits_raw_turns_and_uses_summary(store: MemoryStore) -
     assert built.summary_used is not None
     assert len(built.included_message_ids) <= budget.max_raw_turns
     assert built.estimated_input_tokens <= budget.max_input_tokens_per_turn
-    assert built.messages[-1].content == "turn-8"
+    assert built.messages[-1].content == f"turn-8{_TRAILER_REMINDER}"
     assert "Older turns were mostly complaining" in built.messages[0].content
 
 

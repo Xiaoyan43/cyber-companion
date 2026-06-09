@@ -2217,3 +2217,37 @@
 不要改动的边界：
 
 - 未改 parser / SignalStreamFilter / kernel / 写入管线；人设语气/边界不变；M2 正则回退保留。
+
+## 2026-06-09 - Session 39 (Cursor：SD-1c trailer reminder on user turn)
+
+本次完成：
+
+- **SD-1c — `context_builder.py`**
+  - `_TRAILER_REMINDER` 常量；`provider_user_input_for_send` 仅用于发给 provider 的最后一条 user 消息。
+  - 提醒 token 计入 `reserved_tokens` 预算估算；原始 `user_input` 不变、不入库、不进 `recent_raw` 重放。
+- **SD-1c — tests**
+  - provider user 消息以提醒结尾且含 sentinel；重放历史不含提醒；`user_input` 不被 mutate。
+  - 更新 `test_user_input_truncation` / 既有 context_builder 断言以适配 provider-only 提醒。
+
+下次接着做：
+
+- **真·DeepSeek re-smoke**（Claude review）：有累积历史时 trailer 多数轮次出现、signals 流动。
+- 或 **SD-5** / V2 重建。
+
+已知问题：
+
+- 未在本环境跑真 DeepSeek 验收。
+
+相关文件：
+
+- `backend/app/memory/context_builder.py`
+- `backend/tests/test_context_builder.py`, `test_user_input_truncation.py`
+- `docs/TODO.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**192 passed** + tsc 通过。
+
+不要改动的边界：
+
+- 仅改 context_builder + 测试；提醒 provider-only，绝不入库/重放累积；parser/stream/kernel/写入管线未动。

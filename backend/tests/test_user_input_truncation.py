@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from backend.app.memory.budget import BudgetConfig
-from backend.app.memory.context_builder import build_provider_context
+from backend.app.memory.context_builder import _TRAILER_REMINDER, build_provider_context
 from backend.app.memory.chat_persistence import persist_chat_turn
 from backend.app.memory.store import MemoryStore
 from backend.app.providers.cost import estimate_token_count
@@ -36,9 +36,12 @@ def test_build_provider_context_truncates_oversized_user_input(store: MemoryStor
     built = build_provider_context(store, user_input=long_input, budget=budget)
 
     provider_user = built.messages[-1].content
-    assert provider_user.endswith(" …[truncated]")
-    assert len(provider_user) < len(long_input)
-    assert estimate_token_count(provider_user) <= budget.max_user_input_tokens + 10
+    assert provider_user.endswith(_TRAILER_REMINDER)
+    assert " …[truncated]" in provider_user
+    assert len(provider_user) < len(long_input) + len(_TRAILER_REMINDER)
+    assert estimate_token_count(provider_user) <= (
+        budget.max_user_input_tokens + estimate_token_count(_TRAILER_REMINDER) + 10
+    )
 
 
 def test_persist_chat_turn_keeps_full_user_input(store: MemoryStore) -> None:

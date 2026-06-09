@@ -75,6 +75,11 @@ def _format_summary_block(summary: ConversationSummaryRecord | None) -> str | No
 
 _TRUNCATION_SUFFIX = " …[truncated]"
 
+_TRAILER_REMINDER = (
+    "\n\n（系统提醒：本轮回复必须在正文后另起一行输出 <<<BOXI_SIGNALS>>> 及其单行 JSON，"
+    "不可省略。）"
+)
+
 
 def _truncate_user_input_for_provider(user_input: str, max_tokens: int) -> str:
     if max_tokens <= 0 or estimate_token_count(user_input) <= max_tokens:
@@ -155,8 +160,14 @@ def build_provider_context(
         user_input,
         config.max_user_input_tokens,
     )
-    reserved_tokens = estimate_token_count(provider_user_input) + sum(
-        estimate_token_count(f"{message.role}: {message.content}") for message in recent_raw
+    provider_user_input_for_send = provider_user_input + _TRAILER_REMINDER
+    reminder_tokens = estimate_token_count(_TRAILER_REMINDER)
+    reserved_tokens = (
+        estimate_token_count(provider_user_input)
+        + reminder_tokens
+        + sum(
+            estimate_token_count(f"{message.role}: {message.content}") for message in recent_raw
+        )
     )
     protocol_tokens = estimate_token_count(OUTPUT_PROTOCOL)
     memory_budget = max(
@@ -178,7 +189,7 @@ def build_provider_context(
         provider_messages.append(ChatMessage(role=role, content=message.content))
         included_message_ids.append(message.id)
 
-    provider_messages.append(ChatMessage(role="user", content=provider_user_input))
+    provider_messages.append(ChatMessage(role="user", content=provider_user_input_for_send))
 
     estimated_input_tokens = sum(
         estimate_token_count(message.content) for message in provider_messages
