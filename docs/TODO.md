@@ -116,10 +116,15 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
   `build_provider_context` warm = **9 ms** (not the bottleneck — compact 811-tok context
   confirmed). Remaining ~1.8s `finalize→first_text` = DeepSeek-to-first-sentence (inherent
   floor). No cheap latency win left.
-- [ ] **V2 Half-duplex — drop the headphones `[Claude→Cursor]`.** Mute STT/VAD while Boxi
-  speaks (reuse Pipecat `STTMuteFilter` if present) so speaker echo can't self-interrupt;
-  toggle `CYBER_COMPANION_VOICE_HALF_DUPLEX` (default on; off = barge-in + headphones).
-  Folds in jieba pre-warm (kills the first-turn cold load). **Spec: `docs/V2_HALF_DUPLEX_SPEC.md`.**
+- [x] **V2 Half-duplex — drop the headphones `[Claude→Cursor]`.** Mute STT/VAD while Boxi
+  speaks (reuse Pipecat `AlwaysUserMuteStrategy` — `STTMuteFilter` removed in 1.3.0) so speaker
+  echo can't self-interrupt; toggle `CYBER_COMPANION_VOICE_HALF_DUPLEX` (default on; off =
+  barge-in + headphones). Folds in jieba pre-warm. **Spec: `docs/V2_HALF_DUPLEX_SPEC.md`.**
+- [ ] **V2 Phase 2c — Doubao end-to-end realtime voice (Dialog S2S) `[Claude→Cursor]`.** Fuses
+  ASR+LLM+TTS in one WS → kills STT/TTS overhead, natively interruptible. Build BOTH
+  `OutputMode 0` (pure, Doubao brain, sub-second; soul = persona+memory-inject+transcript
+  extraction) and `OutputMode 1` (hybrid, soul/DeepSeek as orchestrated LLM, ~2s). Keep current
+  pipeline as fallback toggle. Auth App ID+Access Token (env). **Spec: `docs/V2_PHASE2c_SPEC.md`.**
 - [ ] V2 Phase 4–9 — turn-taking polish, PixiJS room, room reactivity, actions, personal files, the box.
 
 ## Current Priority
