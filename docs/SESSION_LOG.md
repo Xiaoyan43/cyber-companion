@@ -2286,3 +2286,59 @@
 
 - key 只走环境变量/临时文件，绝不入库或写进任何文件。
 - 灵魂额外 LLM 不上等待路径；M2 正则保留作兜底；Boxi 毒舌人设不变。
+
+## 2026-06-10 - Session 28 (Claude：SD-3b 实现 + SD-5 实现，两个 checkpoint)
+
+本次完成：
+
+- **SD-3b（`e610f1e`）— M2 兜底 + 枚举合法 memory 类型。** `record_turn_memories` 原本在
+  `signals.memory[]` 非空时无条件走 M3，若 LLM 条目全部校验失败（type 不在白名单 / 内容
+  <4 字 / 置信度 <0.6）则 M3 写空且正则 M2 永不触发，整轮记忆静默丢失（SD-1c 让 trailer 真
+  吐出后暴露：信号流动但事实记忆消失）。修复：M3 写空 → fall through 到 M2（`write_policy.py`）；
+  `OUTPUT_PROTOCOL` 枚举 8 个合法 type（排除系统托管的 `conversation_summary`，`persona.py`）；
+  `MEMORY_DESIGN.md` Auto-Write 段补兜底路径。+3 测试。
+- **SD-5（`a6a8fa8`）— 记忆连边 + 一跳 top-down 检索。** 增量 `memory_links` 表
+  （`SCHEMA_VERSION=3`，双向 + 幂等 + `ON DELETE CASCADE`）；store 三方法
+  （`add_memory_link`/`get_linked_memory_ids`/`count_memory_links`）；反思层确定性 linker
+  `link_related_memories`（consolidate 之后、无 LLM；跨类型 + token 重叠 ≥2 且 ≥0.34、每轮封顶、
+  幂等）；`consolidate_memories` 候选限定 `FACTUAL_MEMORY_TYPES`（印象/摘要/emotion 永不被归档）；
+  `context_builder` 一跳扩展（加性、capped `max(2, max_memories_per_turn//2)`、过期天然跳过）。
+  `MEMORY_DESIGN.md` 三处更新。+12 测试（`test_memory_links.py`）。
+
+下次接着做：
+
+- **SD-3b Done criterion #2（真·DeepSeek 复测）仍欠**：本环境无 `DEEPSEEK_API_KEY` 且无
+  `config/providers.json`，跑不了真机 smoke。用户提供 key（env 或临时文件，smoke 后删）后，
+  跑 ~6 轮 `/chat/complete` 验证 ① 信号继续流动（trust/closeness 移动）② 至少一条事实记忆落库
+  （校验通过→`writer="llm"`，否则回退→`writer="rule_based"`）③ SD-5 反思后 `memory_links` 有边、
+  检索带出 1-hop。灵魂深化 SD-1..SD-5 全部实现完毕。
+- 之后可转 **V2 重建**（`docs/REBUILD_ROADMAP.md`：Pipecat 语音 + PixiJS 房间 + Capacitor iPhone 壳）。
+- Cursor 下一步前端小切片：见本会话给出的「Cursor 任务」（SD-2-UI 关系面板接入 SD-5 印象/连边可视化，
+  或语音 backlog 的 `textForSpeech` 去括号）。
+
+已知问题：
+
+- SD-3b/SD-5 仅单测 + 机制覆盖；真·LLM 路径（appraisal→trust、M3 写入、impression 文本、实际连边）
+  未在真 DeepSeek 上跑过。
+- 反思花费仍未受预算闸约束（墙关着；`jobs.py` 留 `# TODO(SD-later): gate reflection spend`）。
+- linker 的一跳扩展并入单个 `[Relevant memories]` section，packer 仍是整块取舍（既有行为）：极端 token
+  紧张时整块（核心+扩展）一起被丢，扩展逻辑本身从不移除已选记忆。
+
+相关文件：
+
+- `backend/app/memory/{schema,store,write_policy,persona,context_builder}.py`
+- `backend/app/reflection/{jobs,runner}.py`
+- `backend/tests/{test_memory_write_policy,test_memory_links}.py`
+- `docs/MEMORY_DESIGN.md`、`docs/TODO.md`、`docs/SD3b_SPEC.md`、`docs/SD5_SPEC.md`
+
+测试结果：
+
+- SD-3b 后：`PYTHON_BIN=.venv/bin/python npm run check` **195 passed** + tsc。
+- SD-5 后：`PYTHON_BIN=.venv/bin/python npm run check` **207 passed** + tsc。
+
+不要改动的边界：
+
+- key 只走环境变量/临时文件，绝不入库。
+- 反思 best-effort、永不破坏对话路径；`reflecting` finally 必释放。
+- SD-5：增量表、确定性 linker（无 LLM）、一跳 capped 加性检索、linking/consolidation 仅 factual 类型。
+- Boxi 毒舌人设不变；不发全量历史；LLM 输出只当数据。
