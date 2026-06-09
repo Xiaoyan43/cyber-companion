@@ -186,6 +186,14 @@ async def _stream_openai_completion(
 def create_app() -> FastAPI:
     app = FastAPI(title="Boxi Soul LLM", version="0.1.0")
 
+    @app.on_event("startup")
+    async def _prewarm() -> None:
+        # jieba's dictionary load (~1s) otherwise lands on the first turn's
+        # build_provider_context; warm it before the AIGC server's first call.
+        from backend.app.memory.retrieval import tokenize
+
+        await asyncio.to_thread(tokenize, "预热")
+
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok", "service": "soul-llm"}
