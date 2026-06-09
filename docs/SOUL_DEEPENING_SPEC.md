@@ -214,12 +214,12 @@ reuse it). Changes:
 - **Keep regex M2 as fallback** when `signals.memory` is absent (don't delete
   `extract_memory_candidates`; it's the safety net).
 - Tag LLM-written memories `metadata.writer="llm"` (vs `"rule_based"`) for auditing.
-- **Linking (lightweight first):** when persisting, if a near-duplicate of a
-  *different* type is found, store the related id in `metadata.links` (JSON array).
-  Defer a real `memory_links` table to SD-5. This gives memU-style cross-links with
-  no migration.
+- **Cross-type linking moved entirely to SD-5.** (A throwaway `metadata.links` array
+  in SD-3 would just be reworked into the real `memory_links` table in SD-5 — so
+  SD-3 stays a tight "extraction only" slice; SD-5 owns all linking.)
 
 This is the user's "记忆抽取升级" and it adds **zero latency** (same reply call).
+Detailed brief: `docs/SD3_SPEC.md`.
 
 ---
 
@@ -353,8 +353,11 @@ Recommended order: **SD-1 → SD-2 → SD-3 → SD-4**, SD-5 later. SD-1 is the 
   (+`RelationshipStateSchema`), `memory/context_builder.py`
   (`[Relationship]`/`[Impression]` blocks), frontend "Boxi 怎么看你" panel, tests,
   `docs/MEMORY_DESIGN.md`. Detailed brief: `docs/SD2_SPEC.md`.
-- **SD-3:** `memory/write_policy.py` (+`write_memories_from_signals`, keep regex),
-  `backend/app/main.py` (route signals after persist), tests.
+- **SD-3:** `memory/write_policy.py` (+`write_memories_from_signals` +
+  `record_turn_memories` orchestrator, keep regex M2 fallback, `writer` param),
+  `memory/budget.py` + `config/budget*.json` (`llm_memory_extraction` knob),
+  `backend/app/main.py` (orchestrator at the two LLM write sites only), tests,
+  `docs/MEMORY_DESIGN.md` (M3 note). Detailed brief: `docs/SD3_SPEC.md`.
 - **SD-4:** new `backend/app/reflection/` module (trigger + jobs),
   `memory/summary_policy.py` (LLM summary builder behind `llm_summary`),
   `backend/app/main.py` (enqueue `BackgroundTasks`), `memory/budget.py` (knobs),

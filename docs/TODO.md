@@ -24,8 +24,10 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
   relationship state (trust/closeness/familiarity/tension) + impression narrative.
   Numbers land with SD-2; impression text fills in after SD-4. Frontend-only.
 - [ ] **SD-3 — LLM memory extraction (M3) `[Claude]`.** Route `signals.memory[]`
-  through existing dedup pipeline (`write_memories_from_signals`); keep regex M2 as
-  fallback; `writer="llm"` tag; lightweight metadata links.
+  through existing dedup pipeline (`write_memories_from_signals` +
+  `record_turn_memories` orchestrator); keep regex M2 as fallback; `writer="llm"`
+  tag; `llm_memory_extraction` knob. Cross-type linking moved to SD-5. Spec:
+  `docs/SD3_SPEC.md`.
 - [ ] **SD-4 — Background reflection layer `[Claude]`.** Turn-counter trigger
   (`reflection_every_n_turns`); jobs: memory consolidation/evolution, impression
   formation (`relationship_state` memory type), LLM conversation summary. Run via
