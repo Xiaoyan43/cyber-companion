@@ -33,6 +33,14 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
   formation (`relationship_state` memory type), LLM conversation summary. Run via
   `BackgroundTasks` off the response path; single-flight; config-gated
   (`enable_reflection`); failure-isolated. Spec: `docs/SD4_SPEC.md`.
+- [ ] **SD-1b — Make the model actually emit the signals trailer `[Claude]`.**
+  Real-DeepSeek smoke (Session 27) found the trailer is rarely emitted in the chat
+  path (~0–1/3) → signals don't flow (trust/closeness frozen, memories fall to regex
+  M2). Fix (validated live, raises emission to 4/5): mandatory `OUTPUT_PROTOCOL` +
+  one-shot example, drop the "omit" escape (`persona.py`); position protocol LAST in
+  the system message (`context_builder.py`); raise `max_output_tokens_per_turn`
+  300→600 so the trailer isn't truncated. **Spec: `docs/SD1b_SPEC.md`.** Highest
+  priority — without it SD-2/SD-3's live value is dormant.
 - [ ] **SD-5 (optional) — Memory links + top-down retrieval `[Claude]`.**
   `memory_links` table + deterministic cross-type linker (in reflection) + 1-hop
   retrieval expansion + consolidation candidate polish. **Spec ready:
