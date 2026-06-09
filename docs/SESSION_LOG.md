@@ -2428,3 +2428,43 @@
 不要改动的边界：
 
 - 无后端改动；不改 provider / memory schema / behavior contract / file permission policy。
+
+## 2026-06-10 - Session 32 (SD-5b：CJK-aware tokenizer)
+
+本次完成：
+
+- **SD-5b**（`docs/SD5b_SPEC.md`）：`retrieval.tokenize` 用 jieba 切 CJK 实词 + ASCII
+  `[a-z0-9_]+`；lazy import + `_tokenize_fallback`（jieba 缺失时回退旧逻辑）。
+- linker `_LINK_MIN_RATIO` 0.34→**0.25**（仅常量，表/契约/1-hop 扩展未动）。
+- 依赖 `jieba>=0.42.1`；`MEMORY_DESIGN.md` / `OPEN_SOURCE_REUSE.md` 更新。
+- 测试：中文 tokenize + job_progress 排序；中文跨类型连边 + 无关对不连；jieba 缺失 fallback；
+  英文 links/dedup 全绿。
+
+下次接着做：
+
+- Claude 真·DeepSeek 复测：中文对话后 `memory_links > 0`。
+- Memory links UI（待 `GET /memory/links`）或 V2 重建 / 语音 backlog。
+
+已知问题：
+
+- jieba 首次 import 有 `pkg_resources` DeprecationWarning（上游，可忽略）。
+- SD-5b 真机连边 smoke 尚未跑（留给 Claude + key）。
+
+相关文件：
+
+- `backend/app/memory/retrieval.py`
+- `backend/app/reflection/jobs.py`（`_LINK_MIN_RATIO` only）
+- `backend/requirements.txt`
+- `backend/tests/test_memory_retrieval.py`
+- `backend/tests/test_memory_links.py`
+- `docs/MEMORY_DESIGN.md`、`docs/OPEN_SOURCE_REUSE.md`、`docs/TODO.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**211 passed** + tsc。
+- `npm run build:frontend`：通过。
+
+不要改动的边界：
+
+- 未改 `memory_links` 表/契约、SD-5 一跳扩展、`context_builder` SD-1..4 行为。
+- 确定性 only；英文路径与 dedup 套件保持绿色。

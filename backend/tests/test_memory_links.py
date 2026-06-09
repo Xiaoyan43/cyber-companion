@@ -98,6 +98,25 @@ def test_linker_skips_weak_overlap(store: MemoryStore) -> None:
     assert store.count_memory_links() == 0
 
 
+def test_linker_links_chinese_cross_type_shared_noun(store: MemoryStore) -> None:
+    proj = store.create_memory(type="project", content="张伟的副业项目叫acme")
+    job = store.create_memory(type="job_progress", content="副业项目面试安排")
+
+    reflection_jobs.link_related_memories(store, BudgetConfig())
+
+    assert store.get_linked_memory_ids(proj.id) == [job.id]
+    assert store.get_linked_memory_ids(job.id) == [proj.id]
+
+
+def test_linker_skips_unrelated_chinese_pairs(store: MemoryStore) -> None:
+    store.create_memory(type="project", content="今天天气很好适合散步")
+    store.create_memory(type="job_progress", content="明天去超市买菜")
+
+    reflection_jobs.link_related_memories(store, BudgetConfig())
+
+    assert store.count_memory_links() == 0
+
+
 def test_linker_respects_cap(
     store: MemoryStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:

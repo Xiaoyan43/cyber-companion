@@ -2,8 +2,9 @@ from pathlib import Path
 
 import pytest
 
+from backend.app.memory import retrieval
 from backend.app.memory.context_builder import build_provider_context
-from backend.app.memory.retrieval import is_expired
+from backend.app.memory.retrieval import is_expired, rank_memories, tokenize
 from backend.app.memory.store import MemoryStore
 
 
@@ -44,3 +45,33 @@ def test_context_builder_excludes_expired_memories(store: MemoryStore) -> None:
     assert active_memory.id in built.included_memory_ids
     assert "Active job note" in built.messages[0].content
     assert "Expired job note" not in built.messages[0].content
+
+
+def test_chinese_query_tokenizes_and_boosts_job_progress(store: MemoryStore) -> None:
+    query = "我今天投递了简历"
+    tokens = tokenize(query)
+
+    assert "投递" in tokens
+    assert "简历" in tokens
+
+    job = store.create_memory(type="job_progress", content="上周投递了字节简历")
+    other = store.create_memory(type="project", content="周末做饭学新菜")
+
+    ranked = rank_memories([other, job], query)
+
+    assert ranked[0].id == job.id
+
+
+def test_tokenize_falls_back_without_jieba(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(retrieval, "_jieba_module", None)
+    monkeypatch.setattr(retrieval, "_jieba_import_failed", False)
+
+    def fail_jieba_import() -> None:
+        retrieval._jieba_import_failed = True
+        return None
+
+    monkeypatch.setattr(retrieval, "_get_jieba", fail_jieba_import)
+
+    tokens = tokenize("Acme platform migration")
+
+    assert tokens == {"acme", "platform", "migration"}

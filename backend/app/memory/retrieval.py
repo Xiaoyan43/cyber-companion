@@ -6,6 +6,26 @@ from datetime import datetime, timezone
 from backend.app.memory.database import MemoryRecord
 
 TOKEN_PATTERN = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)
+ASCII_WORD_PATTERN = re.compile(r"[a-z0-9_]+")
+CJK_RUN_PATTERN = re.compile(r"[\u4e00-\u9fff]+")
+
+CJK_STOPWORDS = {
+    "我们",
+    "你们",
+    "这个",
+    "那个",
+    "什么",
+    "怎么",
+    "因为",
+    "所以",
+    "但是",
+    "然后",
+    "就是",
+    "已经",
+}
+
+_jieba_module = None
+_jieba_import_failed = False
 
 TYPE_KEYWORDS: dict[str, set[str]] = {
     "job_progress": {"job", "resume", "cv", "offer", "interview", "求职", "简历", "面试", "投递"},
@@ -46,9 +66,52 @@ def is_expired(memory: MemoryRecord, now_iso: str) -> bool:
     return expires_at.astimezone(timezone.utc) <= now.astimezone(timezone.utc)
 
 
-def tokenize(text: str) -> set[str]:
+def _get_jieba():
+    global _jieba_module, _jieba_import_failed
+
+    if _jieba_import_failed:
+        return None
+    if _jieba_module is not None:
+        return _jieba_module
+
+    try:
+        import jieba
+
+        _jieba_module = jieba
+        return jieba
+    except ImportError:
+        _jieba_import_failed = True
+        return None
+
+
+def _tokenize_fallback(text: str) -> set[str]:
     tokens = {match.group(0).lower() for match in TOKEN_PATTERN.finditer(text.lower())}
     return {token for token in tokens if len(token) >= 2}
+
+
+def tokenize(text: str) -> set[str]:
+    jieba = _get_jieba()
+    if jieba is None:
+        return _tokenize_fallback(text)
+
+    lowered = text.lower()
+    tokens: set[str] = set()
+
+    for match in ASCII_WORD_PATTERN.finditer(lowered):
+        word = match.group(0)
+        if len(word) >= 2:
+            tokens.add(word)
+
+    for match in CJK_RUN_PATTERN.finditer(text):
+        for segment in jieba.lcut(match.group(0), cut_all=False):
+            segment = segment.strip()
+            if len(segment) < 2:
+                continue
+            if segment in CJK_STOPWORDS:
+                continue
+            tokens.add(segment.lower())
+
+    return tokens
 
 
 def boosted_memory_types(query: str) -> set[str]:

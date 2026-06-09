@@ -15,7 +15,7 @@ from backend.app.providers.types import ChatCompletionRequest, ChatMessage
 # SD-5 linker tuning.
 _LINK_CANDIDATE_CAP = 40
 _LINK_MIN_OVERLAP = 2
-_LINK_MIN_RATIO = 0.34
+_LINK_MIN_RATIO = 0.25
 _LINK_MAX_NEW_PER_PASS = 20
 
 

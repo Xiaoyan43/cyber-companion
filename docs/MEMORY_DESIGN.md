@@ -180,6 +180,12 @@ Properties:
 Expired memories (`expires_at` in the past) are excluded from context recall;
 `/memory/memories` may still list them for inspection.
 
+**Tokenization (SD-5b):** `retrieval.tokenize` lowercases ASCII words (`[a-z0-9_]+`,
+length ≥ 2) and segments CJK runs with **jieba** (real words, not char-bigrams).
+If jieba is unavailable at runtime, tokenization falls back to the legacy
+whitespace/punctuation split. The same tokenizer feeds keyword recall ranking and
+the SD-5 deterministic linker.
+
 Each LLM call should include:
 
 1. System/persona prompt.
@@ -279,7 +285,7 @@ the stream closes. Only LLM turns increment the counter.
    (`relationship_state`), summaries, and `emotion_state` can never be archived.
 2. **Link related memories (SD-5)** — deterministic, no LLM. Cross-links factual
    memories that share a real token (cross-type pairs only; overlap ≥ 2 and
-   overlap / min(tokens) ≥ 0.34), capped per pass. Runs after consolidation so it
+   overlap / min(tokens) ≥ 0.25), capped per pass. Runs after consolidation so it
    links the post-consolidation set. Feeds the 1-hop retrieval expansion above.
 3. **Impression** — one `relationship_state` memory upsert (`metadata.writer="reflection"`)
    → `[Impression]` block in provider context.

@@ -69,17 +69,10 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
   consolidation candidate set restricted to `FACTUAL_MEMORY_TYPES`. `docs/MEMORY_DESIGN.md`
   updated. 207 backend tests + tsc green (+12 `test_memory_links.py`). Spec:
   `docs/SD5_SPEC.md`.
-- [ ] **SD-5b — CJK-aware tokenizer for linker + retrieval `[Claude]`.** Real-DeepSeek
-  Session 28 smoke: SD-5 linker formed **0 links** on Chinese memories. Root cause:
-  `retrieval.tokenize` (`TOKEN_PATTERN = [\w一-鿿]+`) only splits on
-  whitespace/punctuation, so unsegmented Chinese collapses a whole clause into ONE token
-  (e.g. `张伟的副业项目叫acme`) that never overlaps across memories. The mechanism is
-  correct + unit-tested (passes on English), but is a near no-op for this Chinese-first
-  companion — and the same weakness degrades Chinese **keyword retrieval ranking**
-  (`score_memory` token match). Fix: CJK bigram (or jieba) segmentation in `tokenize`
-  so cross-type linking + keyword recall actually fire on Chinese. Touches retrieval —
-  `[Claude]`-class but **delegated to Cursor via spec**. Decision: jieba (MIT) + graceful
-  fallback; linker ratio 0.34→0.25. **Spec: `docs/SD5b_SPEC.md`.** Claude re-smokes after.
+- [x] **SD-5b — CJK-aware tokenizer for linker + retrieval `[Claude]` (done @ this commit).**
+  jieba segmentation in `retrieval.tokenize` (lazy import + fallback); linker ratio
+  0.34→0.25; Chinese recall + cross-type link unit tests. **Spec: `docs/SD5b_SPEC.md`.**
+  Real-DeepSeek re-smoke (`memory_links > 0` on Chinese) remains a Claude step.
 - [x] **SD config knobs `[Cursor-ok]`.** `llm_memory_extraction` (SD-3);
   `enable_reflection`, `reflection_every_n_turns`, `llm_summary` (SD-4) in
   `BudgetConfig` + `config/budget*.json`.

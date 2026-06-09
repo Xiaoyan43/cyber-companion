@@ -322,6 +322,14 @@ Used for: Float32 audio array passed to faster-whisper `transcribe`.
 Local files: backend/app/stt/faster_whisper.py, backend/requirements.txt
 Notes: Dependency only (also pulled by faster-whisper). No source copied.
 
+Name: jieba
+URL: https://github.com/fxsjy/jieba
+License: MIT
+Version/commit: >=0.42.1
+Used for: CJK word segmentation in `retrieval.tokenize` (memory keyword recall + SD-5 linker).
+Local files: backend/app/memory/retrieval.py, backend/requirements.txt
+Notes: Dependency only. Lazy-imported with graceful fallback to legacy tokenizer if missing.
+
 Name: Volcano Engine / Doubao Speech API (openspeech.bytedance.com)
 URL: https://www.volcengine.com/docs/6561/1257584
 License: Proprietary (cloud service; personal-use experiment)
