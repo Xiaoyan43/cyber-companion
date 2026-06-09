@@ -4,6 +4,7 @@ import pytest
 
 from backend.app.memory.budget import BudgetConfig
 from backend.app.memory.context_builder import build_provider_context
+from backend.app.memory.persona import OUTPUT_PROTOCOL, load_persona_system_prompt
 from backend.app.memory.retrieval import rank_memories, score_memory
 from backend.app.memory.store import MemoryStore
 from backend.app.memory.summary_policy import maybe_update_conversation_summary
@@ -12,6 +13,36 @@ from backend.app.memory.summary_policy import maybe_update_conversation_summary
 @pytest.fixture
 def store(tmp_path: Path) -> MemoryStore:
     return MemoryStore(db_path=tmp_path / "context.db")
+
+
+def test_load_persona_system_prompt_excludes_output_protocol() -> None:
+    prompt = load_persona_system_prompt()
+    assert "MANDATORY OUTPUT FORMAT" not in prompt
+    assert "<<<BOXI_SIGNALS>>>" not in prompt
+    assert "omit the trailer" not in prompt.lower()
+
+
+def test_context_builder_system_message_ends_with_protocol_once(store: MemoryStore) -> None:
+    store.create_memory(
+        type="job_progress",
+        content="Applied to two backend roles.",
+        tags=["job-search"],
+        importance=0.7,
+    )
+    store.create_message(role="user", content="hello")
+
+    built = build_provider_context(store, user_input="follow up")
+    system = built.messages[0].content
+    persona = load_persona_system_prompt()
+
+    assert persona in system
+    assert "[Current mood]" in system
+    assert "[Relationship]" in system
+    assert "[Relevant memories]" in system
+    assert system.count("=== MANDATORY OUTPUT FORMAT (every reply, no exceptions) ===") == 1
+    assert "omit the trailer" not in system.lower()
+    assert system.rstrip().endswith("Put <<<BOXI_SIGNALS>>> nowhere else.")
+    assert system.endswith(OUTPUT_PROTOCOL.lstrip("\n")) or OUTPUT_PROTOCOL in system
 
 
 def test_rank_memories_prefers_job_progress_for_resume_query(store: MemoryStore) -> None:
@@ -107,7 +138,10 @@ def test_context_builder_respects_small_token_budget(store: MemoryStore) -> None
     )
 
     assert built.truncated is True
-    assert built.estimated_input_tokens <= 300
+    system = built.messages[0].content
+    assert system.rstrip().endswith("Put <<<BOXI_SIGNALS>>> nowhere else.")
+    assert "A" * 2000 not in system
+    assert "B" * 2000 not in system
 
 
 def test_summary_policy_creates_summary_for_old_batch(store: MemoryStore) -> None:

@@ -33,7 +33,7 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
   formation (`relationship_state` memory type), LLM conversation summary. Run via
   `BackgroundTasks` off the response path; single-flight; config-gated
   (`enable_reflection`); failure-isolated. Spec: `docs/SD4_SPEC.md`.
-- [ ] **SD-1b — Make the model actually emit the signals trailer `[Claude]`.**
+- [x] **SD-1b — Make the model actually emit the signals trailer `[Claude]`.**
   Real-DeepSeek smoke (Session 27) found the trailer is rarely emitted in the chat
   path (~0–1/3) → signals don't flow (trust/closeness frozen, memories fall to regex
   M2). Fix (validated live, raises emission to 4/5): mandatory `OUTPUT_PROTOCOL` +

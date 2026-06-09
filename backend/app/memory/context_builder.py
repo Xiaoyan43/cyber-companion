@@ -13,7 +13,7 @@ from backend.app.memory.database import (
     MoodStateRecord,
     RelationshipStateRecord,
 )
-from backend.app.memory.persona import load_persona_system_prompt
+from backend.app.memory.persona import OUTPUT_PROTOCOL, load_persona_system_prompt
 from backend.app.memory.retrieval import is_expired, rank_memories, tokenize
 from backend.app.memory.store import MemoryStore
 from backend.app.providers.cost import estimate_token_count
@@ -158,8 +158,13 @@ def build_provider_context(
     reserved_tokens = estimate_token_count(provider_user_input) + sum(
         estimate_token_count(f"{message.role}: {message.content}") for message in recent_raw
     )
-    memory_budget = max(256, config.max_input_tokens_per_turn - reserved_tokens)
+    protocol_tokens = estimate_token_count(OUTPUT_PROTOCOL)
+    memory_budget = max(
+        256,
+        config.max_input_tokens_per_turn - reserved_tokens - protocol_tokens,
+    )
     packed_sections, truncated = _pack_sections(system_sections, max_input_tokens=memory_budget)
+    packed_sections.append(OUTPUT_PROTOCOL)
 
     provider_messages: list[ChatMessage] = [
         ChatMessage(role="system", content="\n\n".join(packed_sections))

@@ -2179,3 +2179,41 @@
 - 预算墙保持关闭但保留旋钮；schema 改动须更 `docs/MEMORY_DESIGN.md`。
 - 后台反思 best-effort、永不破坏对话；`reflecting` finally 必释放。
 - Boxi 毒舌人设不变；不发全量历史；LLM 输出只当数据。
+
+## 2026-06-09 - Session 38 (Cursor：SD-1b mandatory signals trailer)
+
+本次完成：
+
+- **SD-1b Task 1 — `persona.py`**
+  - `OUTPUT_PROTOCOL` 换为 mandatory + one-shot example（含 memory item）；去掉 "omit the trailer" 逃生口。
+  - `load_persona_system_prompt()` 只返回人设，不再 append protocol；常量仍可 import。
+- **SD-1b Task 2 — `context_builder.py`**
+  - `build_provider_context` 在 mood/relationship/impression/memories 之后把 `OUTPUT_PROTOCOL` 作为**最后一个** system section 追加（pack 时预留 token，保证不被截断）。
+- **SD-1b Task 3 — config**
+  - `max_output_tokens_per_turn` 300 → 600（`budget.json` + `budget.example.json`）。
+- **SD-1b Task 4 — tests**
+  - `test_load_persona_system_prompt_excludes_output_protocol`；`test_context_builder_system_message_ends_with_protocol_once`；小预算用例改为断言 protocol 必现 + 大段 memory 被截断。
+
+下次接着做：
+
+- **真·DeepSeek re-smoke**（Claude review）：验证 trailer 多数轮次出现、trust/closeness 移动、`writer="llm"` 记忆写入。
+- 或 **SD-5** / V2 重建。
+
+已知问题：
+
+- 未在本环境跑真 DeepSeek 验收（需 Claude re-smoke）。
+
+相关文件：
+
+- `backend/app/memory/persona.py`, `context_builder.py`
+- `config/budget.json`, `config/budget.example.json`
+- `backend/tests/test_context_builder.py`
+- `docs/TODO.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**189 passed** + tsc 通过。
+
+不要改动的边界：
+
+- 未改 parser / SignalStreamFilter / kernel / 写入管线；人设语气/边界不变；M2 正则回退保留。

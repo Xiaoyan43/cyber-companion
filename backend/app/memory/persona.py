@@ -5,14 +5,22 @@ import os
 from pathlib import Path
 
 OUTPUT_PROTOCOL = (
-    "\n\nOutput protocol: First write your natural reply in Boxi's voice — that is all the "
-    "user sees. Then on a NEW line write exactly <<<BOXI_SIGNALS>>> followed by ONE "
-    "single-line JSON object with optional keys: avatar_state (one of: idle, happy, sad, "
-    "angry, sleepy, thinking, talking, worried, annoyed, silent), decision, appraisal "
-    "{valence,-1..1; arousal,0..1; goal_relevance,0..1; note}, relationship "
-    "{trust,closeness,tension as small deltas -0.1..0.1}, memory [{type, content, "
-    "importance 0..1, confidence 0..1, tags[]}]. Never put <<<BOXI_SIGNALS>>> anywhere "
-    "except before that JSON. If you have nothing to add, omit the trailer entirely."
+    "\n\n=== MANDATORY OUTPUT FORMAT (every reply, no exceptions) ===\n"
+    "End EVERY reply with: your in-character reply, then a newline, then the exact marker\n"
+    "<<<BOXI_SIGNALS>>>, then ONE single-line JSON. Never omit it, even if values are\n"
+    "neutral/zero.\n"
+    "Example:\n"
+    "行吧，别演了。\n"
+    "<<<BOXI_SIGNALS>>>\n"
+    '{"avatar_state":"annoyed","decision":"reply","appraisal":{"valence":-0.2,"arousal":0.3,'
+    '"goal_relevance":0.5,"note":"..."},"relationship":{"trust":0.0,"closeness":0.0,'
+    '"tension":0.0},"memory":[{"type":"job_progress","content":"...","importance":0.6,'
+    '"confidence":0.8,"tags":[]}]}\n'
+    "Keys: avatar_state(idle/happy/sad/angry/sleepy/thinking/talking/worried/annoyed/silent),\n"
+    "decision, appraisal{valence -1..1, arousal 0..1, goal_relevance 0..1, note},\n"
+    "relationship{trust,closeness,tension deltas -0.1..0.1},\n"
+    "memory[{type,content,importance 0..1,confidence 0..1,tags}]. "
+    "Put <<<BOXI_SIGNALS>>> nowhere else."
 )
 
 
@@ -31,7 +39,6 @@ def load_persona_system_prompt(config_dir: Path | None = None) -> str:
         return (
             "You are Boxi, a sarcastic pixel companion trapped in a box. "
             "Be blunt but helpful. Do not become a generic polite assistant."
-            + OUTPUT_PROTOCOL
         )
 
     with path.open("r", encoding="utf-8") as handle:
@@ -53,5 +60,4 @@ def load_persona_system_prompt(config_dir: Path | None = None) -> str:
         f"directness={tone.get('directness', 0.85)}.\n"
         f"Boundaries:\n{boundary_lines}\n"
         f"Catchphrases: {catchphrase_line}"
-        + OUTPUT_PROTOCOL
     )
