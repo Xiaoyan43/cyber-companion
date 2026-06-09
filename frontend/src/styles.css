@@ -460,17 +460,20 @@ button {
 
 
 .relationship-panel,
+.mood-panel,
 .memory-panel {
   border: 1px dashed #564d42;
   border-radius: 6px;
   padding: 10px;
 }
 
+.mood-panel,
 .memory-panel {
   margin-top: 8px;
 }
 
 .relationship-panel summary,
+.mood-panel summary,
 .memory-panel summary {
   cursor: pointer;
   color: #cfc4aa;
@@ -479,6 +482,7 @@ button {
 }
 
 .relationship-panel[open] summary,
+.mood-panel[open] summary,
 .memory-panel[open] summary {
   margin-bottom: 10px;
 }
@@ -514,11 +518,56 @@ button {
   color: #f7f1df;
 }
 
+.mood-copy,
 .memory-copy {
   margin: 0;
   color: #cfc4aa;
   font-size: 0.82rem;
   line-height: 1.45;
+}
+
+.mood-label {
+  margin: 0 0 10px;
+  color: #f7f1df;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.mood-stats {
+  display: grid;
+  gap: 8px;
+}
+
+.mood-stat-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  font-size: 0.82rem;
+}
+
+.mood-stat-header span {
+  color: #a89b84;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.mood-stat-header strong {
+  color: #f7f1df;
+  font-size: 0.78rem;
+}
+
+.mood-stat-bar {
+  height: 8px;
+  border: 1px solid #4a433a;
+  border-radius: 2px;
+  background: rgba(20, 18, 16, 0.45);
+  overflow: hidden;
+}
+
+.mood-stat-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7a6a52 0%, #cfc4aa 100%);
 }
 
 .memory-groups {

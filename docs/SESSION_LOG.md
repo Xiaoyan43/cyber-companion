@@ -2392,3 +2392,39 @@
 
 - 无后端改动；不改 provider / memory schema / behavior contract / file permission policy。
 - 只读，无编辑/删除记忆写操作。
+
+## 2026-06-10 - Session 30 (Cursor：只读「Boxi 此刻心情」面板)
+
+本次完成：
+
+- 纯前端切片：新增 `frontend/src/components/MoodPanel.tsx`，`fetchMoodState()` → `GET /memory/mood`。
+- 折叠面板 + API gating；顶部 mood 中文标签（覆盖 avatar 10 态）；五项进度条
+  （精力/烦躁/无聊/担心/孤独），不重复展示 trust（已在关系面板）。
+- `App.tsx` 挂在 RelationshipPanel 与 MemoryPanel 之间，补齐灵魂仪表盘三件套。
+- `styles.css` 复用 companion 面板像素风格。
+- `docs/TODO.md`：`textForSpeech` / `stripStageDirections` 勾选（`speechText.ts` 已实现并接入）。
+
+下次接着做：
+
+- Memory links 可视化（待 `GET /memory/links` 只读路由）。
+- 语音 backlog（豆包连接复用、streaming TTS 等）或 V2 重建。
+
+已知问题：
+
+- 心情面板仅在挂载/启用时拉取一次，不随对话轮次自动刷新（与关系/记忆面板一致）。
+
+相关文件：
+
+- `frontend/src/components/MoodPanel.tsx`
+- `frontend/src/App.tsx`
+- `frontend/src/styles.css`
+- `docs/TODO.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**207 passed** + tsc。
+- `npm run build:frontend`：通过。
+
+不要改动的边界：
+
+- 无后端改动；不改 provider / memory schema / behavior contract / file permission policy。
