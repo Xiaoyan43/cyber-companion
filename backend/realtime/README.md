@@ -50,11 +50,13 @@ Run:
 python -m backend.realtime.run_voice
 ```
 
-**Working looks like:** speak Chinese → Doubao flash ASR transcribes → DeepSeek replies →
-Doubao 灿灿 TTS speaks back (PCM 24 kHz). **Interrupt** by talking while Boxi is speaking;
-Silero VAD should cut TTS and re-listen. On laptop + external speaker, interruption is
-best-effort (half-duplex); use headphones for reliable Phase 2 testing.
+**Working looks like:** speak Chinese → Doubao ASR transcribes → **Companion Brain**
+(behavior + compact memory context + persona) streams DeepSeek → signal-strip → Doubao
+灿灿 TTS speaks back (PCM 24 kHz). Boxi may stay silent or refuse (behavior engine).
+**Interrupt** by talking while Boxi is speaking; Silero VAD should cut TTS and re-listen.
+On laptop + external speaker, interruption is best-effort (half-duplex); use headphones.
 
-Stack: Pipecat **1.3.0**, STT = **DoubaoFlashSTTService** (cloud flash; streaming WS = Phase 2b),
-TTS = **DoubaoTTSService**, LLM = **OpenAILLMService** → DeepSeek. Fallbacks:
-`CYBER_COMPANION_VOICE_STT=whisper`, `CYBER_COMPANION_VOICE_TTS=mac_say`.
+Stack: Pipecat **1.3.0**, VAD = **SileroVADProcessor**, STT = **DoubaoFlashSTTService** or
+**DoubaoStreamingSTTService** (`CYBER_COMPANION_VOICE_STT=doubao_stream`), LLM slot =
+**CompanionBrainProcessor** (soul mirror of `/chat/complete`), TTS = **DoubaoTTSService**.
+Fallbacks: `CYBER_COMPANION_VOICE_STT=whisper`, `CYBER_COMPANION_VOICE_TTS=mac_say`.

@@ -102,10 +102,11 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
   public `sauc_python` demo). Toggle `CYBER_COMPANION_VOICE_STT=doubao_stream`; flash kept as
   fallback. Protocol + transcription validated live. **Spec: `docs/V2_PHASE2b_SPEC.md`.**
   Default stays flash pending live-mic acceptance (done-criteria #2) → then flip default to streaming.
-- [ ] **V2 Phase 3 — Companion Brain `[Claude→Cursor]`.** Fill the `CompanionBrain` stub +
+- [x] **V2 Phase 3 — Companion Brain `[Claude→Cursor]`.** Fill the `CompanionBrain` stub +
   a `CompanionBrainProcessor` in the LLM slot: compact soul context (no full transcript) +
   behavior gate (reply/silent/refuse/proactive) + persona + memory write + SD-1 signal-strip;
   mirrors `/chat/complete`. Soul reused, not edited. **Spec: `docs/V2_PHASE3_SPEC.md`.**
+  Manual mic recall / behavior smoke still user-owned.
 - [ ] **Voice latency — metrics-driven** `[Claude]`. Session-29 probe disproved context-growth
   (DeepSeek TTFB flat ~0.4s @2.6k chars). Need per-stage Pipecat metrics (LLM/TTS TTFB over
   turns) to find the real "builds up" cause; then targeted fix (VAD `stop_secs`, TTS, audio).

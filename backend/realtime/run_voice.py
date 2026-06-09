@@ -1,7 +1,7 @@
-"""Standalone Pipecat voice skeleton — mic → VAD → STT → DeepSeek → TTS → speaker.
+"""Standalone Pipecat voice loop — mic → VAD → STT → Companion Brain → TTS → speaker.
 
 Run: ``python -m backend.realtime.run_voice`` (see ``backend/realtime/README.md``).
-Not part of the V1 HTTP gate; soul wiring lands in Phase 3.
+Not part of the V1 HTTP gate; soul wiring is V2 Phase 3.
 """
 
 from __future__ import annotations
@@ -30,11 +30,6 @@ load_dotenv(override=True)
 
 logger.remove(0)
 logger.add(sys.stderr, level=os.getenv("CYBER_COMPANION_VOICE_LOG_LEVEL", "INFO"))
-
-BOXI_VOICE_PROMPT = (
-    "你是 Boxi，一个被困在玻璃盒子里的小人。说话简短、口语化，带点毒舌但不恶毒。"
-    "你在语音对话里回答，不要用 markdown、列表或表情符号。"
-)
 
 INPUT_SAMPLE_RATE = 16_000
 
@@ -104,18 +99,15 @@ async def main() -> None:
         default="doubao",
     )
 
-    # Pipecat 1.3.0 local voice agent pattern (see examples/getting-started/06a-voice-agent-local.py).
-    from pipecat.audio.vad.silero import SileroVADAnalyzer
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.worker import PipelineParams, PipelineWorker
-    from pipecat.processors.aggregators.llm_context import LLMContext
-    from pipecat.processors.aggregators.llm_response_universal import (
-        LLMContextAggregatorPair,
-        LLMUserAggregatorParams,
-    )
-    from pipecat.services.openai.llm import OpenAILLMService
     from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
     from pipecat.workers.runner import WorkerRunner
+
+    from backend.app.memory.store import get_memory_store
+    from backend.realtime.companion_brain import CompanionBrain
+    from backend.realtime.companion_brain_processor import CompanionBrainProcessor
+    from backend.realtime.vad_processor import SileroVADProcessor
 
     transport = LocalAudioTransport(
         LocalAudioTransportParams(
@@ -127,34 +119,19 @@ async def main() -> None:
     stt = _build_stt(stt_backend)
     tts, output_sample_rate = _build_tts(tts_backend)
 
-    llm = OpenAILLMService(
-        api_key=os.environ["DEEPSEEK_API_KEY"],
-        base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-        settings=OpenAILLMService.Settings(
-            model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
-            system_instruction=BOXI_VOICE_PROMPT,
-            temperature=0.7,
-            max_tokens=300,
-        ),
-    )
-
-    context = LLMContext()
-    user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
-        context,
-        user_params=LLMUserAggregatorParams(
-            vad_analyzer=SileroVADAnalyzer(),
-        ),
-    )
+    store = get_memory_store()
+    brain = CompanionBrain(store)
+    vad = SileroVADProcessor()
+    brain_processor = CompanionBrainProcessor(brain)
 
     pipeline = Pipeline(
         [
             transport.input(),
+            vad,
             stt,
-            user_aggregator,
-            llm,
+            brain_processor,
             tts,
             transport.output(),
-            assistant_aggregator,
         ]
     )
 
@@ -171,7 +148,7 @@ async def main() -> None:
     runner = WorkerRunner(handle_sigint=False if sys.platform == "win32" else True)
 
     logger.info(
-        f"Voice skeleton ready (STT={stt_backend}, TTS={tts_backend}) — speak into the mic; "
+        f"Voice brain ready (STT={stt_backend}, TTS={tts_backend}) — speak into the mic; "
         "use headphones to avoid echo. Ctrl+C to exit."
     )
 

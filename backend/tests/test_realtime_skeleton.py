@@ -9,16 +9,30 @@ def test_realtime_package_imports() -> None:
     assert backend.realtime.CompanionBrain is CompanionBrain
 
 
-def test_companion_brain_stub_raises_not_implemented() -> None:
+def test_companion_brain_decide_returns_behavior_decision() -> None:
     reset_memory_store()
     store = get_memory_store()
     brain = CompanionBrain(store)
 
-    with pytest.raises(NotImplementedError, match="V2 Phase 1"):
-        brain.decide("hello")
+    decision = brain.decide("你好")
 
-    with pytest.raises(NotImplementedError, match="V2 Phase 1"):
-        brain.respond("hello")
+    assert decision.decision in {"reply", "silent", "mutter", "refuse", "interrupt", "proactive", "observe"}
+    assert decision.avatar_state
 
-    with pytest.raises(NotImplementedError, match="V2 Phase 1"):
-        brain.remember("hello", signals=None)
+
+def test_companion_brain_decide_silent_on_empty_input() -> None:
+    reset_memory_store()
+    store = get_memory_store()
+    brain = CompanionBrain(store)
+
+    decision = brain.decide("   ")
+
+    assert decision.decision == "silent"
+    assert decision.should_call_llm is False
+
+
+def test_companion_brain_processor_imports_with_pipecat() -> None:
+    pytest.importorskip("pipecat")
+    from backend.realtime.companion_brain_processor import CompanionBrainProcessor
+
+    assert CompanionBrainProcessor is not None

@@ -2701,3 +2701,51 @@
 
 - 未改 `backend/app/**`（V1 flash 适配器 `backend/app/stt/doubao.py` 原样保留）、`frontend/**`；pipecat 未进 V1 gate。
 - flash STT 作为 fallback toggle 保留；Soul 接线留 Phase 3。
+
+## 2026-06-10 - Session 38 (V2 Phase 3 — Companion Brain)
+
+本次完成：
+
+- **`CompanionBrain`**（`backend/realtime/companion_brain.py`）：按 `/chat/complete` 顺序接线 soul——
+  `evaluate_behavior` → `evaluate_llm_budget_gate` / `build_provider_context` →
+  `router.complete_stream` → `SignalStreamFilter` 剥 trailer → `parse_structured_assistant_response`；
+  非 LLM 路径走 `build_local_completion`（`silent` 不发声）。`remember()` 镜像 HTTP 尾：
+  `apply_signals_to_kernel` → `persist_chat_turn` → `record_turn_memories` →
+  `maybe_update_conversation_summary` → `note_llm_turn`。
+- **`CompanionBrainProcessor`**（Pipecat `FrameProcessor`，照 Langchain 示例模式）：
+  消费 final `TranscriptionFrame`，发 `LLMFullResponseStartFrame` + `LLMTextFrame` 流式 delta → TTS；
+  `InterruptionFrame` 取消在途 turn；`remember` + `run_reflection_if_due` 走 `asyncio.to_thread` 后台，
+  不阻塞音频。
+- **`SileroVADProcessor`**：从 `LLMUserAggregator` 抽出 VAD，去掉 `LLMContext` / aggregators；
+  pipeline = `transport → VAD → STT → brain → TTS → output`。
+- **`run_voice.py`**：移除 `OpenAILLMService` + `BOXI_VOICE_PROMPT` + `LLMContextAggregatorPair`；
+  接入 brain + VAD；STT/TTS/OpenBLAS 修复不变。
+- 测试：`test_companion_brain.py`（silent 路径 + signal-strip）；`test_realtime_skeleton.py` 更新；
+  realtime 仍 importorskip。
+
+下次接着做：
+
+- 用户戴耳机真机验收（记事实 → 后续 recall；毒舌 persona；偶尔 silent/refuse；查 `/memory/memories`）。
+- `CYBER_COMPANION_VOICE_STT=doubao_stream` 麦验收通过后翻默认 STT。
+- V2 Phase 4（turn-taking）/ Voice latency metrics-driven 诊断。
+
+已知问题：
+
+- 未做真机 mic 对话验收（agent 无麦）；latency「越聊越慢」仍待 metrics run，Phase 3 compact context 不宣称修复。
+- `avatar_state` 仅 log，房间绑定留 Phase 5。
+- 外接音箱回声 / half-duplex 边界不变。
+
+相关文件：
+
+- `backend/realtime/{companion_brain.py,companion_brain_processor.py,vad_processor.py,run_voice.py,README.md}`
+- `backend/tests/{test_companion_brain.py,test_realtime_skeleton.py}`
+- `docs/{TODO.md,SESSION_LOG.md}`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**234 passed** + tsc green；realtime importorskip 仍绿。
+
+不要改动的边界：
+
+- **未改 `backend/app/**`**；soul 仅 import 复用。
+- V1 HTTP gate / `frontend/**` 未动；pipecat 未进 V1 requirements。
