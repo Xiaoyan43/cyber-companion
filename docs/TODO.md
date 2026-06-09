@@ -83,7 +83,7 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
 Source: `docs/ARCHITECTURE_V2.md` + `docs/REBUILD_ROADMAP.md`. Keep the soul; build
 hardware-ready (brain/surface split). One phase = one checkpoint.
 
-- [ ] **V2 Phase 0 — Foundation `[Claude→Cursor]`.** Brain/surface seam
+- [x] **V2 Phase 0 — Foundation `[Claude→Cursor]`.** Brain/surface seam
   (`backend/realtime/` skeleton reusing the soul) + declare Pipecat/PixiJS deps
   (no install) + reuse ledger + layout docs. V1 stays runnable. **Spec:
   `docs/V2_PHASE0_SPEC.md`.**

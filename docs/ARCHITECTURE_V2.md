@@ -189,3 +189,14 @@ Waifu, etc.). Decision:
 - Capacitor — Level 2 (iPhone surface wrapper). MIT.
 - Project AIRI (MIT) / Open-LLM-VTuber (custom license) / Soul of Waifu (GPL-3) —
   Level 1, reference only (study patterns; do not copy code, esp. the non-MIT ones).
+
+## Repo layout (V2)
+
+- `backend/app/` — **soul (kept):** memory, behavior, providers, files, reflection,
+  plus the V1 HTTP API (`main.py`). Unchanged by the rebuild until explicitly retired.
+- `backend/realtime/` — **brain voice loop** (Pipecat, Phase 1+). Reuses the soul via
+  `companion_brain.py`; does not fork memory/behavior logic.
+- `frontend/` — **surface:** V1 CSS pixel avatar now; PixiJS room replaces it in Phase 5.
+- Brain ↔ surface communicate over **WebSocket** (Phase 1+). The V1 app stays runnable
+  throughout the rebuild; `requirements-realtime.txt` declares Pipecat without touching
+  the V1 install gate.

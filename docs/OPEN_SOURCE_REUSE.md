@@ -351,4 +351,36 @@ Version/commit: ^1.60.0
 Used for: scripts/ui_verify.mjs browser smoke verification.
 Local files: package.json, package-lock.json, scripts/ui_verify.mjs
 Notes: devDependency only; no source copied. Bumped in Session 23 to clear GHSA-7mvr-c777-76hp advisory.
+
+Name: Pipecat (pipecat-ai)
+URL: https://github.com/pipecat-ai/pipecat
+License: BSD-2-Clause
+Version/commit: 1.3.0 (pinned in backend/requirements-realtime.txt)
+Used for: V2 realtime voice pipeline (frame-processor, interruption, transport-agnostic).
+Local files: backend/requirements-realtime.txt, backend/realtime/ (Phase 1+)
+Notes: Level 4 (base voice). Declared Phase 0; install in Phase 1 — not in V1 requirements.txt.
+
+Name: PixiJS
+URL: https://pixijs.com/
+License: MIT
+Version/commit: (Phase 5 — not yet installed)
+Used for: V2 2.5D pixel room renderer (glass / room / character layers).
+Local files: frontend/ (Phase 5)
+Notes: Level 3 (renderer). Recorded Phase 0; npm install lands in Phase 5.
+
+Name: Silero VAD via @ricky0123/vad-web
+URL: https://github.com/ricky0123/vad-web
+License: MIT
+Version/commit: (Phase 1 — not yet installed)
+Used for: Browser-side VAD for endpointing and barge-in on the surface.
+Local files: frontend/ (Phase 1)
+Notes: Level 2. Phase 1 install alongside Pipecat brain wiring.
+
+Name: Capacitor
+URL: https://capacitorjs.com/
+License: MIT
+Version/commit: (Phase 9 — not yet installed)
+Used for: Native iOS wrapper for the iPhone-as-box surface (mic + AEC + background audio).
+Local files: frontend/ (Phase 9)
+Notes: Level 2 (iPhone surface wrapper). Pattern borrowed from AIRI Stage Pocket; Phase 9.
 ```

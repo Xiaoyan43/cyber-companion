@@ -2514,3 +2514,40 @@
 不要改动的边界：
 
 - 只读；未改 `memory_links` 表/契约、SD-5 linker、1-hop 检索、任何 SD 契约。
+
+## 2026-06-10 - Session 34 (V2 Phase 0 — brain/surface seam)
+
+本次完成：
+
+- **V2 Phase 0 checkpoint**（`docs/V2_PHASE0_SPEC.md`）：`backend/realtime/` 包骨架
+  （`CompanionBrain` 三类 stub：`decide` / `respond` / `remember`），soul import 对齐
+  `main.chat_complete`（`evaluate_behavior`、`build_provider_context`、
+  `get_provider_router`、`record_turn_memories`、`load_persona_system_prompt`）。
+- `backend/requirements-realtime.txt` 声明 `pipecat-ai==1.3.0`（未安装）。
+- `docs/ARCHITECTURE_V2.md` 新增 Repo layout (V2)；`docs/OPEN_SOURCE_REUSE.md` 记录
+  Pipecat / PixiJS / vad-web / Capacitor。
+- `backend/tests/test_realtime_skeleton.py`：import + stub `NotImplementedError` 边界测试。
+
+下次接着做：
+
+- V2 Phase 1 — Pipecat voice skeleton（安装 realtime deps、WebSocket、mic→VAD→STT→LLM→TTS）。
+
+已知问题：
+
+- 无；V1 行为与 entrypoint 未动。
+
+相关文件：
+
+- `backend/realtime/{__init__.py,companion_brain.py,README.md}`
+- `backend/requirements-realtime.txt`
+- `backend/tests/test_realtime_skeleton.py`
+- `docs/ARCHITECTURE_V2.md`、`docs/OPEN_SOURCE_REUSE.md`、`docs/TODO.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**215 passed** + tsc。
+- `npm run build:frontend`：通过。
+
+不要改动的边界：
+
+- 未改 `backend/app/main.py`、soul 模块、V1 frontend；未 `pip install pipecat`、未装 PixiJS。
