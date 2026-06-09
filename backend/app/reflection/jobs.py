@@ -4,11 +4,19 @@ import json
 
 from backend.app.behavior.parser import JSON_BLOCK_PATTERN
 from backend.app.memory.budget import BudgetConfig
-from backend.app.memory.database import MessageRecord, utc_now_iso
+from backend.app.memory.database import MemoryRecord, MessageRecord, utc_now_iso
+from backend.app.memory.retrieval import tokenize
+from backend.app.memory.schema import FACTUAL_MEMORY_TYPES
 from backend.app.memory.store import MemoryStore
 from backend.app.providers.exceptions import ProviderError
 from backend.app.providers.router import get_provider_router
 from backend.app.providers.types import ChatCompletionRequest, ChatMessage
+
+# SD-5 linker tuning.
+_LINK_CANDIDATE_CAP = 40
+_LINK_MIN_OVERLAP = 2
+_LINK_MIN_RATIO = 0.34
+_LINK_MAX_NEW_PER_PASS = 20
 
 
 def _llm_json(
@@ -44,9 +52,21 @@ def _clamp_importance(value: float) -> float:
     return max(0.0, min(1.0, value))
 
 
+def _factual_candidates(store: MemoryStore, cap: int) -> list[MemoryRecord]:
+    # Factual user-fact memories only. The impression (relationship_state),
+    # conversation summaries, and emotion_state are synthesized/internal and must
+    # never be consolidated or mislinked.
+    factual = [
+        memory
+        for memory in store.list_memories(limit=cap * 3)
+        if memory.type in FACTUAL_MEMORY_TYPES
+    ]
+    return factual[:cap]
+
+
 def consolidate_memories(store: MemoryStore, budget: BudgetConfig) -> None:
     del budget  # reserved for future budget gating
-    candidates = store.list_memories(limit=40)
+    candidates = _factual_candidates(store, _LINK_CANDIDATE_CAP)
     if not candidates:
         return
 
@@ -93,6 +113,57 @@ def consolidate_memories(store: MemoryStore, budget: BudgetConfig) -> None:
             continue
         clamped = _clamp_importance(min(existing.importance, new_importance))
         store.update_memory(mid, importance=clamped)
+
+
+def link_related_memories(store: MemoryStore, budget: BudgetConfig) -> None:
+    """Deterministically cross-link factual memories that share strong tokens.
+
+    Runs in reflection (off the response path) after consolidation, with no LLM.
+    Links are bidirectional + idempotent; only cross-type pairs with a real shared
+    token are linked so retrieval can pull in related context (e.g. a ``project``
+    and a ``job_progress`` that name the same company)."""
+    del budget  # deterministic; no LLM, no budget gating
+    candidates = _factual_candidates(store, _LINK_CANDIDATE_CAP)
+    if len(candidates) < 2:
+        return
+
+    token_cache = {memory.id: tokenize(memory.content) for memory in candidates}
+    # Lazily cache each memory's existing links so the per-pass cap counts only
+    # genuinely new links (idempotent re-runs do not exhaust the budget).
+    existing_links: dict[int, set[int]] = {}
+
+    def _already_linked(left_id: int, right_id: int) -> bool:
+        if left_id not in existing_links:
+            existing_links[left_id] = set(store.get_linked_memory_ids(left_id))
+        return right_id in existing_links[left_id]
+
+    new_links = 0
+    for index, left in enumerate(candidates):
+        if new_links >= _LINK_MAX_NEW_PER_PASS:
+            break
+        left_tokens = token_cache[left.id]
+        if not left_tokens:
+            continue
+        for right in candidates[index + 1 :]:
+            if new_links >= _LINK_MAX_NEW_PER_PASS:
+                break
+            if left.type == right.type:
+                continue
+            right_tokens = token_cache[right.id]
+            if not right_tokens:
+                continue
+            overlap = left_tokens & right_tokens
+            if len(overlap) < _LINK_MIN_OVERLAP:
+                continue
+            smaller = min(len(left_tokens), len(right_tokens))
+            if smaller == 0 or len(overlap) / smaller < _LINK_MIN_RATIO:
+                continue
+            if _already_linked(left.id, right.id):
+                continue
+            store.add_memory_link(left.id, right.id)
+            existing_links[left.id].add(right.id)
+            existing_links.setdefault(right.id, set()).add(left.id)
+            new_links += 1
 
 
 def form_impression(store: MemoryStore, budget: BudgetConfig) -> None:

@@ -152,6 +152,29 @@ Fields:
 - `allowed`
 - `reason`
 
+### memory_links (SD-5)
+
+Additive table (`SCHEMA_VERSION = 3`; no migration runner — same pattern as
+`relationship_state`). Cross-links between related memories so retrieval can follow
+one hop.
+
+Fields:
+
+- `id`
+- `created_at`
+- `memory_id`
+- `related_memory_id`
+- `relation` (default `related`)
+
+Properties:
+
+- **Bidirectional:** each logical link stores both `(a, b)` and `(b, a)` so a
+  single-direction lookup suffices at read time.
+- **Idempotent:** `UNIQUE (memory_id, related_memory_id)` + `INSERT OR IGNORE`; no
+  self-links.
+- **`ON DELETE CASCADE`** on both FKs keeps links clean when a memory is deleted
+  (`connect()` sets `PRAGMA foreign_keys = ON`).
+
 ## Retrieval Policy
 
 Expired memories (`expires_at` in the past) are excluded from context recall;
@@ -167,6 +190,13 @@ Each LLM call should include:
 6. Optional `[Impression]` block when a `relationship_state` memory exists (SD-4 writes it).
 7. Last few raw turns only.
 8. Current user input or event.
+
+**1-hop link expansion (SD-5):** after the top `max_memories_per_turn` are ranked and
+selected, retrieval follows one hop of `memory_links` and pulls in the linked memories
+(capped at `max(2, max_memories_per_turn // 2)`). This is **additive** — it never drops
+a would-be-selected memory — and the extras ride the same token packer, so over-budget
+ones fall out with the rest of the memories block. Expired links are skipped (the linked
+set is drawn from the already-expiry-filtered active memories).
 
 Do not include the full transcript unless the user explicitly asks for it and token budget allows.
 
@@ -245,9 +275,15 @@ the stream closes. Only LLM turns increment the counter.
 
 1. **Consolidate** — archive stale `job_progress`/`recent_event` via `expires_at`;
    deprioritize by lowering `importance` only (never raise, never merge/delete content).
-2. **Impression** — one `relationship_state` memory upsert (`metadata.writer="reflection"`)
+   Candidate set is restricted to `FACTUAL_MEMORY_TYPES` (SD-5), so the impression
+   (`relationship_state`), summaries, and `emotion_state` can never be archived.
+2. **Link related memories (SD-5)** — deterministic, no LLM. Cross-links factual
+   memories that share a real token (cross-type pairs only; overlap ≥ 2 and
+   overlap / min(tokens) ≥ 0.34), capped per pass. Runs after consolidation so it
+   links the post-consolidation set. Feeds the 1-hop retrieval expansion above.
+3. **Impression** — one `relationship_state` memory upsert (`metadata.writer="reflection"`)
    → `[Impression]` block in provider context.
-3. **LLM summary** — when `llm_summary` is true, writes `conversation_summaries` in the
+4. **LLM summary** — when `llm_summary` is true, writes `conversation_summaries` in the
    background; the synchronous `maybe_update_conversation_summary` returns early so
    **no LLM runs on the response path**.
 

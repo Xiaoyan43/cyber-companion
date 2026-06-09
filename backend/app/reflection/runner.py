@@ -20,10 +20,16 @@ def run_reflection_if_due(store: MemoryStore, budget: BudgetConfig) -> None:
             from backend.app.reflection.jobs import (
                 consolidate_memories,
                 form_impression,
+                link_related_memories,
                 summarize_conversation_llm,
             )
 
-            for job in (consolidate_memories, form_impression, summarize_conversation_llm):
+            for job in (
+                consolidate_memories,
+                link_related_memories,
+                form_impression,
+                summarize_conversation_llm,
+            ):
                 try:
                     job(store, budget)
                 except Exception:

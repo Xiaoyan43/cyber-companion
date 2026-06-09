@@ -135,6 +135,30 @@ def build_provider_context(
             break
         selected_memories.append(memory)
 
+    # SD-5: follow one hop of memory links so a selected memory drags in its related
+    # context. Additive and capped — it never drops a would-be-selected memory.
+    # active_memories already excludes expired, so linked-but-expired memories are
+    # skipped. Linked extras ride the same _pack_sections token budget below.
+    memory_by_id = {memory.id: memory for memory in active_memories}
+    selected_ids = {memory.id for memory in selected_memories}
+    link_extra_cap = max(2, config.max_memories_per_turn // 2)
+    linked_extra: list[MemoryRecord] = []
+    seen_extra: set[int] = set()
+    for memory in selected_memories:
+        if len(linked_extra) >= link_extra_cap:
+            break
+        for linked_id in store.get_linked_memory_ids(memory.id):
+            if len(linked_extra) >= link_extra_cap:
+                break
+            if linked_id in selected_ids or linked_id in seen_extra:
+                continue
+            linked_memory = memory_by_id.get(linked_id)
+            if linked_memory is None:
+                continue
+            linked_extra.append(linked_memory)
+            seen_extra.add(linked_id)
+    selected_memories.extend(linked_extra)
+
     # Only real conversation turns (source="chat") may be replayed to the
     # provider. SQL boundary queries avoid loading the full messages table.
     recent_raw = store.list_recent_chat_messages(config.max_raw_turns)

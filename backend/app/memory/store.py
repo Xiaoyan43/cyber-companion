@@ -319,6 +319,42 @@ class MemoryStore:
             cursor = connection.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
         return cursor.rowcount > 0
 
+    def add_memory_link(
+        self,
+        memory_id: int,
+        related_memory_id: int,
+        relation: str = "related",
+    ) -> None:
+        # Store both directions so a single-direction lookup suffices at read time.
+        # INSERT OR IGNORE keeps it idempotent via the UNIQUE(memory_id,
+        # related_memory_id) constraint. No self-links.
+        if memory_id == related_memory_id:
+            return
+        with connect(self.db_path) as connection:
+            connection.executemany(
+                """
+                INSERT OR IGNORE INTO memory_links (memory_id, related_memory_id, relation)
+                VALUES (?, ?, ?)
+                """,
+                (
+                    (memory_id, related_memory_id, relation),
+                    (related_memory_id, memory_id, relation),
+                ),
+            )
+
+    def get_linked_memory_ids(self, memory_id: int) -> list[int]:
+        with connect(self.db_path) as connection:
+            rows = connection.execute(
+                "SELECT related_memory_id FROM memory_links WHERE memory_id = ? ORDER BY id",
+                (memory_id,),
+            ).fetchall()
+        return [int(row["related_memory_id"]) for row in rows]
+
+    def count_memory_links(self) -> int:
+        with connect(self.db_path) as connection:
+            row = connection.execute("SELECT COUNT(*) AS n FROM memory_links").fetchone()
+        return int(row["n"]) if row else 0
+
     def get_mood_state(self) -> MoodStateRecord:
         with connect(self.db_path) as connection:
             row = connection.execute("SELECT * FROM mood_state WHERE id = 1").fetchone()

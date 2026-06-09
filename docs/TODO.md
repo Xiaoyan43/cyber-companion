@@ -58,10 +58,13 @@ Order: SD-1 → SD-2 → SD-3 → SD-4; SD-5 later. One phase = one checkpoint.
   whitelist) dropped the turn's write. Fix: M3 empty → fall through to regex M2
   (`write_policy.py`); enumerate the 8 allowed memory types in `OUTPUT_PROTOCOL`
   (`persona.py`); `MEMORY_DESIGN.md` Auto-Write note updated. **Spec: `docs/SD3b_SPEC.md`.**
-- [ ] **SD-5 (optional) — Memory links + top-down retrieval `[Claude]`.**
-  `memory_links` table + deterministic cross-type linker (in reflection) + 1-hop
-  retrieval expansion + consolidation candidate polish. **Spec ready:
-  `docs/SD5_SPEC.md`** (Claude). Update `docs/MEMORY_DESIGN.md` on implement.
+- [x] **SD-5 (optional) — Memory links + top-down retrieval `[Claude]` (done @ Session 28).**
+  Additive `memory_links` table (`SCHEMA_VERSION=3`, bidirectional + idempotent +
+  `ON DELETE CASCADE`); deterministic cross-type linker in reflection (after
+  consolidate, no LLM); 1-hop retrieval expansion (additive, capped, expired-skipped);
+  consolidation candidate set restricted to `FACTUAL_MEMORY_TYPES`. `docs/MEMORY_DESIGN.md`
+  updated. 207 backend tests + tsc green (+12 `test_memory_links.py`). Spec:
+  `docs/SD5_SPEC.md`.
 - [x] **SD config knobs `[Cursor-ok]`.** `llm_memory_extraction` (SD-3);
   `enable_reflection`, `reflection_every_n_turns`, `llm_summary` (SD-4) in
   `BudgetConfig` + `config/budget*.json`.

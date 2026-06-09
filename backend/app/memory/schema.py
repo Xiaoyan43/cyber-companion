@@ -1,4 +1,4 @@
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 MEMORY_TYPES = (
     "stable_profile",
@@ -10,6 +10,19 @@ MEMORY_TYPES = (
     "relationship_state",
     "behavior_preference",
     "conversation_summary",
+)
+
+# Concrete, user-fact memory types eligible for cross-type linking (SD-5) and for
+# consolidation candidacy. Excludes the synthesized/internal types
+# (relationship_state impression, conversation_summary, emotion_state) so reflection
+# can never archive/deprioritize or mislink them.
+FACTUAL_MEMORY_TYPES = (
+    "stable_profile",
+    "recent_event",
+    "project",
+    "job_progress",
+    "reminder",
+    "behavior_preference",
 )
 
 SCHEMA_SQL = """
@@ -100,8 +113,20 @@ CREATE TABLE IF NOT EXISTS file_access_log (
   reason TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS memory_links (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  memory_id INTEGER NOT NULL,
+  related_memory_id INTEGER NOT NULL,
+  relation TEXT NOT NULL DEFAULT 'related',
+  FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE,
+  FOREIGN KEY (related_memory_id) REFERENCES memories(id) ON DELETE CASCADE,
+  UNIQUE (memory_id, related_memory_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
 CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type);
 CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at);
 CREATE INDEX IF NOT EXISTS idx_reminders_status ON reminders(status);
+CREATE INDEX IF NOT EXISTS idx_memory_links_memory_id ON memory_links(memory_id);
 """
