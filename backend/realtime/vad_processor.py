@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from loguru import logger
+
 from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.audio.vad.vad_analyzer import VADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADAnalyzer, VADParams
+from backend.realtime.voice_config import load_vad_stop_secs
 from pipecat.audio.vad.vad_controller import VADController
 from pipecat.frames.frames import (
     CancelFrame,
@@ -20,9 +23,13 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 class SileroVADProcessor(FrameProcessor):
     """Minimal VAD step extracted from ``LLMUserAggregator`` — passthrough all frames."""
 
-    def __init__(self, *, vad_analyzer: VADAnalyzer | None = None) -> None:
+    def __init__(self, *, vad_analyzer: VADAnalyzer | None = None, stop_secs: float | None = None) -> None:
         super().__init__()
-        analyzer = vad_analyzer or SileroVADAnalyzer()
+        resolved_stop_secs = stop_secs if stop_secs is not None else load_vad_stop_secs()
+        analyzer = vad_analyzer or SileroVADAnalyzer(
+            params=VADParams(stop_secs=resolved_stop_secs),
+        )
+        logger.debug(f"SileroVADProcessor stop_secs={resolved_stop_secs}")
         self._vad_controller = VADController(analyzer)
         self._vad_controller.add_event_handler("on_speech_started", self._on_vad_speech_started)
         self._vad_controller.add_event_handler("on_speech_stopped", self._on_vad_speech_stopped)

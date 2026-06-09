@@ -43,6 +43,10 @@ Env vars:
 | `DOUBAO_TTS_API_KEY` | — | Doubao TTS API key |
 | `DOUBAO_TTS_VOICE_TYPE` | — | e.g. `zh_female_cancan_uranus_bigtts` |
 | `CYBER_COMPANION_SAY_VOICE` | `Tingting` | macOS `say` voice when `CYBER_COMPANION_VOICE_TTS=mac_say` |
+| `CYBER_COMPANION_VOICE_LOG_LEVEL` | `INFO` | `DEBUG` for per-turn latency lines |
+| `CYBER_COMPANION_VOICE_VAD_STOP_SECS` | `0.4` | Silero VAD stop delay (turn-finalize) |
+| `CYBER_COMPANION_VOICE_ASR_END_WINDOW_MS` | `300` | Doubao streaming `end_window_size` |
+| `CYBER_COMPANION_VOICE_MAX_TOKENS` | `200` | Spoken reply cap (+ signals trailer room) |
 
 Run:
 

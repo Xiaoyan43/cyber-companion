@@ -40,6 +40,7 @@ from backend.realtime.doubao_streaming_protocol import (
     build_full_client_request,
     parse_response,
 )
+from backend.realtime.voice_config import load_asr_end_window_ms
 
 WS_URL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel"
 DEFAULT_RESOURCE_ID = "volc.bigasr.sauc.duration"
@@ -57,7 +58,7 @@ class DoubaoStreamingSTTService(STTService):
         *,
         resource_id: str | None = None,
         uid: str = "cyber-companion",
-        end_window_size_ms: int = 800,
+        end_window_size_ms: int | None = None,
         **kwargs,
     ) -> None:
         super().__init__(
@@ -72,7 +73,12 @@ class DoubaoStreamingSTTService(STTService):
             resource_id or os.getenv(ENV_RESOURCE_ID, "").strip() or DEFAULT_RESOURCE_ID
         )
         self._uid = uid
-        self._end_window_size_ms = end_window_size_ms
+        self._end_window_size_ms = (
+            end_window_size_ms
+            if end_window_size_ms is not None
+            else load_asr_end_window_ms()
+        )
+        logger.debug(f"{self.__class__.__name__} end_window_size_ms={self._end_window_size_ms}")
 
         self._websocket = None
         self._receive_task = None

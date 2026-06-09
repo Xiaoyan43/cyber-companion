@@ -107,7 +107,7 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
   behavior gate (reply/silent/refuse/proactive) + persona + memory write + SD-1 signal-strip;
   mirrors `/chat/complete`. Soul reused, not edited. **Spec: `docs/V2_PHASE3_SPEC.md`.**
   Manual mic recall / behavior smoke still user-owned.
-- [ ] **Voice latency + terseness tuning `[Claude→Cursor]`.** Session-29 metrics: LLM is fast
+- [x] **Voice latency + terseness tuning `[Claude→Cursor]`.** Session-29 metrics: LLM is fast
   (TTFB 0.3s, prefix-cached); the cost is stacked turn-finalize (VAD `stop_secs` 0.8 + Doubao
   `end_window` 800 + smart_turn) + Boxi rambling 3–4 sentences × ~1.5–2s sequential TTS (= the
   "builds up"). Fix: one-sentence voice instruction + `max_output_tokens≈200`; tighten

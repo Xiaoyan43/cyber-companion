@@ -108,6 +108,14 @@ async def main() -> None:
     from backend.realtime.companion_brain import CompanionBrain
     from backend.realtime.companion_brain_processor import CompanionBrainProcessor
     from backend.realtime.vad_processor import SileroVADProcessor
+    from backend.realtime.voice_config import (
+        ENV_ASR_END_WINDOW_MS,
+        ENV_MAX_TOKENS,
+        ENV_VAD_STOP_SECS,
+        load_asr_end_window_ms,
+        load_vad_stop_secs,
+        load_voice_max_tokens,
+    )
 
     transport = LocalAudioTransport(
         LocalAudioTransportParams(
@@ -119,9 +127,13 @@ async def main() -> None:
     stt = _build_stt(stt_backend)
     tts, output_sample_rate = _build_tts(tts_backend)
 
+    voice_max_tokens = load_voice_max_tokens()
+    vad_stop_secs = load_vad_stop_secs()
+    asr_end_window_ms = load_asr_end_window_ms()
+
     store = get_memory_store()
-    brain = CompanionBrain(store)
-    vad = SileroVADProcessor()
+    brain = CompanionBrain(store, max_output_tokens=voice_max_tokens)
+    vad = SileroVADProcessor(stop_secs=vad_stop_secs)
     brain_processor = CompanionBrainProcessor(brain)
 
     pipeline = Pipeline(
@@ -150,6 +162,13 @@ async def main() -> None:
     logger.info(
         f"Voice brain ready (STT={stt_backend}, TTS={tts_backend}) — speak into the mic; "
         "use headphones to avoid echo. Ctrl+C to exit."
+    )
+    logger.info(
+        "Voice tuning: "
+        f"{ENV_VAD_STOP_SECS}={vad_stop_secs}, "
+        f"{ENV_ASR_END_WINDOW_MS}={asr_end_window_ms}, "
+        f"{ENV_MAX_TOKENS}={voice_max_tokens}; "
+        "smart_turn=off (no LLMUserAggregator in pipeline — VAD-only endpointing)"
     )
 
     await runner.add_workers(worker)

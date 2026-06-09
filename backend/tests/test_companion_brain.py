@@ -5,11 +5,21 @@ import pytest
 from backend.app.behavior.parser import SIGNALS_SENTINEL
 from backend.app.memory.store import get_memory_store, reset_memory_store
 from backend.app.providers.router import reset_provider_router
-from backend.realtime.companion_brain import CompanionBrain
+from backend.realtime.companion_brain import VOICE_MODE_INSTRUCTION, CompanionBrain
 
 
 async def _collect_turn_events(brain: CompanionBrain, user_text: str):
     return [event async for event in brain.stream_turn(user_text)]
+
+
+def test_append_voice_mode_instruction_adds_system_message() -> None:
+    from backend.app.providers.types import ChatMessage
+
+    messages = [ChatMessage(role="user", content="你好")]
+    augmented = CompanionBrain.append_voice_mode_instruction(messages)
+
+    assert augmented[-1].role == "system"
+    assert augmented[-1].content == VOICE_MODE_INSTRUCTION
 
 
 def test_stream_turn_local_reply_without_llm() -> None:

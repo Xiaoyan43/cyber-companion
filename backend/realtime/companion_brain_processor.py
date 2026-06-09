@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 from loguru import logger
 
@@ -57,6 +58,8 @@ class CompanionBrainProcessor(FrameProcessor):
         await self.push_frame(frame, direction)
 
     async def _handle_turn(self, user_text: str) -> None:
+        turn_started = time.monotonic()
+        first_delta_at: float | None = None
         await self.push_frame(LLMFullResponseStartFrame())
         try:
             async for event in self._brain.stream_turn(user_text):
@@ -64,11 +67,19 @@ class CompanionBrainProcessor(FrameProcessor):
                     chunk = event[1]
                     if not chunk:
                         continue
+                    if first_delta_at is None:
+                        first_delta_at = time.monotonic()
                     text_frame = LLMTextFrame(chunk)
                     text_frame.includes_inter_frame_spaces = True
                     await self.push_frame(text_frame)
                 else:
                     outcome = event[1]
+                    self._log_turn_latency(
+                        user_text=user_text,
+                        outcome=outcome,
+                        turn_started=turn_started,
+                        first_delta_at=first_delta_at,
+                    )
                     self._log_outcome(outcome)
                     self._schedule_off_path_work(outcome)
         except Exception as error:
@@ -80,6 +91,28 @@ class CompanionBrainProcessor(FrameProcessor):
         finally:
             await self.push_frame(LLMFullResponseEndFrame())
             self._turn_task = None
+
+    def _log_turn_latency(
+        self,
+        *,
+        user_text: str,
+        outcome: VoiceTurnOutcome,
+        turn_started: float,
+        first_delta_at: float | None,
+    ) -> None:
+        now = time.monotonic()
+        if first_delta_at is not None:
+            first_delta_s = f"{first_delta_at - turn_started:.3f}s"
+        else:
+            first_delta_s = "n/a"
+        logger.debug(
+            "CompanionBrain turn latency: "
+            f"user={user_text[:40]!r} "
+            f"finalize→first_text={first_delta_s} "
+            f"finalize→stream_end={now - turn_started:.3f}s "
+            f"spoken_chars={len(outcome.result.content)} "
+            f"has_signals={outcome.reply_signals is not None}"
+        )
 
     def _log_outcome(self, outcome: VoiceTurnOutcome) -> None:
         logger.info(

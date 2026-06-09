@@ -2749,3 +2749,67 @@
 
 - **未改 `backend/app/**`**；soul 仅 import 复用。
 - V1 HTTP gate / `frontend/**` 未动；pipecat 未进 V1 requirements。
+
+## 2026-06-10 - Session 39 (V2 voice latency + terseness tuning)
+
+本次完成：
+
+- **`voice_config.py`**：三档 turn-finalize / 简短化旋钮均可 env 覆盖、保守默认——
+  `CYBER_COMPANION_VOICE_VAD_STOP_SECS=0.4`、`CYBER_COMPANION_VOICE_ASR_END_WINDOW_MS=300`、
+  `CYBER_COMPANION_VOICE_MAX_TOKENS=200`。
+- **Task 1 简短化**：`CompanionBrain.append_voice_mode_instruction` 在
+  `build_provider_context` 之后 append 语音 system 指令（不改 soul persona）；`run_voice`
+  传入 `max_output_tokens=200` 作 backstop。
+- **Task 2 turn-finalize**：`SileroVADProcessor` 用 `VADParams(stop_secs=0.4)`；
+  `DoubaoStreamingSTTService` 默认 `end_window_size_ms=300`（原 800）。
+- **smart_turn 结论**：Session-29 DEBUG 里的 `TurnAnalyzerUserTurnStopStrategy` /
+  `base_smart_turn:analyze_end_of_turn` 来自旧管线的 **`LLMUserAggregator`**（Pipecat 内置
+  smart-turn ML 端点）。Phase 3 已换成 `SileroVADProcessor` + `CompanionBrainProcessor`，
+  **当前 pipeline 无 smart_turn**；端点只靠 VAD `stop_secs` + Doubao `end_window_size`（不再三层叠加）。
+- **DEBUG 时序**：`CompanionBrainProcessor` 打 `finalize→first_text` / `finalize→stream_end`；
+  `run_voice` 启动打印 tuning 行。
+
+**Session-29 基线（`/tmp/voice_debug.log`，旧管线 = LLMUserAggregator + smart_turn + OpenAILLM）：**
+
+| 指标 | 典型值（「我记住了，你喜欢吃火锅」轮） |
+|---|---|
+| ASR TTFB（finalize） | ~2.7s |
+| LLM TTFB | ~0.36s |
+| finalize transcript → Bot started speaking | ~3.35s（25.004→28.359） |
+| Boxi 说话时长 | ~11s（3 句串行 TTS） |
+| 更早一轮「你最喜欢吃什么」回复 | 3 句 TTS，~16s（52.039→08.444） |
+
+**调优后（Phase 3 brain + 本 commit，`CYBER_COMPANION_VOICE_STT=doubao_stream` DEBUG 烟测）：**
+
+| 指标 | 观察 |
+|---|---|
+| 启动 tuning | `stop_secs=0.4`, `end_window=300`, `max_tokens=200`, `smart_turn=off` ✅ |
+| 完整对话轮次 | agent 烟测仅环境噪声 partial，**无完整一问一答**；戴耳机全链路需用户本地复测 |
+| 预期（待用户验） | start-gap 目标 <2s；Boxi ~1 句 / TTS ~1.5–2s；trailer 仍 strip |
+
+下次接着做：
+
+- 用户戴耳机 `CYBER_COMPANION_VOICE_LOG_LEVEL=DEBUG` 跑 3–5 轮，对比上表填 after 实测数；
+  若端点裁切说话，把 `VAD_STOP_SECS`/`ASR_END_WINDOW_MS` 调回 0.5/500。
+- V2 Phase 4 turn-taking；若仍觉「越聊越慢」再开 metrics-driven 专项。
+
+已知问题：
+
+- after 全链路数字未在本 session 填满（无可靠 mic 对话）；terseness/trailer 是否常截断待用户验。
+- `ttfs_p99_latency not set` 警告仍在（Pipecat STT 元数据，非本次范围）。
+
+相关文件：
+
+- `backend/realtime/{voice_config.py,companion_brain.py,companion_brain_processor.py,vad_processor.py,doubao_streaming_stt_service.py,run_voice.py,README.md}`
+- `backend/tests/{test_voice_config.py,test_companion_brain.py}`
+- `docs/{TODO.md,SESSION_LOG.md}`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**237 passed** + tsc green。
+- DEBUG 烟测：`/tmp/voice_tune_after.log` — pipeline ready，tuning 行与 `stop_secs=0.4` /
+  `end_window_size_ms=300` 日志正确；无 `smart_turn` 行。
+
+不要改动的边界：
+
+- **未改 `backend/app/**`**、**`frontend/**`**；voice 指令仅在 realtime brain append。

@@ -28,8 +28,13 @@ from backend.app.memory.write_policy import record_turn_memories
 from backend.app.providers.cost import estimate_cost
 from backend.app.providers.exceptions import ProviderError
 from backend.app.providers.router import ProviderRouter, get_provider_router
-from backend.app.providers.types import ChatCompletionRequest, ChatCompletionResult, StreamChunk
+from backend.app.providers.types import ChatCompletionRequest, ChatCompletionResult, ChatMessage, StreamChunk
 from backend.app.schemas import ChatMessageSchema
+
+VOICE_MODE_INSTRUCTION = (
+    "语音对话模式：用一句话、口语化、简短回答（必要时最多两句）。"
+    "正文之后仍按协议输出 <<<BOXI_SIGNALS>>> 行。"
+)
 
 BrainStreamEvent = (
     tuple[Literal["delta"], str]
@@ -72,6 +77,11 @@ class CompanionBrain:
             self._store,
             BehaviorEvent(event_type="user_message", user_input=user_text),
         )
+
+    @staticmethod
+    def append_voice_mode_instruction(messages: list[ChatMessage]) -> list[ChatMessage]:
+        """Realtime-only terseness lever — does not touch soul persona."""
+        return [*messages, ChatMessage(role="system", content=VOICE_MODE_INSTRUCTION)]
 
     async def stream_turn(self, user_text: str) -> AsyncIterator[BrainStreamEvent]:
         """One finalized utterance — mirrors ``/chat/complete`` + streaming deltas."""
@@ -122,18 +132,24 @@ class CompanionBrain:
                     budget=self._budget,
                     behavior=decision,
                 )
+                voice_messages = self.append_voice_mode_instruction(built.messages)
+                max_tokens = (
+                    self._max_output_tokens
+                    if self._max_output_tokens is not None
+                    else self._budget.max_output_tokens_per_turn
+                )
                 logger.debug(
                     "CompanionBrain provider context: "
-                    f"{len(built.messages)} messages, "
+                    f"{len(voice_messages)} messages, "
                     f"~{built.estimated_input_tokens} input tokens, "
                     f"truncated={built.truncated}, "
                     f"memories={len(built.included_memory_ids)}, "
-                    f"history_turns={len(built.included_message_ids)}"
+                    f"history_turns={len(built.included_message_ids)}, "
+                    f"max_output_tokens={max_tokens}, voice_mode=on"
                 )
-                max_tokens = self._max_output_tokens or self._budget.max_output_tokens_per_turn
                 completion_request = ChatCompletionRequest(
-                    messages=built.messages,
-                    max_output_tokens=min(max_tokens, self._budget.max_output_tokens_per_turn),
+                    messages=voice_messages,
+                    max_output_tokens=max_tokens,
                 )
                 provider_status = self._router.get_provider(self._provider_name).status()
                 signal_filter = SignalStreamFilter()
