@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 
 import httpx
@@ -24,9 +25,15 @@ def reset_router() -> None:
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    repo_root = Path(__file__).resolve().parents[2]
-    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(repo_root / "config"))
+def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    # Seed providers from the committed example into an isolated config dir so these
+    # tests are deterministic and ignore any live, deployment-specific
+    # config/providers.json (e.g. an Ark endpoint switch with ARK_API_KEY).
+    repo_config = Path(__file__).resolve().parents[2] / "config"
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    shutil.copy(repo_config / "providers.example.json", config_dir / "providers.json")
+    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(config_dir))
     monkeypatch.setenv("CYBER_COMPANION_PROVIDER_MODE", "mock")
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     return TestClient(app)
