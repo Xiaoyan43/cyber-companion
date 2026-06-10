@@ -9,6 +9,9 @@ AccessKey*.csv
 *ak_sk*
 *secret*.txt
 
+# Live provider config (account-specific endpoint ids) — example is the template
+config/providers.json
+
 # Python
 __pycache__/
 *.py[cod]
