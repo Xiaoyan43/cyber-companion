@@ -270,9 +270,11 @@ Restart demo Server after edits. **Keep `soul_tunnel.sh` running** for the whole
 
 | Artifact | Purpose |
 |---|---|
+| `backend/app/rtc/` | In-repo `/rtc/prepare`, `/rtc/agent/start`, `/rtc/stop` (Stage 2c) |
+| `frontend/src/rtc/` + `RtcVoicePanel` | Browser RTC + subtitles in companion panel |
 | `backend/realtime/soul_llm_server.py` | Stage-1 OpenAI-compatible soul |
-| `scripts/soul_tunnel.sh` | soul + tunnel helper |
+| `scripts/soul_tunnel.sh` | soul + tunnel helper (Stage 2b) |
 | `.env` | all secrets (from `.env.example` names) |
-| `docs/RTC_DEMO_SETUP.md` | this runbook |
+| `docs/RTC_DEMO_SETUP.md` | external demo runbook (reference + debugging) |
 
 Do **not** commit `rtc-aigc-demo/`, tunnel URLs, or credential values.

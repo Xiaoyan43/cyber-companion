@@ -6,7 +6,7 @@ import {
   synthesizeSpeech,
 } from "../api/tts";
 import { primeAudioPlayback } from "./audioUnlock";
-import { textForSpeech } from "./speechText";
+import { textChunksForSpeech, textForSpeech } from "./speechText";
 
 const MUTE_STORAGE_KEY = "cyber-companion-tts-muted";
 
@@ -197,10 +197,7 @@ export function useTextToSpeech({
     };
   }, []);
 
-  const clearCurrentAudio = useCallback(() => {
-    streamAbortRef.current?.abort();
-    streamAbortRef.current = null;
-
+  const detachCurrentAudio = useCallback(() => {
     const audio = audioRef.current;
     if (audio) {
       audio.pause();
@@ -209,6 +206,12 @@ export function useTextToSpeech({
       audioRef.current = null;
     }
   }, []);
+
+  const clearCurrentAudio = useCallback(() => {
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+    detachCurrentAudio();
+  }, [detachCurrentAudio]);
 
   const stopSpeaking = useCallback((notifyEnd = false) => {
     playbackSessionRef.current += 1;
@@ -291,10 +294,49 @@ export function useTextToSpeech({
     [],
   );
 
+  const playSpeechChunk = useCallback(
+    async (
+      speechText: string,
+      decision: string | undefined,
+      avatarState: string | undefined,
+      sessionId: number,
+      abortController: AbortController,
+    ): Promise<boolean> => {
+      const streamUrl = buildTtsStreamUrl({
+        text: speechText,
+        decision,
+        avatarState,
+      });
+      const playbackUrl = `${streamUrl}&_play=${sessionId}`;
+
+      let played = await playStreamingAudio(
+        playbackUrl,
+        audioRef,
+        sessionId,
+        playbackSessionRef,
+        abortController.signal,
+      );
+
+      if (
+        !played &&
+        enabledRef.current &&
+        !mutedRef.current &&
+        sessionId === playbackSessionRef.current
+      ) {
+        detachCurrentAudio();
+        played = await playBufferedFallback(speechText, decision, avatarState, sessionId);
+      }
+
+      return played;
+    },
+    [detachCurrentAudio, playBufferedFallback],
+  );
+
   const speakReply = useCallback(
     async ({ text, decision, avatarState }: SpeakReplyInput) => {
-      const speechText = textForSpeech(text, maxSpeechCharsRef.current);
-      if (!enabledRef.current || mutedRef.current || !speechText) {
+      const maxChars = maxSpeechCharsRef.current;
+      const chunks = textChunksForSpeech(text, maxChars);
+      if (!enabledRef.current || mutedRef.current || chunks.length === 0) {
         return false;
       }
 
@@ -303,15 +345,15 @@ export function useTextToSpeech({
 
       playbackSessionRef.current += 1;
       const sessionId = playbackSessionRef.current;
+      clearCurrentAudio();
+
       const abortController = new AbortController();
       streamAbortRef.current = abortController;
 
       try {
-        clearCurrentAudio();
-
         try {
           const evaluation = await evaluateTtsSpeech({
-            text: speechText,
+            text: chunks[0],
             decision,
             avatarState,
           });
@@ -329,33 +371,28 @@ export function useTextToSpeech({
           return false;
         }
 
-        const streamUrl = buildTtsStreamUrl({
-          text: speechText,
-          decision,
-          avatarState,
-        });
-        const playbackUrl = `${streamUrl}&_play=${sessionId}`;
-
         onSpeakingStartRef.current?.();
         speakingRef.current = true;
         setSpeaking(true);
 
-        let played = await playStreamingAudio(
-          playbackUrl,
-          audioRef,
-          sessionId,
-          playbackSessionRef,
-          abortController.signal,
-        );
+        let anyPlayed = false;
+        for (const chunk of chunks) {
+          if (
+            !enabledRef.current ||
+            mutedRef.current ||
+            sessionId !== playbackSessionRef.current
+          ) {
+            break;
+          }
 
-        if (
-          !played &&
-          enabledRef.current &&
-          !mutedRef.current &&
-          sessionId === playbackSessionRef.current
-        ) {
-          clearCurrentAudio();
-          played = await playBufferedFallback(speechText, decision, avatarState, sessionId);
+          const played = await playSpeechChunk(
+            chunk,
+            decision,
+            avatarState,
+            sessionId,
+            abortController,
+          );
+          anyPlayed = anyPlayed || played;
         }
 
         if (sessionId === playbackSessionRef.current) {
@@ -364,7 +401,7 @@ export function useTextToSpeech({
           onSpeakingEndRef.current?.();
         }
 
-        return played;
+        return anyPlayed;
       } catch (error) {
         const message = error instanceof Error ? error.message : "TTS playback failed.";
         setLastError(message);
@@ -381,7 +418,7 @@ export function useTextToSpeech({
         ttsInFlightRef.current = false;
       }
     },
-    [clearCurrentAudio, playBufferedFallback],
+    [clearCurrentAudio, playSpeechChunk],
   );
 
   return {

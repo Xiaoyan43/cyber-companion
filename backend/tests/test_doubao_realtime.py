@@ -53,6 +53,9 @@ def test_start_session_includes_session_id_and_persona_json() -> None:
     decoded = json.loads(gzip.decompress(frame[offset + 4 : offset + 4 + size]))
     assert decoded["dialog"]["bot_name"]
     assert "Boxi" in decoded["dialog"]["system_role"] or "毒舌" in decoded["dialog"]["system_role"]
+    assert decoded["asr"]["extra"]["end_smooth_window_ms"] == 1000
+    assert decoded["asr"]["extra"]["enable_asr_twopass"] is True
+    assert decoded["asr"]["extra"]["enable_custom_vad"] is True
     assert decoded["dialog"]["extra"]["model"] == "1.2.1.1"
     assert decoded["tts"]["audio_config"]["format"] == "pcm_s16le"
 

@@ -28,7 +28,7 @@ class CostEstimate:
 @dataclass(frozen=True)
 class ChatCompletionRequest:
     messages: list[ChatMessage]
-    max_output_tokens: int = 300
+    max_output_tokens: int = 2400
 
 
 @dataclass(frozen=True)

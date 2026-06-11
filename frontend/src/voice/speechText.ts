@@ -108,15 +108,8 @@ function lastIndexOfAny(text: string, needles: string[]): number {
   return best;
 }
 
+/** First TTS chunk only — use {@link textChunksForSpeech} to read a long reply in full. */
 export function textForSpeech(text: string, maxChars: number): string {
-  const prepared = prepareTextForSpeech(text);
-  if (!prepared || maxChars <= 0) {
-    return "";
-  }
-
-  if (prepared.length <= maxChars) {
-    return prepared;
-  }
-
-  return textChunksForSpeech(prepared, maxChars)[0] ?? "";
+  const chunks = textChunksForSpeech(text, maxChars);
+  return chunks[0] ?? "";
 }

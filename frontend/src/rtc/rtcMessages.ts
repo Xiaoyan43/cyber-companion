@@ -142,7 +142,9 @@ export type RtcCompletedTurn = {
   turnKey: string;
 };
 
-/** Last line is a finalized bot subtitle with a preceding user line → one exchange. */
+/** Last line is a finalized bot subtitle → one exchange: the preceding user line +
+ *  ALL bot segments since it, concatenated. Keyed by the user line id so a reply that
+ *  finalizes in several `definite` segments posts ONCE (not once per segment). */
 export function detectCompletedTurn(lines: RtcSubtitleLine[]): RtcCompletedTurn | null {
   if (lines.length < 2) {
     return null;
@@ -152,22 +154,32 @@ export function detectCompletedTurn(lines: RtcSubtitleLine[]): RtcCompletedTurn 
     return null;
   }
 
+  // Walk back from the tail, collecting this turn's bot segments until the user
+  // line that opened the exchange. Bot lines before that user line belong to an
+  // earlier turn and are excluded.
+  const botParts: string[] = [];
   let userLine: RtcSubtitleLine | undefined;
-  for (let index = lines.length - 2; index >= 0; index -= 1) {
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
     const line = lines[index];
+    if (line.speaker === "boxi") {
+      if (line.text.trim()) {
+        botParts.unshift(line.text.trim());
+      }
+      continue;
+    }
     if (line.speaker === "user" && line.text.trim()) {
       userLine = line;
       break;
     }
   }
-  if (!userLine) {
+  if (!userLine || botParts.length === 0) {
     return null;
   }
 
   return {
     userText: userLine.text.trim(),
-    botText: last.text.trim(),
-    turnKey: `${userLine.id}:${last.id}`,
+    botText: botParts.join(""),
+    turnKey: userLine.id,
   };
 }
 

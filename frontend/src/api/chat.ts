@@ -33,6 +33,7 @@ export type ChatCompleteError = {
 export type ChatStreamDoneMeta = {
   provider: string;
   model: string;
+  content?: string;
   decision: string;
   avatar_state: string;
   should_call_llm: boolean;
@@ -222,5 +223,9 @@ export async function requestChatStream(
     throw new Error("Stream ended without done event");
   }
 
-  return { content: accumulated, meta: doneMeta };
+  const meta: ChatStreamDoneMeta = doneMeta;
+  const finalContent =
+    typeof meta.content === "string" && meta.content.length > 0 ? meta.content : accumulated;
+
+  return { content: finalContent, meta };
 }

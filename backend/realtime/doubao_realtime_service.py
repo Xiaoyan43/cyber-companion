@@ -120,7 +120,10 @@ def build_start_session_payload() -> dict:
     return {
         "asr": {
             "extra": {
-                "end_smooth_window_ms": 800,
+                # Smart sentence break: longer smooth window + twopass ASR (volc S2S docs).
+                "end_smooth_window_ms": 1000,
+                "enable_custom_vad": True,
+                "enable_asr_twopass": True,
             },
         },
         "tts": {

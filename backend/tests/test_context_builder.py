@@ -44,17 +44,19 @@ def test_context_builder_system_message_ends_with_protocol_once(store: MemorySto
     assert "[Relevant memories]" in system
     assert system.count("=== MANDATORY OUTPUT FORMAT (every reply, no exceptions) ===") == 1
     assert "omit the trailer" not in system.lower()
-    assert system.rstrip().endswith("Put <<<BOXI_SIGNALS>>> nowhere else.")
+    assert _TRAILER_REMINDER.strip() in system
+    assert system.index(_TRAILER_REMINDER.strip()) > system.index("Put <<<BOXI_SIGNALS>>> nowhere else.")
     assert system.endswith(OUTPUT_PROTOCOL.lstrip("\n")) or OUTPUT_PROTOCOL in system
 
 
-def test_provider_user_message_ends_with_trailer_reminder(store: MemoryStore) -> None:
+def test_trailer_reminder_lives_in_system_not_user_message(store: MemoryStore) -> None:
     built = build_provider_context(store, user_input="hello")
     user_message = built.messages[-1].content
+    system_message = built.messages[0].content
 
-    assert user_message.startswith("hello")
-    assert user_message.endswith(_TRAILER_REMINDER)
-    assert "<<<BOXI_SIGNALS>>>" in user_message
+    assert user_message == "hello"
+    assert _TRAILER_REMINDER.strip() in system_message
+    assert "系统提醒" not in user_message
 
 
 def test_trailer_reminder_not_in_replayed_history(store: MemoryStore) -> None:
@@ -94,7 +96,7 @@ def test_context_builder_uses_default_budget_when_omitted(store: MemoryStore) ->
 
     built = build_provider_context(store, user_input="follow up")
 
-    assert built.messages[-1].content == f"follow up{_TRAILER_REMINDER}"
+    assert built.messages[-1].content == "follow up"
     assert built.estimated_input_tokens <= BudgetConfig().max_input_tokens_per_turn
     assert len(built.included_message_ids) <= BudgetConfig().max_raw_turns
 
@@ -129,7 +131,7 @@ def test_context_builder_limits_raw_turns_and_uses_summary(store: MemoryStore) -
     assert built.summary_used is not None
     assert len(built.included_message_ids) <= budget.max_raw_turns
     assert built.estimated_input_tokens <= budget.max_input_tokens_per_turn
-    assert built.messages[-1].content == f"turn-8{_TRAILER_REMINDER}"
+    assert built.messages[-1].content == "turn-8"
     assert "Older turns were mostly complaining" in built.messages[0].content
 
 
@@ -168,7 +170,7 @@ def test_context_builder_respects_small_token_budget(store: MemoryStore) -> None
 
     assert built.truncated is True
     system = built.messages[0].content
-    assert system.rstrip().endswith("Put <<<BOXI_SIGNALS>>> nowhere else.")
+    assert _TRAILER_REMINDER.strip() in system
     assert "A" * 2000 not in system
     assert "B" * 2000 not in system
 

@@ -46,6 +46,7 @@ from backend.app.providers.exceptions import ProviderError
 from backend.app.providers.router import get_provider_router, reset_provider_router
 from backend.app.providers.cost import estimate_cost
 from backend.app.providers.types import ChatCompletionRequest, ChatCompletionResult, ChatMessage
+from backend.app.rtc.routes import router as rtc_router
 from backend.app.schemas import (
     BehaviorDecisionSchema,
     BehaviorEvaluateRequest,
@@ -182,6 +183,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+app.include_router(rtc_router)
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -674,7 +677,7 @@ def chat_complete(
             )
             completion_request = ChatCompletionRequest(
                 messages=built.messages,
-                max_output_tokens=min(request.max_output_tokens, budget.max_output_tokens_per_turn),
+                max_output_tokens=budget.max_output_tokens_per_turn,
             )
 
             try:
@@ -770,6 +773,7 @@ def _chat_stream_done_meta(
     return {
         "provider": result.provider,
         "model": result.model,
+        "content": result.content,
         "decision": decision,
         "avatar_state": avatar_state,
         "should_call_llm": should_call_llm,
@@ -939,7 +943,7 @@ def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
                 )
                 completion_request = ChatCompletionRequest(
                     messages=built.messages,
-                    max_output_tokens=min(request.max_output_tokens, budget.max_output_tokens_per_turn),
+                    max_output_tokens=budget.max_output_tokens_per_turn,
                 )
 
                 provider = router.get_provider(request.provider)

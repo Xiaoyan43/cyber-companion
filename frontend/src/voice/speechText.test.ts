@@ -49,6 +49,14 @@ describe("textForSpeech", () => {
   it("keeps quoted content intact", () => {
     expect(textForSpeech('（停顿）够不够"dźwięk"？', 500)).toBe('够不够"dźwięk"？');
   });
+
+  it("returns only the first chunk for long replies", () => {
+    const long = "第一句很长。".repeat(20);
+    const chunks = textChunksForSpeech(long, 30);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(textForSpeech(long, 30)).toBe(chunks[0]);
+    expect(chunks.join("")).toContain("第一句很长。");
+  });
 });
 
 describe("textChunksForSpeech", () => {

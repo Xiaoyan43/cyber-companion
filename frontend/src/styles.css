@@ -49,10 +49,12 @@ button {
 }
 
 .companion-panel {
-  display: grid;
-  grid-template-rows: auto minmax(260px, 1fr) auto auto;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
   padding: 18px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
 }
 
 .state-debug {
@@ -414,7 +416,7 @@ button {
   }
 
   .companion-panel {
-    grid-template-rows: auto 280px auto auto;
+    max-height: none;
   }
 
   .chat-panel {
@@ -654,4 +656,264 @@ button {
   color: #a89b84;
   font-size: 0.78rem;
   text-align: center;
+}
+
+.rtc-voice-panel {
+  border: 1px solid #4a433a;
+  border-radius: 6px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  background: rgba(20, 18, 16, 0.35);
+}
+
+.rtc-voice-panel.live {
+  min-height: 200px;
+  grid-template-rows: auto auto minmax(120px, 1fr) auto;
+}
+
+.rtc-voice-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rtc-voice-title {
+  color: #cfc4aa;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.rtc-voice-phase {
+  color: #a89b84;
+  font-size: 0.75rem;
+}
+
+.rtc-voice-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.rtc-viking-badge {
+  border: 1px solid #564d42;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  color: #a89b84;
+  cursor: help;
+}
+
+.rtc-viking-badge.tone-ready {
+  border-color: #44a48a;
+  color: #9fd9c8;
+}
+
+.rtc-viking-badge.tone-partial {
+  border-color: #d9b44a;
+  color: #f0d78a;
+}
+
+.rtc-viking-badge.tone-off {
+  border-color: #4a433a;
+  color: #8a8070;
+}
+
+.rtc-mode-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rtc-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #564d42;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  color: #cfc4aa;
+  cursor: pointer;
+}
+
+.rtc-mode.active {
+  border-color: #44a48a;
+  color: #f7f1df;
+  background: rgba(68, 164, 138, 0.12);
+}
+
+.rtc-mode input {
+  accent-color: #44a48a;
+}
+
+.rtc-live-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rtc-mic-badge {
+  border: 1px solid #564d42;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  color: #a89b84;
+}
+
+.rtc-mic-badge.active {
+  border-color: #44a48a;
+  color: #9fd9c8;
+}
+
+.rtc-live-mode {
+  color: #a89b84;
+  font-size: 0.75rem;
+}
+
+.rtc-agent-badge {
+  border: 1px solid #564d42;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  color: #cfc4aa;
+}
+
+.rtc-agent-badge.phase-listening {
+  border-color: #44a48a;
+  color: #9fd9c8;
+}
+
+.rtc-agent-badge.phase-thinking {
+  border-color: #d9b44a;
+  color: #f0d78a;
+}
+
+.rtc-agent-badge.phase-speaking {
+  border-color: #dd5b44;
+  color: #ffb4a6;
+}
+
+.rtc-autoplay-banner {
+  border: 1px solid #dd5b44;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: rgba(221, 91, 68, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rtc-autoplay-banner p {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.rtc-autoplay-banner button {
+  border: 1px solid #dd5b44;
+  border-radius: 4px;
+  background: #2b2724;
+  color: #ffddd6;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+}
+
+.rtc-subtitle-list {
+  min-height: 120px;
+  max-height: 220px;
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  border: 1px solid #4a433a;
+  border-radius: 6px;
+  padding: 10px;
+  background: rgba(12, 11, 10, 0.45);
+}
+
+.rtc-subtitle-empty {
+  margin: 0;
+  color: #a89b84;
+  font-size: 0.82rem;
+}
+
+.rtc-subtitle-line {
+  display: grid;
+  gap: 2px;
+}
+
+.rtc-subtitle-line.user {
+  justify-items: end;
+  text-align: right;
+}
+
+.rtc-subtitle-speaker {
+  font-size: 0.68rem;
+  color: #7f7563;
+  text-transform: uppercase;
+}
+
+.rtc-subtitle-line p {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.4;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.rtc-subtitle-line.user p {
+  background: rgba(68, 164, 138, 0.16);
+}
+
+.rtc-subtitle-line.boxi p {
+  background: rgba(221, 91, 68, 0.12);
+}
+
+.rtc-interrupt-tag {
+  font-size: 0.65rem;
+  color: #ffb4a6;
+}
+
+.rtc-voice-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.rtc-join-button,
+.rtc-leave-button {
+  border: 1px solid #564d42;
+  border-radius: 4px;
+  padding: 8px 12px;
+  background: #2b2724;
+  color: #f7f1df;
+  width: 100%;
+}
+
+.rtc-join-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rtc-leave-button {
+  border-color: #dd5b44;
+  color: #ffddd6;
+}
+
+.rtc-voice-error {
+  margin: 0;
+  color: #ff9b88;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.rtc-remote-player {
+  width: 0;
+  height: 0;
+  overflow: hidden;
 }

@@ -184,22 +184,22 @@ def build_provider_context(
         user_input,
         config.max_user_input_tokens,
     )
-    provider_user_input_for_send = provider_user_input + _TRAILER_REMINDER
-    reminder_tokens = estimate_token_count(_TRAILER_REMINDER)
-    reserved_tokens = (
-        estimate_token_count(provider_user_input)
-        + reminder_tokens
-        + sum(
-            estimate_token_count(f"{message.role}: {message.content}") for message in recent_raw
-        )
+    provider_user_input_for_send = provider_user_input
+    reserved_tokens = estimate_token_count(provider_user_input) + sum(
+        estimate_token_count(f"{message.role}: {message.content}") for message in recent_raw
     )
+    trailer_tokens = estimate_token_count(_TRAILER_REMINDER)
     protocol_tokens = estimate_token_count(OUTPUT_PROTOCOL)
     memory_budget = max(
         256,
-        config.max_input_tokens_per_turn - reserved_tokens - protocol_tokens,
+        config.max_input_tokens_per_turn
+        - reserved_tokens
+        - protocol_tokens
+        - trailer_tokens,
     )
     packed_sections, truncated = _pack_sections(system_sections, max_input_tokens=memory_budget)
     packed_sections.append(OUTPUT_PROTOCOL)
+    packed_sections.append(_TRAILER_REMINDER.strip())
 
     provider_messages: list[ChatMessage] = [
         ChatMessage(role="system", content="\n\n".join(packed_sections))

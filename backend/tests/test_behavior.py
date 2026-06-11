@@ -199,3 +199,41 @@ def test_stream_filter_sentinel_split_across_chunks() -> None:
     assert SIGNALS_SENTINEL not in output
     assert "<<<BOXI" not in output
     assert "{" not in output
+
+
+def test_parser_accepts_sentinel_typos() -> None:
+    parsed = parse_structured_assistant_response(
+        '故事讲完了。\n<<<BOXI_SIGANLS>>>\n'
+        '{"avatar_state":"talking","decision":"reply","relationship":{"trust":0.0}}'
+    )
+    assert parsed.content == "故事讲完了。"
+    assert parsed.avatar_state == "talking"
+    assert parsed.signals is not None
+
+
+def test_strip_leaked_provider_reminder() -> None:
+    from backend.app.behavior.parser import strip_leaked_provider_reminder
+
+    raw = "故事讲完了。现在你欠我一顿火锅。\n\n（系统提醒：本轮回复必须在正文后另起一行输出"
+    assert strip_leaked_provider_reminder(raw) == "故事讲完了。现在你欠我一顿火锅。"
+
+
+def test_parser_strips_leaked_provider_reminder() -> None:
+    parsed = parse_structured_assistant_response(
+        "行吧。\n\n（系统提醒：本轮回复必须在正文后另起一行输出 <<<BOXI_SIGNALS>>> 及其单行 JSON，不可省略。）"
+    )
+    assert parsed.content == "行吧。"
+    assert "系统提醒" not in parsed.content
+
+
+def test_stream_filter_strips_typo_sentinel() -> None:
+    output = _stream_filter_output(
+        [
+            "故事讲完了。",
+            "\n<<<BOXI_SIGANLS>>>\n",
+            '{"avatar_state":"talking","decision":"reply"}',
+        ]
+    )
+    assert output.rstrip() == "故事讲完了。"
+    assert "SIGANLS" not in output
+    assert "{" not in output

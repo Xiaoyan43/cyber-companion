@@ -53,7 +53,21 @@ describe("parseRtcRoomMessage", () => {
     expect(completed).toEqual({
       userText: "你好",
       botText: "又醒了。",
-      turnKey: "rtc-line-1:rtc-line-2",
+      turnKey: "rtc-line-1",
+    });
+  });
+
+  it("aggregates a multi-segment bot reply into one turn keyed by the user line", () => {
+    const lines = [
+      { id: "rtc-line-1", speaker: "user" as const, text: "讲讲", definite: true, paragraph: true },
+      { id: "rtc-line-2", speaker: "boxi" as const, text: "行。", definite: true, paragraph: true },
+      { id: "rtc-line-3", speaker: "boxi" as const, text: "听好了。", definite: true, paragraph: true },
+    ];
+    const completed = detectCompletedTurn(lines);
+    expect(completed).toEqual({
+      userText: "讲讲",
+      botText: "行。听好了。",
+      turnKey: "rtc-line-1",
     });
   });
 

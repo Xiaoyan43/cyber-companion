@@ -24,6 +24,7 @@ import {
 } from "./chat/types";
 import { appendChatStreamDelta } from "./chat/streamRender";
 import { PixelCharacter } from "./components/PixelCharacter";
+import { RtcVoicePanel } from "./components/RtcVoicePanel";
 import { MemoryLinksPanel } from "./components/MemoryLinksPanel";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { MoodPanel } from "./components/MoodPanel";
@@ -31,6 +32,8 @@ import { RelationshipPanel } from "./components/RelationshipPanel";
 import { primeAudioPlayback } from "./voice/audioUnlock";
 import { usePushToTalk } from "./voice/usePushToTalk";
 import { useTextToSpeech } from "./voice/useTextToSpeech";
+import { useRtcVoice } from "./rtc/useRtcVoice";
+import type { RtcAgentPhase } from "./rtc/rtcMessages";
 
 type ApiHealth = {
   status: "checking" | "ok" | "offline";
@@ -297,10 +300,18 @@ function App() {
               },
               onDone: (meta) => {
                 setLastTurn(streamMetaToTurnSummary(meta));
+                const finalText =
+                  typeof meta.content === "string" && meta.content.length > 0
+                    ? meta.content
+                    : undefined;
                 setMessages((current) =>
                   current.map((message) =>
                     message.id === boxiMessageId
-                      ? { ...message, meta: streamMetaToMessageMeta(meta) }
+                      ? {
+                          ...message,
+                          text: finalText ?? message.text,
+                          meta: streamMetaToMessageMeta(meta),
+                        }
                       : message,
                   ),
                 );
@@ -535,6 +546,44 @@ function App() {
     onTranscript: submitFromVoice,
   });
 
+  const mapRtcAgentToAvatar = useCallback(
+    (agentPhase: RtcAgentPhase) => {
+      if (agentPhase === "speaking") {
+        cancelScheduledReturn();
+        setManualState("talking");
+        return;
+      }
+      if (agentPhase === "thinking") {
+        cancelScheduledReturn();
+        setManualState("thinking");
+        return;
+      }
+      if (agentPhase === "listening" || agentPhase === "idle") {
+        scheduleReturnToIdle(avatarState, "");
+      }
+    },
+    [avatarState, cancelScheduledReturn, scheduleReturnToIdle, setManualState],
+  );
+
+  const rtcVoice = useRtcVoice({
+    onAgentPhaseChange: mapRtcAgentToAvatar,
+  });
+
+  const rtcPhaseLabel = useMemo(() => {
+    switch (rtcVoice.phase) {
+      case "joining":
+        return "连接中…";
+      case "live":
+        return rtcVoice.mode === "pure" ? "纯 E2E 通话中" : "Soul 混合通话中";
+      case "leaving":
+        return "断开中…";
+      case "error":
+        return "RTC 错误";
+      default:
+        return "未连接";
+    }
+  }, [rtcVoice.mode, rtcVoice.phase]);
+
   const voiceStatusText = useMemo(() => {
     if (pushToTalkState === "recording") {
       return "Recording… release to transcribe";
@@ -599,10 +648,42 @@ function App() {
 
         <p className="status-line">{statusText}</p>
 
-        <RelationshipPanel enabled={apiHealth.status === "ok"} />
-        <MoodPanel enabled={apiHealth.status === "ok"} />
-        <MemoryPanel enabled={apiHealth.status === "ok"} />
-        <MemoryLinksPanel enabled={apiHealth.status === "ok"} />
+        <RtcVoicePanel
+          mode={rtcVoice.mode}
+          onModeChange={rtcVoice.setMode}
+          modeReady={rtcVoice.modeReady}
+          pureReady={rtcVoice.status?.pure_ready ?? false}
+          hybridReady={rtcVoice.status?.hybrid_ready ?? false}
+          phaseLabel={rtcPhaseLabel}
+          agentPhase={rtcVoice.agentPhase}
+          error={rtcVoice.error}
+          isLive={rtcVoice.isLive}
+          subtitles={rtcVoice.subtitles}
+          welcomeMessage={rtcVoice.session?.welcome_message}
+          autoplayBlocked={rtcVoice.autoplayBlocked}
+          micActive={rtcVoice.micActive}
+          onJoin={() => {
+            primeAudioPlayback();
+            void rtcVoice.join();
+          }}
+          onLeave={() => void rtcVoice.leave()}
+          onResumeAudio={() => void rtcVoice.resumeAutoplay()}
+          disabled={apiHealth.status !== "ok"}
+          vikingMemoryEnabled={rtcVoice.status?.viking_memory_enabled ?? false}
+          vikingMemoryWriteReady={rtcVoice.status?.viking_memory_write_ready ?? false}
+          vikingUserId={rtcVoice.status?.default_user_id}
+          vikingMemorySaveState={rtcVoice.memorySaveState}
+          sqliteMemoryReady={rtcVoice.status?.sqlite_memory_ready ?? false}
+        />
+
+        {!rtcVoice.isLive ? (
+          <>
+            <RelationshipPanel enabled={apiHealth.status === "ok"} />
+            <MoodPanel enabled={apiHealth.status === "ok"} />
+            <MemoryPanel enabled={apiHealth.status === "ok"} />
+            <MemoryLinksPanel enabled={apiHealth.status === "ok"} />
+          </>
+        ) : null}
 
         {showAvatarDebug ? (
           <details className="state-debug" open>
@@ -713,7 +794,7 @@ function App() {
             placeholder="Type something..."
             disabled={isSending || pushToTalkState === "transcribing"}
           />
-          {pushToTalkEnabled ? (
+          {pushToTalkEnabled && !rtcVoice.isLive ? (
             <button
               type="button"
               className={
@@ -721,7 +802,7 @@ function App() {
               }
               aria-pressed={pushToTalkState === "recording"}
               aria-label="Hold to talk"
-              disabled={isSending || pushToTalkState === "transcribing"}
+              disabled={isSending || pushToTalkState === "transcribing" || rtcVoice.isLive}
               onPointerDown={handlePttPointerDown}
               onPointerUp={handlePttPointerUp}
               onPointerLeave={handlePttPointerLeave}

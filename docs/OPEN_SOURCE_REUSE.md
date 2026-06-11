@@ -424,4 +424,25 @@ Used for: V2 RTC Stage 2 — adjacent clone for validating OutputMode 0/1 + Star
   runbook in `docs/RTC_DEMO_SETUP.md`.
 Local files: docs/RTC_DEMO_SETUP.md, scripts/soul_tunnel.sh
 Notes: Level 1 (reference). Clone outside repo; configure `Server/scenes/*.json` only in the clone.
-```
+
+Name: Volcengine rtc-aigc-demo utils/handler (TLV + subtitles)
+URL: https://github.com/volcengine/rtc-aigc-demo/blob/main/src/utils/utils.ts
+License: BSD-3-Clause
+Used for: V2 RTC Stage 2c — `frontend/src/rtc/tlv.ts`, `rtcMessages.ts` (subtitle + agent brief).
+Local files: frontend/src/rtc/tlv.ts, frontend/src/rtc/rtcMessages.ts
+Notes: Level 3 (adapted). No Redux; React state only.
+
+Name: Volcengine rtc-aigc-demo Server/token.js (RTC AccessToken)
+URL: https://github.com/volcengine/rtc-aigc-demo/blob/main/Server/token.js
+License: BSD-3-Clause
+Used for: V2 RTC Stage 2c — `backend/app/rtc/token.py` (ported AccessToken serialize).
+Local files: backend/app/rtc/token.py
+Notes: Level 3 (adapted). Stdlib-only Python port.
+
+Name: Volcengine RTC Web SDK (@volcengine/rtc)
+URL: https://www.npmjs.com/package/@volcengine/rtc
+License: (Volcengine SDK — personal-use; see package)
+Version: ~4.66.20 (matches rtc-aigc-demo)
+Used for: V2 RTC Stage 2c — `frontend/src/rtc/useRtcVoice.ts`.
+Local files: frontend/package.json, frontend/src/rtc/**
+Notes: Level 4 (dependency). Join flow mirrors official demo.
