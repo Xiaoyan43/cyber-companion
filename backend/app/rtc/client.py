@@ -9,7 +9,11 @@ import httpx
 
 from backend.app.rtc.config import RtcConfig, RtcMode
 from backend.app.rtc.signer import sign_rtc_openapi_request
-from backend.app.rtc.voice_chat import build_stop_voice_chat_body, build_voice_chat_body
+from backend.app.rtc.voice_chat import (
+    build_stop_voice_chat_body,
+    build_update_voice_chat_body,
+    build_voice_chat_body,
+)
 
 RTC_HOST = "rtc.volcengineapi.com"
 RTC_API_VERSION = "2024-12-01"
@@ -87,3 +91,21 @@ def stop_voice_chat(
 ) -> dict[str, Any]:
     body = build_stop_voice_chat_body(config, mode=mode, room_id=room_id)
     return _call_openapi(config, action="StopVoiceChat", body=body)
+
+
+def update_voice_chat(
+    config: RtcConfig,
+    *,
+    mode: RtcMode,
+    room_id: str,
+    command: str,
+    message: str = "",
+) -> dict[str, Any]:
+    body = build_update_voice_chat_body(
+        config,
+        mode=mode,
+        room_id=room_id,
+        command=command,
+        message=message,
+    )
+    return _call_openapi(config, action="UpdateVoiceChat", body=body)

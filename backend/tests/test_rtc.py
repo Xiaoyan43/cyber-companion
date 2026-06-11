@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -13,10 +14,12 @@ from backend.app.rtc.config import RtcConfig, mode_ready, resolve_rtc_user_id
 from backend.app.rtc.routes import router as rtc_router
 from backend.app.rtc.signer import sign_rtc_openapi_request
 from backend.app.rtc.token import AccessToken, mint_rtc_token
+from backend.app.memory.persona import load_rtc_speaking_style, load_rtc_system_role
+from backend.app.rtc.client import update_voice_chat
 from backend.app.rtc.voice_chat import (
-    PURE_SYSTEM_ROLE,
     build_memory_config,
     build_stop_voice_chat_body,
+    build_update_voice_chat_body,
     build_voice_chat_body,
 )
 
@@ -57,6 +60,7 @@ def rtc_config() -> RtcConfig:
         viking_memory_transition_words="",
         viking_memory_types=(),
         enable_asr_twopass=False,
+        enable_music=True,
     )
 
 
@@ -116,19 +120,116 @@ def test_build_voice_chat_pure_matches_demo_asr(rtc_config: RtcConfig) -> None:
         body["Config"]["S2SConfig"]["ProviderParams"]["tts"]["speaker"]
         == rtc_config.rt_speaker
     )
+    dialog_extra = body["Config"]["S2SConfig"]["ProviderParams"]["dialog"]["extra"]
+    assert dialog_extra["model"] == "1.2.1.1"
+    assert dialog_extra["enable_music"] is True
 
 
-def test_build_voice_chat_pure_asr_twopass_opt_in(rtc_config: RtcConfig) -> None:
-    with_twopass = RtcConfig(**{**rtc_config.__dict__, "enable_asr_twopass": True})
+def test_build_voice_chat_pure_music_opt_out(rtc_config: RtcConfig) -> None:
+    without_music = RtcConfig(**{**rtc_config.__dict__, "enable_music": False})
     body = build_voice_chat_body(
-        with_twopass,
+        without_music,
         mode="pure",
         room_id="room-a",
         target_user_id="user-a",
     )
+    extra = body["Config"]["S2SConfig"]["ProviderParams"]["dialog"]["extra"]
+    assert "enable_music" not in extra
+
+
+def test_build_voice_chat_pure_enables_tts_tag_parse(rtc_config: RtcConfig) -> None:
+    body = build_voice_chat_body(
+        rtc_config,
+        mode="pure",
+        room_id="room-a",
+        target_user_id="user-a",
+    )
+    tts_context = body["Config"]["TTSConfig"]["Context"]
+    assert tts_context == {"TagParse": True, "QuoteUserQuestion": True}
+
+
+def test_build_voice_chat_hybrid_omits_tts_tag_parse(rtc_config: RtcConfig) -> None:
+    body = build_voice_chat_body(
+        rtc_config,
+        mode="hybrid",
+        room_id="room-b",
+        target_user_id="user-b",
+    )
+    assert "TTSConfig" not in body["Config"]
+
+
+def test_build_update_voice_chat_body_set_tts_context(rtc_config: RtcConfig) -> None:
+    message = '{"Tag":{"additions":{"context_texts":["更冲、更不耐烦但别凶"]}}}'
+    body = build_update_voice_chat_body(
+        rtc_config,
+        mode="pure",
+        room_id="room-a",
+        command="SetTTSContext",
+        message=message,
+    )
+    assert body == {
+        "AppId": rtc_config.rtc_app_id,
+        "RoomId": "room-a",
+        "TaskId": rtc_config.task_pure,
+        "Command": "SetTTSContext",
+        "Message": message,
+    }
+
+
+@patch("backend.app.rtc.client.httpx.post")
+def test_update_voice_chat_calls_openapi(mock_post, rtc_config: RtcConfig) -> None:
+    mock_post.return_value.status_code = 200
+    mock_post.return_value.json.return_value = {"Result": "ok"}
+    message = '{"Tag":{"additions":{"context_texts":["语气放软、关切、稍慢"]}}}'
+    result = update_voice_chat(
+        rtc_config,
+        mode="pure",
+        room_id="room-a",
+        command="SetTTSContext",
+        message=message,
+    )
+    assert result == {"Result": "ok"}
+    mock_post.assert_called_once()
+    posted_body = mock_post.call_args.kwargs["content"]
+    if isinstance(posted_body, bytes):
+        posted_body = posted_body.decode("utf-8")
+    assert rtc_config.rtc_app_id in posted_body
+    assert "SetTTSContext" in posted_body
+    assert "语气放软、关切、稍慢" in posted_body
+    assert rtc_config.task_pure in posted_body
+    assert mock_post.call_args.args[0].endswith("Action=UpdateVoiceChat&Version=2024-12-01")
+
+
+def test_build_voice_chat_pure_asr_twopass_opt_in(
+    rtc_config: RtcConfig,
+    tmp_path: Path,
+) -> None:
+    from backend.app.memory.store import MemoryStore
+
+    neutral_store = MemoryStore(db_path=tmp_path / "rtc_pure_twopass.db")
+    neutral_store.update_mood_state(
+        annoyance=0.1,
+        worry=0.1,
+        loneliness=0.1,
+        boredom=0.1,
+        energy=0.5,
+    )
+    neutral_store.update_relationship_state(trust=0.5, closeness=0.5, tension=0.1)
+
+    with_twopass = RtcConfig(**{**rtc_config.__dict__, "enable_asr_twopass": True})
+    with patch("backend.app.rtc.state_block.get_memory_store", return_value=neutral_store):
+        body = build_voice_chat_body(
+            with_twopass,
+            mode="pure",
+            room_id="room-a",
+            target_user_id="user-a",
+        )
     asr = body["Config"]["S2SConfig"]["ProviderParams"]["asr"]["extra"]
     assert asr["enable_asr_twopass"] is True
-    assert body["Config"]["S2SConfig"]["ProviderParams"]["dialog"]["system_role"] == PURE_SYSTEM_ROLE
+    dialog = body["Config"]["S2SConfig"]["ProviderParams"]["dialog"]
+    assert dialog["system_role"] == load_rtc_system_role()
+    assert dialog["speaking_style"] == load_rtc_speaking_style()
+    assert "边界" not in dialog["system_role"]
     assert "LLMConfig" not in body["Config"]
 
 

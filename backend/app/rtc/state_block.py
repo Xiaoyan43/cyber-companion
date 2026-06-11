@@ -1,10 +1,12 @@
-"""Join-time kernel stance block for pure-E2E RTC (PS-3 / PS-4)."""
+"""Join-time kernel stance block for pure-E2E RTC (PS-3 / PS-5 / PS-6)."""
 
 from __future__ import annotations
 
+import json
 import logging
 
 from backend.app.memory.database import MoodStateRecord, RelationshipStateRecord
+from backend.app.memory.persona import load_rtc_speaking_style
 from backend.app.memory.store import MemoryStore, get_memory_store
 
 logger = logging.getLogger(__name__)
@@ -118,6 +120,66 @@ def build_rtc_welcome_message(
     except Exception:
         logger.exception("build_rtc_welcome_message failed")
         return default
+
+
+def _kernel_speaking_modifier(
+    mood: MoodStateRecord,
+    relationship: RelationshipStateRecord,
+) -> str:
+    if mood.worry >= _MOOD_THRESHOLD:
+        return "；用户最近不太好，收一收毒舌、稳一点"
+    if mood.annoyance >= _MOOD_THRESHOLD or relationship.tension >= _TENSION_AWKWARD_THRESHOLD:
+        return "；现在更冲、更短"
+    if relationship.closeness >= _BUCKET_HIGH and relationship.tension < 0.3:
+        return "；和ta更熟，可更随意贴近"
+    return ""
+
+
+def _kernel_emotion_context_text(
+    mood: MoodStateRecord,
+    relationship: RelationshipStateRecord,
+) -> str | None:
+    if mood.worry >= _MOOD_THRESHOLD:
+        return "语气放软、关切、稍慢"
+    if mood.annoyance >= _MOOD_THRESHOLD or relationship.tension >= _TENSION_AWKWARD_THRESHOLD:
+        return "更冲、更不耐烦但别凶"
+    if mood.loneliness >= _MOOD_THRESHOLD:
+        return "更热络一点"
+    return None
+
+
+def build_rtc_speaking_style(store: MemoryStore | None = None) -> str:
+    """Base style + kernel stance modifier → the speaking_style field. Never raises."""
+    try:
+        resolved = store if store is not None else get_memory_store()
+        mood = resolved.get_mood_state()
+        relationship = resolved.get_relationship_state()
+        return f"{load_rtc_speaking_style()}{_kernel_speaking_modifier(mood, relationship)}"
+    except Exception:
+        logger.exception("build_rtc_speaking_style failed")
+        try:
+            return load_rtc_speaking_style()
+        except Exception:
+            return "口语化，每次一两句。"
+
+
+def build_rtc_emotion_tag(store: MemoryStore | None = None) -> str | None:
+    """Kernel → SetTTSContext Message JSON. None when neutral."""
+    try:
+        resolved = store if store is not None else get_memory_store()
+        mood = resolved.get_mood_state()
+        relationship = resolved.get_relationship_state()
+        context_text = _kernel_emotion_context_text(mood, relationship)
+        if context_text is None:
+            return None
+        return json.dumps(
+            {"Tag": {"additions": {"context_texts": [context_text]}}},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    except Exception:
+        logger.exception("build_rtc_emotion_tag failed")
+        return None
 
 
 def build_rtc_steering_directive(store: MemoryStore | None = None) -> str:

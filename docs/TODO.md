@@ -165,7 +165,7 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
   into the existing signals JSON → reused `apply_signals_to_kernel` + `record_turn_memories`
   (writes **SQLite**, the source of truth). Sub-second spoken latency untouched. Replaces the
   lost `<<<BOXI_SIGNALS>>>` trailer and is *more* reliable (JSON-only, can't leak).
-  **Spec: `docs/V2_RTC_PURE_SOUL_SPEC.md`** (slices PS-1…PS-4; 新窗口说 `推进`).
+  **Spec: `docs/V2_RTC_PURE_SOUL_SPEC.md`** (slices PS-1…PS-6; 新窗口说 `推进`).
   - [x] **PS-1** — `reflection/turn_analyzer.py` `analyze_turn()`: local appraisal + DeepSeek
     signals pass + kernel + `persist_chat_turn` + `record_turn_memories` + reflection. Mock-provider tests.
   - [x] **PS-2** — `POST /rtc/turn` + frontend per-turn post + `BackgroundTask`; voice turns now
@@ -173,9 +173,13 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
   - [x] **PS-3** — SHAPE (join-time): `rtc/state_block.py build_rtc_state_block()` → discretized
     Chinese mood/relationship stance block folded into `system_role` at `StartVoiceChat`.
     `UpdateVoiceChat` can't update config mid-session → per-call, not per-turn.
-  - [x] **PS-4** — steering (join-time): `build_rtc_steering_directive()` → one Chinese stance
-    imperative (terse-sharp / comfort / warmer) from kernel buckets; state-as-persona, not
-    stage-direction; hard silence dropped. Pure rtc-layer fns — no soul/API/schema change.
+  - [x] **PS-4** — steering (join-time) via `system_role`. **⚠ device A/B: ignored — wrong channel
+    (tone belongs in `speaking_style`, not `system_role`). Superseded by PS-5/PS-6.**
+  - [x] **PS-5** — tone → `speaking_style` (join-time): `build_rtc_speaking_style()` = base +
+    kernel modifier; **stop appending steering to `system_role`** (the PS-4 fix). `[Claude spec ✓ → Cursor]`
+  - [x] **PS-6** — emotion → `UpdateVoiceChat(SetTTSContext)` (mid-session, per-turn, off-path):
+    `TagParse` on at join; kernel → NL `{{additions}}` tag for the next reply; new `update_voice_chat`
+    client method. **The PS-4 re-test** (does pure E2E now follow tone?) — **pending user device A/B.**
   - [ ] (later, MIT-adoptable) proactive timing via `pearthink123/revive-companion` math
     (Poisson "longing" + Bayesian user-state) — feeds the proactive part, maps onto `loneliness`.
 - [ ] V2 Phase 4–9 — turn-taking polish, PixiJS room, room reactivity, actions, personal files, the box.

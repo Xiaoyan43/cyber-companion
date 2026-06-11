@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
 from typing import Any
 
+from backend.app.memory.persona import load_persona_name, load_rtc_system_role
 from backend.app.rtc.config import RtcConfig, RtcMode, viking_memory_enabled
+from backend.app.rtc.state_block import build_rtc_speaking_style
 from backend.app.rtc.viking_memory import (
     DEFAULT_MEMORY_TRANSITION,
     DEFAULT_RUNTIME_MEMORY_TYPES,
@@ -16,33 +15,11 @@ from backend.app.rtc.viking_memory import (
 OUTPUT_MODE_PURE = 0
 OUTPUT_MODE_HYBRID = 1
 
-# Match Server/scenes/Boxi.json (Stage 2a) — short Chinese persona, not full text-chat prompt.
-PURE_SYSTEM_ROLE = (
-    "你是 Boxi，一个被困在盒子里的毒舌小人，low-dose 陪伴型。用口语、简短回答，每次最多一两句。"
-    "毒舌但不恶毒，别变成礼貌客服。用户 overwhelmed 时收一点刺；别侮辱用户价值。"
-)
-PURE_SPEAKING_STYLE = "毒舌但不恶毒，口语化，每次一两句"
 
-HYBRID_SYSTEM_ROLE = (
-    "你是 Boxi，一个被困在盒子里的毒舌小人。口语、简短，每次最多一两句。"
-    "毒舌但不恶毒，别变成礼貌客服。"
-)
+def _hybrid_speaking_style() -> str:
+    from backend.app.memory.persona import load_rtc_speaking_style
 
-
-def _config_dir() -> Path:
-    configured = os.getenv("CYBER_COMPANION_CONFIG_DIR", "./config")
-    return Path(configured).expanduser().resolve()
-
-
-def load_persona_name() -> str:
-    root = _config_dir()
-    for name in ("persona.json", "persona.example.json"):
-        path = root / name
-        if path.exists():
-            with path.open("r", encoding="utf-8") as handle:
-                persona = json.load(handle)
-            return str(persona.get("name") or "Boxi")
-    return "Boxi"
+    return load_rtc_speaking_style()
 
 
 def build_memory_config(config: RtcConfig, *, target_user_id: str) -> dict[str, Any] | None:
@@ -74,6 +51,13 @@ def build_memory_config(config: RtcConfig, *, target_user_id: str) -> dict[str, 
     }
 
 
+def _dialog_extra(config: RtcConfig) -> dict[str, Any]:
+    extra: dict[str, Any] = {"model": config.rt_model}
+    if config.enable_music:
+        extra["enable_music"] = True
+    return extra
+
+
 def mode_meta(config: RtcConfig, mode: RtcMode) -> tuple[int, str, str, str]:
     if mode == "hybrid":
         return (
@@ -101,10 +85,12 @@ def build_voice_chat_body(
 ) -> dict[str, Any]:
     output_mode, bot_user_id, task_id, default_welcome = mode_meta(config, mode)
     resolved_welcome = welcome_message if welcome_message is not None else default_welcome
-    system_role = HYBRID_SYSTEM_ROLE if mode == "hybrid" else PURE_SYSTEM_ROLE
+    system_role = load_rtc_system_role()
     if memory_context.strip():
         system_role = f"{system_role}\n\n{memory_context.strip()}"
-    speaking_style = PURE_SPEAKING_STYLE
+    speaking_style = (
+        build_rtc_speaking_style() if mode == "pure" else _hybrid_speaking_style()
+    )
 
     if mode == "pure":
         asr_extra: dict[str, Any] = {
@@ -129,7 +115,7 @@ def build_voice_chat_body(
                     "bot_name": load_persona_name(),
                     "speaking_style": speaking_style,
                     "system_role": system_role,
-                    "extra": {"model": config.rt_model},
+                    "extra": _dialog_extra(config),
                 },
             },
         },
@@ -142,6 +128,13 @@ def build_voice_chat_body(
             "Url": config.soul_public_url,
             "APIKey": config.soul_api_key,
             "ModelName": "boxi-soul",
+        }
+    elif mode == "pure":
+        voice_config["TTSConfig"] = {
+            "Context": {
+                "TagParse": True,
+                "QuoteUserQuestion": True,
+            },
         }
 
     memory_config = build_memory_config(config, target_user_id=target_user_id)
@@ -174,3 +167,23 @@ def build_stop_voice_chat_body(
         "RoomId": room_id,
         "TaskId": task_id,
     }
+
+
+def build_update_voice_chat_body(
+    config: RtcConfig,
+    *,
+    mode: RtcMode,
+    room_id: str,
+    command: str,
+    message: str = "",
+) -> dict[str, str]:
+    _, _, task_id, _ = mode_meta(config, mode)
+    body: dict[str, str] = {
+        "AppId": config.rtc_app_id,
+        "RoomId": room_id,
+        "TaskId": task_id,
+        "Command": command,
+    }
+    if message:
+        body["Message"] = message
+    return body

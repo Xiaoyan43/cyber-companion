@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from backend.app.memory.budget import BudgetConfig, load_budget_config
 from backend.app.memory.store import MemoryStore
-from backend.app.rtc.client import RtcApiError, start_voice_chat, stop_voice_chat
+from backend.app.rtc.client import RtcApiError, start_voice_chat, stop_voice_chat, update_voice_chat
 from backend.app.rtc.config import (
     RtcConfig,
     base_rtc_ready,
@@ -21,8 +21,9 @@ from backend.app.rtc.config import (
 from backend.app.memory.store import get_memory_store
 from backend.app.rtc.sqlite_memory import load_sqlite_memory_context, sqlite_memory_has_content
 from backend.app.rtc.state_block import (
+    build_rtc_emotion_tag,
+    build_rtc_speaking_style,
     build_rtc_state_block,
-    build_rtc_steering_directive,
     build_rtc_welcome_message,
 )
 from backend.app.rtc.token import mint_rtc_token
@@ -63,6 +64,25 @@ def _run_turn_analysis(
 ) -> None:
     try:
         analyze_turn(store, user_text=user_text, bot_text=bot_text, budget=budget)
+        emotion_message = build_rtc_emotion_tag(store)
+        if emotion_message:
+            config = load_rtc_config()
+            if mode_ready(config, "pure"):
+                try:
+                    update_voice_chat(
+                        config,
+                        mode="pure",
+                        room_id=room_id,
+                        command="SetTTSContext",
+                        message=emotion_message,
+                    )
+                    logger.info(
+                        "RTC SetTTSContext injected room=%s chars=%d",
+                        room_id,
+                        len(emotion_message),
+                    )
+                except Exception:
+                    logger.exception("RTC SetTTSContext failed for room=%s", room_id)
     finally:
         store.release_turn_analysis(room_id)
 
@@ -82,14 +102,13 @@ def _resolve_rtc_welcome_message(config: RtcConfig, mode: RtcModeSchema, store: 
 def _load_rtc_memory_context(config: RtcConfig, user_id: str) -> str:
     store = get_memory_store()
     state_block = build_rtc_state_block(store)
-    steering = build_rtc_steering_directive(store)
     sqlite_context = load_sqlite_memory_context(store)
     if state_block:
         logger.info("RTC state block inject chars=%d", len(state_block))
     if sqlite_context:
         logger.info("SQLite memory inject chars=%d", len(sqlite_context))
     viking_context = _load_viking_memory_context(config, user_id)
-    return _merge_memory_context(state_block, steering, sqlite_context, viking_context)
+    return _merge_memory_context(state_block, sqlite_context, viking_context)
 
 
 def _load_viking_memory_context(config: RtcConfig, user_id: str) -> str:
@@ -120,7 +139,8 @@ def rtc_stance_preview() -> dict[str, str]:
         "default_welcome": default,
         "welcome_message": _resolve_rtc_welcome_message(config, "pure", store),
         "state_block": build_rtc_state_block(store),
-        "steering_directive": build_rtc_steering_directive(store),
+        "speaking_style": build_rtc_speaking_style(store),
+        "emotion_tag": build_rtc_emotion_tag(store) or "",
     }
 
 

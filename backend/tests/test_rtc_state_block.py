@@ -1,7 +1,8 @@
-"""PS-3 / PS-4 — join-time kernel stance block for RTC."""
+"""PS-3 / PS-5 / PS-6 — join-time kernel stance block for RTC."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,7 +13,10 @@ from fastapi.testclient import TestClient
 from backend.app.memory.store import MemoryStore
 from backend.app.rtc.config import RtcConfig
 from backend.app.rtc.routes import _load_rtc_memory_context, router as rtc_router
+from backend.app.memory.persona import load_rtc_speaking_style
 from backend.app.rtc.state_block import (
+    build_rtc_emotion_tag,
+    build_rtc_speaking_style,
     build_rtc_state_block,
     build_rtc_steering_directive,
     build_rtc_welcome_message,
@@ -56,6 +60,7 @@ def rtc_config() -> RtcConfig:
         viking_memory_transition_words="",
         viking_memory_types=(),
         enable_asr_twopass=False,
+        enable_music=True,
     )
 
 
@@ -204,7 +209,84 @@ def test_merged_context_prepends_state_before_sqlite(
     assert sqlite_pos != -1
     assert state_pos < sqlite_pos
     assert "有点烦躁" in merged
-    assert "可以更冲、更短" in merged
+    assert "收一收毒舌" not in merged
+
+
+def test_build_rtc_speaking_style_neutral_uses_base(store: MemoryStore) -> None:
+    _neutral_kernel(store)
+    assert build_rtc_speaking_style(store) == load_rtc_speaking_style()
+
+
+@pytest.mark.parametrize(
+    ("setup", "modifier"),
+    [
+        (lambda s: s.update_mood_state(worry=0.6), "收一收毒舌、稳一点"),
+        (lambda s: s.update_mood_state(annoyance=0.6), "现在更冲、更短"),
+        (
+            lambda s: s.update_relationship_state(tension=0.5),
+            "现在更冲、更短",
+        ),
+        (
+            lambda s: s.update_relationship_state(closeness=0.75, tension=0.1),
+            "和ta更熟，可更随意贴近",
+        ),
+    ],
+)
+def test_build_rtc_speaking_style_kernel_modifiers(
+    store: MemoryStore,
+    setup,
+    modifier: str,
+) -> None:
+    _neutral_kernel(store)
+    setup(store)
+    style = build_rtc_speaking_style(store)
+    assert load_rtc_speaking_style() in style
+    assert modifier in style
+
+
+def test_build_rtc_speaking_style_worry_beats_annoyance(store: MemoryStore) -> None:
+    _neutral_kernel(store)
+    store.update_mood_state(worry=0.6, annoyance=0.7)
+    assert "收一收毒舌、稳一点" in build_rtc_speaking_style(store)
+    assert "现在更冲、更短" not in build_rtc_speaking_style(store)
+
+
+def test_build_rtc_emotion_tag_neutral_returns_none(store: MemoryStore) -> None:
+    _neutral_kernel(store)
+    assert build_rtc_emotion_tag(store) is None
+
+
+@pytest.mark.parametrize(
+    ("setup", "context_text"),
+    [
+        (lambda s: s.update_mood_state(worry=0.6), "语气放软、关切、稍慢"),
+        (lambda s: s.update_mood_state(annoyance=0.6), "更冲、更不耐烦但别凶"),
+        (
+            lambda s: s.update_relationship_state(tension=0.5),
+            "更冲、更不耐烦但别凶",
+        ),
+        (lambda s: s.update_mood_state(loneliness=0.6), "更热络一点"),
+    ],
+)
+def test_build_rtc_emotion_tag_kernel_buckets(
+    store: MemoryStore,
+    setup,
+    context_text: str,
+) -> None:
+    _neutral_kernel(store)
+    setup(store)
+    message = build_rtc_emotion_tag(store)
+    assert message is not None
+    payload = json.loads(message)
+    assert payload == {"Tag": {"additions": {"context_texts": [context_text]}}}
+
+
+def test_build_rtc_emotion_tag_worry_beats_annoyance(store: MemoryStore) -> None:
+    _neutral_kernel(store)
+    store.update_mood_state(worry=0.6, annoyance=0.7)
+    message = build_rtc_emotion_tag(store)
+    assert message is not None
+    assert "语气放软、关切、稍慢" in message
 
 
 def test_build_voice_chat_system_role_includes_state_block(
@@ -215,20 +297,23 @@ def test_build_voice_chat_system_role_includes_state_block(
     store.update_relationship_state(trust=0.5, closeness=0.5, tension=0.1)
 
     state_block = build_rtc_state_block(store)
-    steering = build_rtc_steering_directive(store)
-    memory_context = "\n\n".join(part for part in (state_block, steering) if part)
-
-    body = build_voice_chat_body(
-        rtc_config,
-        mode="pure",
-        room_id="room-a",
-        target_user_id="boxi_user",
-        memory_context=memory_context,
-    )
-    system_role = body["Config"]["S2SConfig"]["ProviderParams"]["dialog"]["system_role"]
+    with patch("backend.app.rtc.state_block.get_memory_store", return_value=store):
+        body = build_voice_chat_body(
+            rtc_config,
+            mode="pure",
+            room_id="room-a",
+            target_user_id="boxi_user",
+            memory_context=state_block,
+        )
+    dialog = body["Config"]["S2SConfig"]["ProviderParams"]["dialog"]
+    system_role = dialog["system_role"]
     assert "【你此刻的状态】" in system_role
     assert "有点担心ta" in system_role
-    assert "收一收毒舌" in system_role
+    assert "收一收毒舌" not in system_role
+    assert "收一收毒舌、稳一点" in dialog["speaking_style"]
+    tts_context = body["Config"]["TTSConfig"]["Context"]
+    assert tts_context["TagParse"] is True
+    assert tts_context["QuoteUserQuestion"] is True
 
 
 @patch("backend.app.rtc.routes.start_voice_chat")
@@ -280,3 +365,5 @@ def test_rtc_stance_preview_endpoint(
     assert payload["default_welcome"] == rtc_config.welcome_pure
     assert "别磨蹭" in payload["welcome_message"]
     assert "有点烦躁" in payload["state_block"]
+    assert "现在更冲、更短" in payload["speaking_style"]
+    assert "更冲、更不耐烦但别凶" in payload["emotion_tag"]

@@ -3382,3 +3382,45 @@
 不要改动的边界：
 
 - 未改 kernel/schema；实验为实机对照，非自动化回归。
+
+## 2026-06-12 - Session: V2 RTC Pure-Soul PS-5/PS-6 tone + emotion channels
+
+本次完成：
+
+- **PS-5（join-time tone）：** `build_rtc_speaking_style()` = `load_rtc_speaking_style()` 基础 +
+  kernel 修饰（worry / annoyance+tension / closeness 桶，与 PS-4 映射一致但更短）；
+  `build_voice_chat_body` pure 模式改用该函数；`_load_rtc_memory_context` **移除**
+  `build_rtc_steering_directive`（不再把 steering 拼进 `system_role`）。
+- **PS-6（mid-session emotion）：** pure join 时 `Config.TTSConfig.Context =
+  {TagParse:true, QuoteUserQuestion:true}`；`client.update_voice_chat()`（`UpdateVoiceChat` /
+  `SetTTSContext`）；`build_rtc_emotion_tag()` → `Message` JSON
+  `{"Tag":{"additions":{"context_texts":[…]}}}`；`/rtc/turn` 后台 `analyze_turn` 之后非中性即注入
+  （failure-isolated）；`GET /rtc/stance-preview` 增 `speaking_style` + `emotion_tag`。
+- 单测：`test_rtc_state_block.py` speaking_style / emotion_tag 各桶；
+  `test_rtc.py` TTSConfig + `update_voice_chat` mock HTTP；`test_rtc_turn.py` SetTTSContext 接线。
+
+下次接着做：
+
+- **用户实机 PS-4 复测（结论性）：** 纯 E2E 多轮拉高 annoyance/worry → 听下一轮语气是否更冲/更软；
+  若有效则 pure E2E 语气可控，不必为 tone 上 Hybrid。
+- V2 RTC 其他项见 `docs/TODO.md`。
+
+已知问题：
+
+- `SetTTSContext` 每轮重发（tag 作用域=下一轮）；若实机显示情绪 persist 过久，再加 `schema_meta` change-gating。
+- `npm run check` 中 `test_providers.py` 3 例红（`local-budget` / 真 DeepSeek key 环境）— 与本轮 diff 无关。
+
+相关文件：
+
+- `backend/app/rtc/{state_block,voice_chat,client,routes}.py`
+- `backend/tests/{test_rtc_state_block,test_rtc,test_rtc_turn}.py`
+- `docs/TODO.md`, `docs/SESSION_LOG.md`
+
+测试结果：
+
+- RTC 相关：**60 passed**（`test_rtc*.py`）
+- 全量 `npm run check`：**334 passed, 3 failed**（`test_providers.py` 环境项）
+
+不要改动的边界：
+
+- 未改 kernel 数学 / memory schema / soul writers / OutputMode 0 / Doubao realtime service。
