@@ -54,11 +54,26 @@ export async function prepareRtcSession(mode: RtcMode): Promise<RtcPrepareRespon
   return response.json() as Promise<RtcPrepareResponse>;
 }
 
+export type RtcStancePreview = {
+  default_welcome: string;
+  welcome_message: string;
+  state_block: string;
+  steering_directive: string;
+};
+
+export async function fetchRtcStancePreview(): Promise<RtcStancePreview> {
+  const response = await fetch(`${apiBaseUrl}/rtc/stance-preview`);
+  if (!response.ok) {
+    throw new Error(`RTC stance preview failed (${response.status})`);
+  }
+  return response.json() as Promise<RtcStancePreview>;
+}
+
 export async function startRtcAgent(
   mode: RtcMode,
   roomId: string,
   userId: string,
-): Promise<void> {
+): Promise<{ welcome_message: string }> {
   const response = await fetch(`${apiBaseUrl}/rtc/agent/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -68,6 +83,7 @@ export async function startRtcAgent(
     const detail = await response.text();
     throw new Error(formatRtcApiError(detail, `RTC agent start failed (${response.status})`));
   }
+  return response.json() as Promise<{ status: string; welcome_message: string }>;
 }
 
 export async function saveRtcMemorySession(payload: {

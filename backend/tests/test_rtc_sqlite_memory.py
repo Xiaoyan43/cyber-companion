@@ -56,6 +56,7 @@ def rtc_config() -> RtcConfig:
         viking_memory_limit=3,
         viking_memory_transition_words="",
         viking_memory_types=(),
+        enable_asr_twopass=False,
     )
 
 

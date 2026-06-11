@@ -20,7 +20,11 @@ from backend.app.rtc.config import (
 )
 from backend.app.memory.store import get_memory_store
 from backend.app.rtc.sqlite_memory import load_sqlite_memory_context, sqlite_memory_has_content
-from backend.app.rtc.state_block import build_rtc_state_block, build_rtc_steering_directive
+from backend.app.rtc.state_block import (
+    build_rtc_state_block,
+    build_rtc_steering_directive,
+    build_rtc_welcome_message,
+)
 from backend.app.rtc.token import mint_rtc_token
 from backend.app.rtc.viking_memory import (
     VikingMemoryError,
@@ -67,6 +71,14 @@ def _merge_memory_context(*parts: str) -> str:
     return "\n\n".join(part.strip() for part in parts if part.strip())
 
 
+def _resolve_rtc_welcome_message(config: RtcConfig, mode: RtcModeSchema, store: MemoryStore) -> str:
+    _, _, _, default = mode_meta(config, mode)
+    if mode != "pure":
+        return default
+    welcome = build_rtc_welcome_message(store, default=default)
+    return welcome
+
+
 def _load_rtc_memory_context(config: RtcConfig, user_id: str) -> str:
     store = get_memory_store()
     state_block = build_rtc_state_block(store)
@@ -96,6 +108,20 @@ def _load_viking_memory_context(config: RtcConfig, user_id: str) -> str:
     except VikingMemoryError as error:
         logger.warning("Viking memory search failed for user=%s: %s", user_id, error)
         return ""
+
+
+@router.get("/stance-preview")
+def rtc_stance_preview() -> dict[str, str]:
+    """Current kernel → join-time inject lines (for E2E weight experiments)."""
+    store = get_memory_store()
+    config = load_rtc_config()
+    _, _, _, default = mode_meta(config, "pure")
+    return {
+        "default_welcome": default,
+        "welcome_message": _resolve_rtc_welcome_message(config, "pure", store),
+        "state_block": build_rtc_state_block(store),
+        "steering_directive": build_rtc_steering_directive(store),
+    }
 
 
 @router.get("/status", response_model=RtcStatusResponse)
@@ -135,7 +161,9 @@ def rtc_prepare(payload: RtcPrepareRequest) -> RtcPrepareResponse:
         user_id=user_id,
     )
 
-    output_mode, bot_user_id, task_id, welcome_message = mode_meta(config, mode)
+    store = get_memory_store()
+    output_mode, bot_user_id, task_id, _ = mode_meta(config, mode)
+    welcome_message = _resolve_rtc_welcome_message(config, mode, store)
     return RtcPrepareResponse(
         mode=mode,
         output_mode=output_mode,
@@ -158,6 +186,8 @@ def rtc_start_legacy(payload: RtcPrepareRequest) -> RtcPrepareResponse:
     prepared = rtc_prepare(payload)
     config = load_rtc_config()
     mode: RtcModeSchema = payload.mode
+    store = get_memory_store()
+    welcome_message = _resolve_rtc_welcome_message(config, mode, store)
     try:
         start_voice_chat(
             config,
@@ -165,6 +195,7 @@ def rtc_start_legacy(payload: RtcPrepareRequest) -> RtcPrepareResponse:
             room_id=prepared.room_id,
             target_user_id=prepared.user_id,
             memory_context=_load_rtc_memory_context(config, prepared.user_id),
+            welcome_message=welcome_message,
         )
     except RtcApiError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
@@ -185,6 +216,8 @@ def rtc_agent_start(payload: RtcAgentStartRequest) -> dict[str, str]:
     if not room_id or not user_id:
         raise HTTPException(status_code=400, detail="room_id and user_id are required")
 
+    store = get_memory_store()
+    welcome_message = _resolve_rtc_welcome_message(config, mode, store)
     try:
         start_voice_chat(
             config,
@@ -192,11 +225,13 @@ def rtc_agent_start(payload: RtcAgentStartRequest) -> dict[str, str]:
             room_id=room_id,
             target_user_id=user_id,
             memory_context=_load_rtc_memory_context(config, user_id),
+            welcome_message=welcome_message,
         )
     except RtcApiError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
-    return {"status": "ok"}
+    logger.info("RTC welcome_message chars=%d", len(welcome_message))
+    return {"status": "ok", "welcome_message": welcome_message}
 
 
 @router.post("/stop", response_model=RtcStopResponse)

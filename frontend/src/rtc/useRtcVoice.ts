@@ -360,11 +360,12 @@ export function useRtcVoice({ onAgentPhaseChange }: UseRtcVoiceOptions = {}) {
 
       await startLocalMicrophone(engine);
 
-      await startRtcAgent(mode, prepared.room_id, prepared.user_id);
+      const started = await startRtcAgent(mode, prepared.room_id, prepared.user_id);
+      const liveSession = { ...prepared, welcome_message: started.welcome_message };
       messageStateRef.current = { ...messageStateRef.current, agentEnabled: true };
 
-      sessionRef.current = prepared;
-      setSession(prepared);
+      sessionRef.current = liveSession;
+      setSession(liveSession);
       setPhase("live");
     } catch (joinError: unknown) {
       sessionRef.current = null;

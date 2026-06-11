@@ -56,6 +56,7 @@ def rtc_config() -> RtcConfig:
         viking_memory_limit=3,
         viking_memory_transition_words="",
         viking_memory_types=(),
+        enable_asr_twopass=False,
     )
 
 
@@ -110,6 +111,22 @@ def test_build_voice_chat_pure_matches_demo_asr(rtc_config: RtcConfig) -> None:
     asr = body["Config"]["S2SConfig"]["ProviderParams"]["asr"]["extra"]
     assert body["Config"]["S2SConfig"]["OutputMode"] == 0
     assert asr["end_smooth_window_ms"] == 1000
+    assert asr["enable_asr_twopass"] is False
+    assert (
+        body["Config"]["S2SConfig"]["ProviderParams"]["tts"]["speaker"]
+        == rtc_config.rt_speaker
+    )
+
+
+def test_build_voice_chat_pure_asr_twopass_opt_in(rtc_config: RtcConfig) -> None:
+    with_twopass = RtcConfig(**{**rtc_config.__dict__, "enable_asr_twopass": True})
+    body = build_voice_chat_body(
+        with_twopass,
+        mode="pure",
+        room_id="room-a",
+        target_user_id="user-a",
+    )
+    asr = body["Config"]["S2SConfig"]["ProviderParams"]["asr"]["extra"]
     assert asr["enable_asr_twopass"] is True
     assert body["Config"]["S2SConfig"]["ProviderParams"]["dialog"]["system_role"] == PURE_SYSTEM_ROLE
     assert "LLMConfig" not in body["Config"]

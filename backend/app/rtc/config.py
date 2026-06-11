@@ -30,7 +30,7 @@ DEFAULT_RTC_USER_ID = "boxi_user"
 DEFAULT_VIKING_MEMORY_PROJECT = "default"
 DEFAULT_VIKING_MEMORY_HOST = "https://api-knowledgebase.mlp.cn-beijing.volces.com"
 DEFAULT_VIKING_MEMORY_LIMIT = 3
-DEFAULT_RT_SPEAKER = "zh_male_yunzhou_jupiter_bigtts"
+DEFAULT_RT_SPEAKER = "zh_female_vv_jupiter_bigtts"
 DEFAULT_RT_MODEL = "1.2.1.1"
 DEFAULT_WELCOME_PURE = "行吧，我又醒了。你想聊什么？"
 DEFAULT_WELCOME_HYBRID = "行吧，Soul 模式。说点什么。"
@@ -67,6 +67,8 @@ class RtcConfig:
     viking_memory_limit: int
     viking_memory_transition_words: str
     viking_memory_types: tuple[str, ...]
+    # Off by default: twopass ASR can finalize the same utterance twice → double reply.
+    enable_asr_twopass: bool
 
 
 def _env(name: str, default: str = "") -> str:
@@ -78,6 +80,13 @@ def _env_int(name: str, default: int) -> int:
     if not raw:
         return default
     return int(raw)
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = _env(name)
+    if not raw:
+        return default
+    return raw.lower() in {"1", "true", "yes", "on"}
 
 
 def _env_csv(name: str) -> tuple[str, ...]:
@@ -114,6 +123,7 @@ def load_rtc_config() -> RtcConfig:
         viking_memory_limit=_env_int(ENV_VIKING_MEMORY_LIMIT, DEFAULT_VIKING_MEMORY_LIMIT),
         viking_memory_transition_words=_env(ENV_VIKING_MEMORY_TRANSITION),
         viking_memory_types=_env_csv(ENV_VIKING_MEMORY_TYPES),
+        enable_asr_twopass=_env_bool("VOLC_RTC_ENABLE_ASR_TWOPASS", False),
     )
 
 

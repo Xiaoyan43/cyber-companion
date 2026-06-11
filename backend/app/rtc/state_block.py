@@ -22,6 +22,16 @@ _MOOD_LINES: tuple[tuple[str, float, str], ...] = (
     ("boredom", _MOOD_THRESHOLD, "有点无聊"),
 )
 
+# Spoken WelcomeMessage lines — deliberately distinct per branch for E2E weight experiments.
+_WELCOME_LINES: tuple[tuple[str, float, str], ...] = (
+    ("annoyance", _MOOD_THRESHOLD, "又响了。有话快说，别磨蹭。"),
+    ("worry", _MOOD_THRESHOLD, "在呢。你最近还好吗？"),
+    ("loneliness", _MOOD_THRESHOLD, "终于来人了。说吧，我听着。"),
+    ("boredom", _MOOD_THRESHOLD, "无聊死了。你赶紧说点有意思的。"),
+)
+_LOW_ENERGY_WELCOME = "困……干嘛非现在把我喊醒。"
+_HIGH_CLOSENESS_WELCOME = "哟，又是你啊。想聊啥？"
+
 
 def _bucket_label(value: float) -> str:
     if value < _BUCKET_LOW:
@@ -82,6 +92,32 @@ def build_rtc_state_block(store: MemoryStore | None = None) -> str:
     except Exception:
         logger.exception("build_rtc_state_block failed")
         return ""
+
+
+def build_rtc_welcome_message(
+    store: MemoryStore | None = None,
+    *,
+    default: str,
+) -> str:
+    """Kernel-derived spoken opening for StartVoiceChat. Falls back to *default* when neutral."""
+    try:
+        resolved = store if store is not None else get_memory_store()
+        mood = resolved.get_mood_state()
+        relationship = resolved.get_relationship_state()
+
+        for field, threshold, line in _WELCOME_LINES:
+            if getattr(mood, field) >= threshold:
+                return line
+        if mood.energy <= _LOW_ENERGY_THRESHOLD:
+            return _LOW_ENERGY_WELCOME
+        if relationship.closeness >= _BUCKET_HIGH and relationship.tension < 0.3:
+            return _HIGH_CLOSENESS_WELCOME
+        if _is_fully_neutral(mood, relationship):
+            return default
+        return default
+    except Exception:
+        logger.exception("build_rtc_welcome_message failed")
+        return default
 
 
 def build_rtc_steering_directive(store: MemoryStore | None = None) -> str:

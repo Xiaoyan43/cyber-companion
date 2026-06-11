@@ -97,8 +97,10 @@ def build_voice_chat_body(
     room_id: str,
     target_user_id: str,
     memory_context: str = "",
+    welcome_message: str | None = None,
 ) -> dict[str, Any]:
-    output_mode, bot_user_id, task_id, welcome_message = mode_meta(config, mode)
+    output_mode, bot_user_id, task_id, default_welcome = mode_meta(config, mode)
+    resolved_welcome = welcome_message if welcome_message is not None else default_welcome
     system_role = HYBRID_SYSTEM_ROLE if mode == "hybrid" else PURE_SYSTEM_ROLE
     if memory_context.strip():
         system_role = f"{system_role}\n\n{memory_context.strip()}"
@@ -107,7 +109,7 @@ def build_voice_chat_body(
     if mode == "pure":
         asr_extra: dict[str, Any] = {
             "end_smooth_window_ms": 1000,
-            "enable_asr_twopass": True,
+            "enable_asr_twopass": config.enable_asr_twopass,
         }
     else:
         asr_extra = {"end_smooth_window_ms": 500}
@@ -122,6 +124,7 @@ def build_voice_chat_body(
                     "token": config.rt_access_token,
                 },
                 "asr": {"extra": asr_extra},
+                "tts": {"speaker": config.rt_speaker},
                 "dialog": {
                     "bot_name": load_persona_name(),
                     "speaking_style": speaking_style,
@@ -151,7 +154,7 @@ def build_voice_chat_body(
         "TaskId": task_id,
         "AgentConfig": {
             "TargetUserId": [target_user_id],
-            "WelcomeMessage": welcome_message,
+            "WelcomeMessage": resolved_welcome,
             "UserId": bot_user_id,
             "EnableConversationStateCallback": True,
         },

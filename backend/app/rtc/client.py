@@ -66,6 +66,7 @@ def start_voice_chat(
     room_id: str,
     target_user_id: str,
     memory_context: str = "",
+    welcome_message: str | None = None,
 ) -> dict[str, Any]:
     body = build_voice_chat_body(
         config,
@@ -73,6 +74,7 @@ def start_voice_chat(
         room_id=room_id,
         target_user_id=target_user_id,
         memory_context=memory_context,
+        welcome_message=welcome_message,
     )
     return _call_openapi(config, action="StartVoiceChat", body=body)
 

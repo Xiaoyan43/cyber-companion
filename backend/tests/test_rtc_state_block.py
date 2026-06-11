@@ -12,7 +12,13 @@ from fastapi.testclient import TestClient
 from backend.app.memory.store import MemoryStore
 from backend.app.rtc.config import RtcConfig
 from backend.app.rtc.routes import _load_rtc_memory_context, router as rtc_router
-from backend.app.rtc.state_block import build_rtc_state_block, build_rtc_steering_directive
+from backend.app.rtc.state_block import (
+    build_rtc_state_block,
+    build_rtc_steering_directive,
+    build_rtc_welcome_message,
+)
+
+_DEFAULT_WELCOME = "行吧，我又醒了。你想聊什么？"
 from backend.app.rtc.voice_chat import build_voice_chat_body
 
 
@@ -49,6 +55,7 @@ def rtc_config() -> RtcConfig:
         viking_memory_limit=3,
         viking_memory_transition_words="",
         viking_memory_types=(),
+        enable_asr_twopass=False,
     )
 
 
@@ -67,6 +74,31 @@ def test_fully_neutral_kernel_returns_empty_blocks(store: MemoryStore) -> None:
     _neutral_kernel(store)
     assert build_rtc_state_block(store) == ""
     assert build_rtc_steering_directive(store) == ""
+    assert build_rtc_welcome_message(store, default=_DEFAULT_WELCOME) == _DEFAULT_WELCOME
+
+
+def test_welcome_message_annoyance_branch(store: MemoryStore) -> None:
+    store.update_mood_state(annoyance=1.0, energy=0.0, worry=0.0)
+    welcome = build_rtc_welcome_message(store, default=_DEFAULT_WELCOME)
+    assert welcome != _DEFAULT_WELCOME
+    assert "别磨蹭" in welcome
+
+
+def test_welcome_message_worry_branch(store: MemoryStore) -> None:
+    store.update_mood_state(annoyance=0.0, worry=1.0, energy=1.0)
+    welcome = build_rtc_welcome_message(store, default=_DEFAULT_WELCOME)
+    assert "还好吗" in welcome
+
+
+def test_build_voice_chat_welcome_override(rtc_config: RtcConfig) -> None:
+    body = build_voice_chat_body(
+        rtc_config,
+        mode="pure",
+        room_id="room-a",
+        target_user_id="boxi_user",
+        welcome_message="实验开场白。",
+    )
+    assert body["AgentConfig"]["WelcomeMessage"] == "实验开场白。"
 
 
 @pytest.mark.parametrize(
@@ -221,5 +253,30 @@ def test_rtc_agent_start_injects_state_block(
 
     assert response.status_code == 200
     memory_context = mock_start.call_args.kwargs["memory_context"]
+    welcome = mock_start.call_args.kwargs["welcome_message"]
     assert "【你此刻的状态】" in memory_context
     assert "有点烦躁" in memory_context
+    assert welcome is not None
+    assert "别磨蹭" in welcome
+    assert response.json()["welcome_message"] == welcome
+
+
+def test_rtc_stance_preview_endpoint(
+    rtc_config: RtcConfig,
+    store: MemoryStore,
+) -> None:
+    store.update_mood_state(annoyance=1.0, energy=0.0, worry=0.0)
+
+    app = FastAPI()
+    app.include_router(rtc_router)
+    client = TestClient(app)
+
+    with patch("backend.app.rtc.routes.load_rtc_config", return_value=rtc_config):
+        with patch("backend.app.rtc.routes.get_memory_store", return_value=store):
+            response = client.get("/rtc/stance-preview")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["default_welcome"] == rtc_config.welcome_pure
+    assert "别磨蹭" in payload["welcome_message"]
+    assert "有点烦躁" in payload["state_block"]

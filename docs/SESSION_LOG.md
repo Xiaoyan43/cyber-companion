@@ -3337,3 +3337,48 @@
 不要改动的边界：
 
 - 未改 soul/kernel/schema/voice_chat/UpdateVoiceChat/OutputMode 0。
+
+## 2026-06-11 - Session: Pure E2E 权重对照实验 + 动态 WelcomeMessage
+
+本次完成：
+
+- **动态 WelcomeMessage：** `build_rtc_welcome_message()` — kernel 分支选差异明显的开场白；
+  `prepare` / `agent/start` 注入 `StartVoiceChat`；`GET /rtc/stance-preview` 不进房可预览；
+  前端 `agent/start` 回写 `welcome_message` 到字幕区。
+- **ASR twopass 默认关闭**（`VOLC_RTC_ENABLE_ASR_TWOPASS` 可 opt-in）— 修复「一句话双声双答」。
+- **用户 A/B 对照实验（实机 PASS 开场 / 部分 PASS 回复）：**
+
+  | 注入通道 | 实验结果 | 权重判断 |
+  |----------|----------|----------|
+  | **WelcomeMessage** | A「别磨蹭…」/ B「在呢。你最近还好吗？」均与 `/rtc/stance-preview` **一致** | **高** — 豆包会照读进房第一句 |
+  | **system_role stance + steering** | 同句 provocation A/B **有差别**，但 B **未表现关心**（仍偏毒舌/怼） | **低且不可控** — 能扰动用词，不服从 worry steering |
+
+  Pure E2E weight map（摘要）：
+  - WelcomeMessage：kernel 驱动，A/B 听感可区分，与 preview 一致。
+  - system_role stance：同 provocation 会变，但不跟「收毒舌、稳一点」走。
+
+- PS-2 kernel 面板变动已在此前会话验证；本轮证实 **开场可靠、对话语气别指望纯 E2E stance**。
+
+下次接着做：
+
+- 产品分工：WelcomeMessage 保留；reply 语气若要可控 → 以后 Hybrid Soul 或接受 E2E 为「嘴巴+记忆」。
+- 可选：RTC 面板 stance 徽章（肉眼对照 preview，不盲听）。
+
+已知问题：
+
+- 纯 E2E 同句 provocation 仍可能高度相似；stance 在 prompt 里占比小 + 毒舌人设/记忆块主导。
+- 幽灵 RTC 会话：dev 热更新后偶发「UI 未连接但麦仍占」— 需关光标签或退出浏览器。
+
+相关文件：
+
+- `backend/app/rtc/{state_block,routes,config,voice_chat,client}.py`
+- `frontend/src/rtc/{api,useRtcVoice}.ts`
+- `backend/tests/test_rtc_state_block.py`, `.env.example`
+
+测试结果：
+
+- `test_rtc_state_block.py` **22 passed**；用户实机 A/B 开场 **一致**。
+
+不要改动的边界：
+
+- 未改 kernel/schema；实验为实机对照，非自动化回归。
