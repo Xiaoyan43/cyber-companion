@@ -3000,3 +3000,272 @@
 不要改动的边界：
 
 - **未改 `backend/app/**`**、**`frontend/**`**、**未 vendor demo**。
+
+## 2026-06-10 - User validation: RTC Stage 2a PASS
+
+- **2a 用户实机 PASS：** `rtc-aigc-demo` 场景 **Boxi（纯端到端）** / `OutputMode 0` — RTC 语音 +
+  barge-in 正常（用户账号 + 已配 creds）。
+- **2b 待验：** `BoxiHybrid` + `scripts/soul_tunnel.sh` → CustomLLM 指向 soul endpoint，验跨轮 memory。
+
+## 2026-06-10 - Session: Stage 2c v2 (demo-aligned RTC + subtitles)
+
+本次完成：
+
+- **Stage 2c v2 重做：** `backend/app/rtc/` — `/rtc/prepare`（仅 token）→ 浏览器 joinRoom →
+  `/rtc/agent/start`（StartVoiceChat），对齐官方 demo 顺序。
+- 纯 E2E `VoiceChat` 与 `Boxi.json` 一致：短中文 `system_role`、`end_smooth_window_ms=1000`、
+  `enable_asr_twopass`。
+- 前端：`@volcengine/rtc` + TLV 字幕/AgentBrief 解析 + autoplay 恢复；字幕在**左栏**
+  `RtcVoicePanel`，不占用右侧文字聊天。
+- 6 backend RTC tests + 2 frontend `rtcMessages` tests。
+
+下次接着做：
+
+- 用户实机验纯 E2E 延迟 vs 体验馆；Soul 混合需 `soul_tunnel.sh` + `SOUL_LLM_PUBLIC_URL`。
+- Phase 2c Task 2：纯 E2E 旁路 memory inject + transcript write。
+
+已知问题：
+
+- Soul 混合仍依赖有效 tunnel；未做 live mic 验收。
+
+相关文件：
+
+- `backend/app/rtc/**`, `frontend/src/rtc/**`, `frontend/src/components/RtcVoicePanel.tsx`
+- `docs/{TODO.md,SESSION_LOG.md,OPEN_SOURCE_REUSE.md,RTC_DEMO_SETUP.md}`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**260 passed** + tsc green；frontend vitest **20 passed**。
+
+不要改动的边界：
+
+- 未改 memory schema / provider 抽象；Soul 混合仍走 `soul_llm_server`。
+
+## 2026-06-10 - Session: V2 RTC Viking Memory VM-1
+
+本次完成：
+
+- **`docs/V2_RTC_VIKING_MEMORY_SPEC.md`** — 跨 session 切片 VM-1…5 + 新窗口 `推进` 接续说明。
+- **VM-1 代码：** `MemoryConfig` 注入 `build_voice_chat_body`（env `VIKING_MEMORY_COLLECTION` 非空时启用）；
+  稳定 `user_id`（`VOLC_RTC_DEFAULT_USER_ID`，默认 `boxi_user`，不再每通话随机 UUID）。
+- `GET /rtc/status` 增加 `viking_memory_enabled`、`default_user_id`。
+- `.env.example` Viking 相关变量；RTC 测试 **13 passed**。
+
+下次接着做：
+
+- **VM-2（用户手动）：** Viking 控制台建记忆库 + `VoiceChatRoleForRTC` 跨服务授权；`.env` 填
+  `VIKING_MEMORY_COLLECTION`；实机验证跨天 RTC 召回。
+- **VM-3：** 通话结束 → 字幕 → `AddSession` 后端代理（`POST /rtc/memory/session`）。
+
+已知问题：
+
+- 未接 Viking 写入（AddSession）；未做 live 记忆库联调。
+- 文字聊天 SQLite 与 Viking 仍隔离（VM-4 未做）。
+
+相关文件：
+
+- `docs/V2_RTC_VIKING_MEMORY_SPEC.md`, `docs/TODO.md`
+- `backend/app/rtc/{config,voice_chat,routes}.py`, `backend/app/schemas.py`
+- `backend/tests/test_rtc.py`, `.env.example`, `frontend/src/rtc/api.ts`
+
+测试结果：
+
+- `PYTHONPATH=. pytest backend/tests/test_rtc.py`：**13 passed**
+
+不要改动的边界：
+
+- 未改 SQLite memory schema / CompanionBrain；纯 E2E OutputMode 0 路径不变。
+
+## 2026-06-10 - Session: V2 RTC Viking Memory VM-3
+
+本次完成：
+
+- **`POST /rtc/memory/session`** — 字幕合并为 user/assistant 消息后调 Viking `AddSession`（Bearer `VIKING_MEMORY_API_KEY`）。
+- 前端 `leave()`：挂断前自动上传字幕（`viking_memory_write_ready` 时）；失败会显示错误。
+- `GET /rtc/status` 增加 `viking_memory_write_ready`。
+- 测试：`test_rtc_viking_memory.py` + RTC 共 **16 passed**。
+
+下次接着做：
+
+- **用户 VM-2 复测**：第一轮说 Acme → 结束 → 第二轮问「我副业叫什么」；需等实时抽取几秒或新开通话。
+- VM-5 左栏 Viking 状态徽章（可选）。
+
+已知问题：
+
+- AddSession 成功不等于下一轮立刻召回（依赖 Viking 事件抽取延迟）；无字幕的极短通话不会写入。
+
+相关文件：
+
+- `backend/app/rtc/viking_memory.py`, `backend/app/rtc/routes.py`, `frontend/src/rtc/{api,useRtcVoice}.ts`
+- `backend/tests/test_rtc_viking_memory.py`, `docs/V2_RTC_VIKING_MEMORY_SPEC.md`
+
+测试结果：
+
+- `PYTHONPATH=. pytest backend/tests/test_rtc*.py`：**16 passed**
+
+不要改动的边界：
+
+- 未改 SQLite / CompanionBrain；密钥仅服务端 `.env`。
+
+## 2026-06-10 - Session: V2 RTC Viking Memory VM-2 recall PASS
+
+本次完成：
+
+- **跨会话召回用户 PASS：** 新 RTC 通话问「我叫什么 / 我在哪」→ 正确回答 **Alex / 海岛市**。
+- **根因：** Viking 写入成功，但 `SearchMemory` 注入含一条失败轮次的 event（「你还没告诉我名字」），盖过 `profile_v1`。
+- **修复：** `search_user_memories` + `format_memories_for_system_role` — 档案优先、可读化 profile、过滤矛盾 event；
+  `MemoryConfig` 运行时默认仅 `profile_v1`；`agent/start` 打日志（hits/chars）。
+- 测试：`test_rtc.py` + `test_rtc_viking_memory.py` **20 passed**。
+
+下次接着做：
+
+- **VM-5（可选）：** 左栏 Viking 记忆状态徽章。
+- **VM-4（可选）：** SQLite 摘要注入 `system_role`，与 Viking 并行。
+
+已知问题：
+
+- 文字聊天 SQLite 与 Viking 仍隔离；极短无字幕通话不会写入 Viking。
+- Soul 混合仍要 tunnel（`SOUL_LLM_PUBLIC_URL`）。
+
+相关文件：
+
+- `backend/app/rtc/{viking_memory,voice_chat,routes}.py`
+- `backend/tests/test_rtc*.py`, `docs/V2_RTC_VIKING_MEMORY_SPEC.md`
+
+测试结果：
+
+- `pytest backend/tests/test_rtc.py backend/tests/test_rtc_viking_memory.py`：**20 passed**
+- 用户实机：跨会话 RTC 记忆召回 **PASS**
+
+不要改动的边界：
+
+- 未改 SQLite memory schema / CompanionBrain / provider 抽象。
+
+## 2026-06-10 - Session: V2 RTC Viking Memory VM-5 UI
+
+本次完成：
+
+- **VM-5 左栏徽章：** `RtcVikingMemoryBadge` — 读 `GET /rtc/status` 的 `viking_memory_enabled` /
+  `viking_memory_write_ready` / `default_user_id`；状态「关 / 只读 / 就绪」；hover 提示 user_id。
+- 挂断后字幕写入 Viking 时显示「写入中…」→「已写入」（4 秒）。
+- 前端单测 `vikingMemoryBadge.test.ts` **+3**。
+
+下次接着做：
+
+- **VM-4（可选）：** SQLite 对话摘要注入 RTC `system_role`。
+
+已知问题：
+
+- 文字聊天 SQLite 与 Viking 仍隔离。
+
+相关文件：
+
+- `frontend/src/components/{RtcVoicePanel,RtcVikingMemoryBadge}.tsx`
+- `frontend/src/rtc/{vikingMemoryBadge,vikingMemoryBadge.test,useRtcVoice}.ts`
+- `frontend/src/styles.css`, `docs/TODO.md`
+
+测试结果：
+
+- `npm run check` + `npm run test`（frontend vitest **23 passed**）
+
+不要改动的边界：
+
+- 未改 backend memory schema / Viking API 契约。
+
+## 2026-06-10 - Session: V2 RTC Viking Memory VM-4 SQLite inject
+
+本次完成：
+
+- **VM-4：** `backend/app/rtc/sqlite_memory.py` — 进房前从 SQLite 读取对话摘要、关系印象、
+  Top-3 事实记忆，格式化为中文块注入 `system_role`（与 Viking 块合并）。
+- `agent/start` / legacy `/rtc/start` 走 `_load_rtc_memory_context`（SQLite → Viking）。
+- 测试 `test_rtc_sqlite_memory.py` **4 passed**；RTC 全套 **24 passed**。
+
+下次接着做：
+
+- 用户实机：文字聊一件新事（如面试公司名）→ 不开 RTC 写入 → 直接开语音问 → 应能提到。
+- V2 其他项：Stage 2b hybrid / Stage 3 情绪扩展等（见 `docs/TODO.md`）。
+
+已知问题：
+
+- 文字事实不会自动同步到 Viking；仅进房时读 SQLite 快照。
+- `system_role` 总长仍受云端限制，摘要/要点已做字符上限裁剪。
+
+相关文件：
+
+- `backend/app/rtc/{sqlite_memory,routes}.py`
+- `backend/tests/test_rtc_sqlite_memory.py`, `docs/V2_RTC_VIKING_MEMORY_SPEC.md`
+
+测试结果：
+
+- `pytest backend/tests/test_rtc*.py`：**24 passed**
+
+不要改动的边界：
+
+- 未改 SQLite schema / Viking 写入路径 / CompanionBrain。
+
+## 2026-06-10 - Session: VM-4 纯 E2E 文字记忆理解与间接召回
+
+本次完成：
+
+- **VM-4 增强：** `sqlite_memory.py` 注入近期 8 轮对话原文 + `【用户说过的事】` 计划要点块
+  （明天/打算/要去等关键词），并强化指令：间接口语提问也必须当「已知事实」回答。
+- `GET /rtc/status` 新增 `sqlite_memory_ready`；左栏 RTC 面板显示「文字记忆 就绪/空」徽章。
+- **用户实机 PASS：** 文字聊「明天吃盖浇饭」→ 纯 E2E 问「文字里聊了什么」能答；
+  问「我明天要去做什么」也能答盖浇饭（不再只会 meta 复述）。
+
+下次接着做：
+
+- Stage 2b hybrid（用户暂缓）；或 V2 其他项见 `docs/TODO.md`。
+
+已知问题：
+
+- 文字事实仍不会自动同步 Viking；每次需重新 `agent/start` 才刷新 SQLite 快照。
+- 计划要点仅靠关键词启发式，复杂日程可能漏抽。
+
+相关文件：
+
+- `backend/app/rtc/{sqlite_memory,routes}.py`, `backend/app/schemas.py`
+- `backend/tests/test_rtc_sqlite_memory.py`
+- `frontend/src/{rtc/api,components/RtcVoicePanel}.tsx`, `frontend/src/App.tsx`
+
+测试结果：
+
+- `pytest backend/tests/test_rtc*.py`：**27 passed**
+
+不要改动的边界：
+
+- 未改 SQLite schema / Viking API / CompanionBrain / Stage 2b。
+
+## 2026-06-11 - Session: V2 RTC Pure-Soul PS-1 turn analyzer core
+
+本次完成：
+
+- **PS-1：** 新增 `backend/app/reflection/turn_analyzer.py` — `analyze_turn()` 离线路径：
+  `evaluate_behavior` → DeepSeek JSON 分析 → `apply_signals_to_kernel` → `persist_chat_turn`
+  → `record_turn_memories` → `note_llm_turn` + `run_reflection_if_due`；全程 try/except 不抛出。
+- `budget.py` + `config/budget*.json` 新增 `enable_turn_analyzer` / `analyze_every_n_turns` 旋钮。
+- `test_turn_analyzer.py` **6 passed**（mock provider：关系轴移动 + SQLite typed memory；
+  provider/parse 失败为干净 no-op）。
+
+下次接着做：
+
+- **PS-2：** `POST /rtc/turn` + 前端每轮 POST + `BackgroundTask` + single-flight claim。
+
+已知问题：
+
+- `analyze_every_n_turns` > 1 的 per-room counter 留待 PS-2（当前为 store 级 `turns_since_analysis`）。
+
+相关文件：
+
+- `backend/app/reflection/{turn_analyzer,__init__}.py`
+- `backend/app/memory/budget.py`, `config/budget*.json`
+- `backend/tests/test_turn_analyzer.py`, `docs/TODO.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**291 passed** + frontend tsc green
+
+不要改动的边界：
+
+- 未改 kernel 数学 / memory schema / Doubao realtime / OutputMode 0 / RTC routes。

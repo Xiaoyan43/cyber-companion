@@ -141,9 +141,41 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
     "Acme"). **Spec: `docs/V2_RTC_STAGE1_SPEC.md`.**
   - [ ] **Stage 2 — OutputMode-1 over RTC, validated via official demo `[Claude→Cursor]`.**
     Repo side done: `docs/RTC_DEMO_SETUP.md`, `scripts/soul_tunnel.sh`, `.env.example` RTC/IAM vars.
-    **User manual:** 2a pure RTC (OutputMode 0); 2b OutputMode 1 + custom-LLM = Stage-1 endpoint
-    (via tunnel). Don't fork the demo. **Spec: `docs/V2_RTC_STAGE2_SPEC.md`.**
+    **2a PASS (user):** `Boxi` scene / OutputMode 0 — RTC voice + barge-in OK on user account.
+    **2b pending:** OutputMode 1 + custom-LLM = Stage-1 endpoint (via tunnel). **Spec:
+    `docs/V2_RTC_STAGE2_SPEC.md`.**
   - [ ] Stage 3 — emotion-recognition extension → soul appraisal/kernel.
+  - [ ] **Stage 2c — RTC in our frontend (pure E2E + soul hybrid) `[Cursor]`.**
+    **v2 landed:** demo-aligned join order (`prepare` → joinRoom → mic → `agent/start`),
+    binary subtitle + agent brief parsing, autoplay recovery; VoiceChat payload matches
+    `Boxi.json` (short `system_role`, twopass ASR). **Pure E2E user PASS (token fix).**
+  - [x] **V2 RTC Viking Memory — pure E2E + 火山长期记忆 `[Cursor]`.**
+    **Spec: `docs/V2_RTC_VIKING_MEMORY_SPEC.md`**（跨 session 按 Slice VM-1…5 推进，新窗口说 `推进`）。
+    - [x] **VM-1** — 稳定 `VOLC_RTC_DEFAULT_USER_ID` + `MemoryConfig` 注入 `StartVoiceChat`；
+      `GET /rtc/status` → `viking_memory_enabled`。
+    - [x] **VM-2** — 记忆库 `friend` + IAM 授权；跨会话召回 **用户 PASS**（Alex / 海岛市）。
+      `SearchMemory` → `system_role` 注入；档案优先 + 过滤矛盾 event；`MemoryConfig` 默认 `profile_v1`。
+    - [x] **VM-3** — 通话结束字幕 → `POST /rtc/memory/session` → Viking `AddSession`；leave 时自动上传。
+    - [x] **VM-4** — SQLite 文字记忆注入 `system_role`（近期对话 + 计划要点 + 摘要/印象；
+      间接提问如「明天干嘛」**用户 PASS**；`GET /rtc/status` → `sqlite_memory_ready`）。
+    - [x] **VM-5** — 左栏 Viking 记忆状态徽章（就绪/只读/关 + 挂断写入反馈）；hover 显示 user_id。
+- [ ] **V2 RTC Pure-Soul — off-path turn analyzer `[Claude spec → Cursor builds → Claude reviews]`.**
+  Give pure E2E (`OutputMode 0`) the soul's emotion/relationship kernel + typed memory
+  **off the audio path** — one cheap DeepSeek pass per turn turns `(user_text, bot_text)`
+  into the existing signals JSON → reused `apply_signals_to_kernel` + `record_turn_memories`
+  (writes **SQLite**, the source of truth). Sub-second spoken latency untouched. Replaces the
+  lost `<<<BOXI_SIGNALS>>>` trailer and is *more* reliable (JSON-only, can't leak).
+  **Spec: `docs/V2_RTC_PURE_SOUL_SPEC.md`** (slices PS-1…PS-4; 新窗口说 `推进`).
+  - [x] **PS-1** — `reflection/turn_analyzer.py` `analyze_turn()`: local appraisal + DeepSeek
+    signals pass + kernel + `persist_chat_turn` + `record_turn_memories` + reflection. Mock-provider tests.
+  - [ ] **PS-2** — `POST /rtc/turn` + frontend per-turn post + `BackgroundTask`; voice turns now
+    feed the same SQLite soul as text. Spoken latency unchanged.
+  - [ ] **PS-3** (later) — SHAPE: discretized state re-inject via `UpdateVoiceChat`, gated on
+    bucket-change (avoid prefix-cache thrash). Borrow eros-engine `affinity_scope`.
+  - [ ] **PS-4** (later) — steering: `evaluate_behavior(transcript)` → mutter/deflect/terse
+    directive (state-as-persona, not stage-direction); hard silence dropped.
+  - [ ] (later, MIT-adoptable) proactive timing via `pearthink123/revive-companion` math
+    (Poisson "longing" + Bayesian user-state) — feeds the proactive part, maps onto `loneliness`.
 - [ ] V2 Phase 4–9 — turn-taking polish, PixiJS room, room reactivity, actions, personal files, the box.
 
 ## Current Priority

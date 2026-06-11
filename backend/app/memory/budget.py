@@ -19,6 +19,8 @@ class BudgetConfig:
     llm_memory_extraction: bool = True
     enable_reflection: bool = True
     reflection_every_n_turns: int = 6
+    enable_turn_analyzer: bool = True
+    analyze_every_n_turns: int = 1
     llm_summary: bool = True
     allow_cloud_stt: bool = False
     allow_cloud_tts: bool = False
@@ -57,6 +59,8 @@ def load_budget_config(config_dir: Path | None = None) -> BudgetConfig:
         llm_memory_extraction=bool(payload.get("llm_memory_extraction", True)),
         enable_reflection=bool(payload.get("enable_reflection", True)),
         reflection_every_n_turns=int(payload.get("reflection_every_n_turns", 6)),
+        enable_turn_analyzer=bool(payload.get("enable_turn_analyzer", True)),
+        analyze_every_n_turns=int(payload.get("analyze_every_n_turns", 1)),
         llm_summary=bool(payload.get("llm_summary", True)),
         allow_cloud_stt=bool(payload.get("allow_cloud_stt", False)),
         allow_cloud_tts=bool(payload.get("allow_cloud_tts", False)),
