@@ -3269,3 +3269,38 @@
 不要改动的边界：
 
 - 未改 kernel 数学 / memory schema / Doubao realtime / OutputMode 0 / RTC routes。
+
+## 2026-06-11 - Session: V2 RTC Pure-Soul PS-2 wire analyze_turn to RTC
+
+本次完成：
+
+- **PS-2 后端：** `POST /rtc/turn`（`RtcTurnRequest`）校验非空 → `claim_turn_analysis(room_id)`
+  → `BackgroundTask(_run_turn_analysis → analyze_turn)` → 立即 `{"status":"ok"}`；
+  `schema_meta` 键 `turn_analyzing:{room_id}` 做 per-room single-flight。
+- **PS-2 前端：** `detectCompletedTurn`（bot `definite` + 前序 user 行）→ `postRtcTurn`
+  fire-and-forget（`useRtcVoice.ts` 字幕回调）；挂断 `saveRtcMemorySession` 流程不动。
+- `docs/MEMORY_DESIGN.md` 补充 pure-E2E 离线路径说明。
+- 测试 `test_rtc_turn.py` **4 passed**；frontend `detectCompletedTurn` vitest 增 1 例。
+
+下次接着做：
+
+- **PS-3** — discretized state re-inject via `UpdateVoiceChat`（bucket-change gated）。
+- 用户实机：纯 E2E 说几轮 → SQLite 应有 voice persist + kernel 移动 + `writer=llm` memory。
+
+已知问题：
+
+- `analyze_every_n_turns` > 1 仍为 store 级计数（per-room 批次留后续）。
+
+相关文件：
+
+- `backend/app/{rtc/routes,schemas}.py`, `backend/app/memory/store.py`
+- `frontend/src/rtc/{api,rtcMessages,useRtcVoice}.ts`
+- `backend/tests/test_rtc_turn.py`, `docs/MEMORY_DESIGN.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check` + `npm run build:frontend` green
+
+不要改动的边界：
+
+- 未改 kernel 数学 / memory schema / Doubao realtime / OutputMode 0 / Viking hangup 路径。

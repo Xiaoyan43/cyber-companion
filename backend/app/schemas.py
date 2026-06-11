@@ -17,7 +17,7 @@ class ChatMessageSchema(BaseModel):
 class ChatCompleteRequest(BaseModel):
     messages: list[ChatMessageSchema] = Field(min_length=1)
     provider: str | None = None
-    max_output_tokens: int = Field(default=300, ge=1, le=4000)
+    max_output_tokens: int = Field(default=2400, ge=1, le=4000)
 
 
 class TokenUsageSchema(BaseModel):
@@ -307,3 +307,83 @@ class TTSSynthesizeResponse(BaseModel):
     audio_base64: str | None = None
     duration_ms: int | None = None
     mock: bool = False
+
+
+RtcModeSchema = Literal["pure", "hybrid"]
+
+
+class RtcStatusResponse(BaseModel):
+    base_configured: bool
+    pure_ready: bool
+    hybrid_ready: bool
+    missing_pure: list[str] = Field(default_factory=list)
+    missing_hybrid: list[str] = Field(default_factory=list)
+    viking_memory_enabled: bool = False
+    viking_memory_write_ready: bool = False
+    sqlite_memory_ready: bool = False
+    default_user_id: str = "boxi_user"
+
+
+class RtcMemorySubtitleItem(BaseModel):
+    speaker: Literal["user", "boxi"]
+    text: str = ""
+
+
+class RtcMemorySessionRequest(BaseModel):
+    room_id: str = ""
+    user_id: str
+    bot_user_id: str = ""
+    subtitles: list[RtcMemorySubtitleItem] = Field(default_factory=list)
+
+
+class RtcMemorySessionResponse(BaseModel):
+    saved: bool
+    session_id: str
+    message_count: int
+
+
+class RtcPrepareRequest(BaseModel):
+    mode: RtcModeSchema = "pure"
+    room_id: str = ""
+    user_id: str = ""
+
+
+class RtcPrepareResponse(BaseModel):
+    mode: RtcModeSchema
+    output_mode: int
+    app_id: str
+    room_id: str
+    user_id: str
+    token: str
+    bot_user_id: str
+    task_id: str
+    welcome_message: str
+
+
+class RtcAgentStartRequest(BaseModel):
+    mode: RtcModeSchema = "pure"
+    room_id: str
+    user_id: str
+
+
+class RtcStopRequest(BaseModel):
+    mode: RtcModeSchema = "pure"
+    room_id: str
+
+
+class RtcStopResponse(BaseModel):
+    stopped: bool
+    mode: RtcModeSchema
+    room_id: str
+
+
+class RtcTurnRequest(BaseModel):
+    room_id: str
+    user_id: str
+    user_text: str
+    bot_text: str
+
+
+class RtcTurnResponse(BaseModel):
+    status: str = "ok"
+

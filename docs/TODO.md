@@ -168,7 +168,7 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
   **Spec: `docs/V2_RTC_PURE_SOUL_SPEC.md`** (slices PS-1…PS-4; 新窗口说 `推进`).
   - [x] **PS-1** — `reflection/turn_analyzer.py` `analyze_turn()`: local appraisal + DeepSeek
     signals pass + kernel + `persist_chat_turn` + `record_turn_memories` + reflection. Mock-provider tests.
-  - [ ] **PS-2** — `POST /rtc/turn` + frontend per-turn post + `BackgroundTask`; voice turns now
+  - [x] **PS-2** — `POST /rtc/turn` + frontend per-turn post + `BackgroundTask`; voice turns now
     feed the same SQLite soul as text. Spoken latency unchanged.
   - [ ] **PS-3** (later) — SHAPE: discretized state re-inject via `UpdateVoiceChat`, gated on
     bucket-change (avoid prefix-cache thrash). Borrow eros-engine `affinity_scope`.

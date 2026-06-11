@@ -677,6 +677,31 @@ class MemoryStore:
     def release_reflection(self) -> None:
         self.set_meta("reflecting", "0")
 
+    @staticmethod
+    def _turn_analyzing_key(room_id: str) -> str:
+        return f"turn_analyzing:{room_id.strip()}"
+
+    def claim_turn_analysis(self, room_id: str) -> bool:
+        key = self._turn_analyzing_key(room_id)
+        with connect(self.db_path) as connection:
+            row = connection.execute(
+                "SELECT value FROM schema_meta WHERE key = ?",
+                (key,),
+            ).fetchone()
+            if row and str(row["value"]) == "1":
+                return False
+            connection.execute(
+                """
+                INSERT INTO schema_meta(key, value) VALUES (?, '1')
+                ON CONFLICT(key) DO UPDATE SET value = '1'
+                """,
+                (key,),
+            )
+            return True
+
+    def release_turn_analysis(self, room_id: str) -> None:
+        self.set_meta(self._turn_analyzing_key(room_id), "0")
+
     def get_max_chat_message_id(self) -> int:
         with connect(self.db_path) as connection:
             row = connection.execute(

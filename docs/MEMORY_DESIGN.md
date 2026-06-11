@@ -261,6 +261,18 @@ guesses are skipped. Near-duplicate memories of the same type are updated in
 place instead of inserted again. Writes link to the persisted user message via
 `source_message_id`.
 
+## Pure-E2E voice turns (PS-1 / PS-2)
+
+Pure RTC (`OutputMode 0`) has no `<<<BOXI_SIGNALS>>>` trailer on the spoken path.
+After each finalized user→bot subtitle exchange, the frontend fire-and-forget posts
+to `POST /rtc/turn`; the backend schedules `analyze_turn` in a `BackgroundTask`
+(single-flight per room via `schema_meta` key `turn_analyzing:{room_id}`).
+
+The analyzer reuses the same writers as text chat: `apply_signals_to_kernel`,
+`persist_chat_turn` (provider metadata `doubao_realtime`), `record_turn_memories`, and
+`run_reflection_if_due`. SQLite remains the source of truth; Viking `AddSession` on
+hangup is unchanged (cloud layer only).
+
 ## Background reflection (SD-4)
 
 After an LLM reply is sent, a **background** worker may run up to three extra LLM
