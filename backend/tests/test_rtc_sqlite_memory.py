@@ -168,7 +168,7 @@ def test_rtc_agent_start_injects_sqlite_context(
     mock_start.return_value = {"Result": "ok"}
 
     with patch("backend.app.rtc.routes.load_rtc_config", return_value=rtc_config):
-        with patch("backend.app.rtc.sqlite_memory.get_memory_store", return_value=store):
+        with patch("backend.app.rtc.routes.get_memory_store", return_value=store):
             response = rtc_client.post(
                 "/rtc/agent/start",
                 json={"mode": "pure", "room_id": "room-1", "user_id": "boxi_user"},

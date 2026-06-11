@@ -3304,3 +3304,36 @@
 不要改动的边界：
 
 - 未改 kernel 数学 / memory schema / Doubao realtime / OutputMode 0 / Viking hangup 路径。
+
+## 2026-06-11 - Session: V2 RTC Pure-Soul PS-3/PS-4 join-time state injection
+
+本次完成：
+
+- **PS-3 + PS-4：** 新建 `backend/app/rtc/state_block.py` — `build_rtc_state_block()` 读
+  `mood_state`/`relationship_state` → 离散桶（低/中/高）→ 中文 `【你此刻的状态】` 块；
+  `build_rtc_steering_directive()` 按 spec 映射表输出一句 stance 指令（worry/annoyance+
+  tension/closeness 分支）；全中性 → `""`。
+- `_load_rtc_memory_context` prepend state + steering，再接 SQLite/Viking；不改 `voice_chat.py`。
+- `test_rtc_state_block.py` **18 passed**（各桶分支、全中性、system_role 接线、agent/start）。
+
+下次接着做：
+
+- 用户实机：文字聊几轮拉高 trust/closeness 或 annoyance → 新开纯 E2E 通话，听语气是否随 stance 变化。
+- V2 其他项见 `docs/TODO.md`。
+
+已知问题：
+
+- Join-time only：单次通话中途不刷新 stance（云端不支持 mid-session `system_role` 更新）。
+
+相关文件：
+
+- `backend/app/rtc/{state_block,routes}.py`
+- `backend/tests/test_rtc_state_block.py`, `backend/tests/test_rtc_sqlite_memory.py`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**313 passed** + frontend tsc green
+
+不要改动的边界：
+
+- 未改 soul/kernel/schema/voice_chat/UpdateVoiceChat/OutputMode 0。

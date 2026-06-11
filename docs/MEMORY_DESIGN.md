@@ -273,6 +273,11 @@ The analyzer reuses the same writers as text chat: `apply_signals_to_kernel`,
 `run_reflection_if_due`. SQLite remains the source of truth; Viking `AddSession` on
 hangup is unchanged (cloud layer only).
 
+At **join time** (`StartVoiceChat`), `rtc/state_block.py` prepends a discretized Chinese
+stance block + steering directive from the current kernel (`mood_state` +
+`relationship_state`) ahead of SQLite/Viking memory — join-time only because the RTC
+OpenAPI path cannot update `system_role` mid-session.
+
 ## Background reflection (SD-4)
 
 After an LLM reply is sent, a **background** worker may run up to three extra LLM

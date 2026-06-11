@@ -20,6 +20,7 @@ from backend.app.rtc.config import (
 )
 from backend.app.memory.store import get_memory_store
 from backend.app.rtc.sqlite_memory import load_sqlite_memory_context, sqlite_memory_has_content
+from backend.app.rtc.state_block import build_rtc_state_block, build_rtc_steering_directive
 from backend.app.rtc.token import mint_rtc_token
 from backend.app.rtc.viking_memory import (
     VikingMemoryError,
@@ -67,11 +68,16 @@ def _merge_memory_context(*parts: str) -> str:
 
 
 def _load_rtc_memory_context(config: RtcConfig, user_id: str) -> str:
-    sqlite_context = load_sqlite_memory_context()
+    store = get_memory_store()
+    state_block = build_rtc_state_block(store)
+    steering = build_rtc_steering_directive(store)
+    sqlite_context = load_sqlite_memory_context(store)
+    if state_block:
+        logger.info("RTC state block inject chars=%d", len(state_block))
     if sqlite_context:
         logger.info("SQLite memory inject chars=%d", len(sqlite_context))
     viking_context = _load_viking_memory_context(config, user_id)
-    return _merge_memory_context(sqlite_context, viking_context)
+    return _merge_memory_context(state_block, steering, sqlite_context, viking_context)
 
 
 def _load_viking_memory_context(config: RtcConfig, user_id: str) -> str:

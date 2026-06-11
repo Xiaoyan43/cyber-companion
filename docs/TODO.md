@@ -170,10 +170,12 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
     signals pass + kernel + `persist_chat_turn` + `record_turn_memories` + reflection. Mock-provider tests.
   - [x] **PS-2** — `POST /rtc/turn` + frontend per-turn post + `BackgroundTask`; voice turns now
     feed the same SQLite soul as text. Spoken latency unchanged.
-  - [ ] **PS-3** (later) — SHAPE: discretized state re-inject via `UpdateVoiceChat`, gated on
-    bucket-change (avoid prefix-cache thrash). Borrow eros-engine `affinity_scope`.
-  - [ ] **PS-4** (later) — steering: `evaluate_behavior(transcript)` → mutter/deflect/terse
-    directive (state-as-persona, not stage-direction); hard silence dropped.
+  - [x] **PS-3** — SHAPE (join-time): `rtc/state_block.py build_rtc_state_block()` → discretized
+    Chinese mood/relationship stance block folded into `system_role` at `StartVoiceChat`.
+    `UpdateVoiceChat` can't update config mid-session → per-call, not per-turn.
+  - [x] **PS-4** — steering (join-time): `build_rtc_steering_directive()` → one Chinese stance
+    imperative (terse-sharp / comfort / warmer) from kernel buckets; state-as-persona, not
+    stage-direction; hard silence dropped. Pure rtc-layer fns — no soul/API/schema change.
   - [ ] (later, MIT-adoptable) proactive timing via `pearthink123/revive-companion` math
     (Poisson "longing" + Bayesian user-state) — feeds the proactive part, maps onto `loneliness`.
 - [ ] V2 Phase 4–9 — turn-taking polish, PixiJS room, room reactivity, actions, personal files, the box.
