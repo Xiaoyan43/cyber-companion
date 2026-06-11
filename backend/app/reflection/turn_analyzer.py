@@ -119,12 +119,14 @@ def analyze_turn(
             BehaviorEvent(event_type="user_message", user_input=user_text),
         )
 
+        # A failed/skipped LLM appraisal must NOT drop the turn: still persist the
+        # transcript (SQLite history + summaries/reflection stay complete) and run
+        # regex memory below; only the kernel update is skipped (no valid signals).
         signals: dict | None = None
         if _llm_analysis_due(store, config):
             signals = _llm_analyze_turn(user_text, bot_text)
-            if signals is None:
-                return
-            _reset_analysis_counter(store)
+            if signals is not None:
+                _reset_analysis_counter(store)
 
         avatar_state = "talking"
         if isinstance(signals, dict):

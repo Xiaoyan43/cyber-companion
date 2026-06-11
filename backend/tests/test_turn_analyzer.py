@@ -127,13 +127,12 @@ def test_analyze_turn_moves_relationship_and_writes_memory(
     assert messages[1].metadata.get("provider") == "doubao_realtime"
 
 
-def test_analyze_turn_provider_failure_is_clean_no_op(
+def test_analyze_turn_provider_failure_persists_transcript_skips_kernel(
     store: MemoryStore,
     budget: BudgetConfig,
 ) -> None:
     before_rel = store.get_relationship_state()
     before_message_count = store.count_chat_messages()
-    before_memory_count = len(store.list_memories(limit=50))
 
     _install_analyze_provider(None, broken=True)
 
@@ -144,15 +143,23 @@ def test_analyze_turn_provider_failure_is_clean_no_op(
         budget=budget,
     )
 
+    # Kernel is skipped (no valid signals) ...
     after_rel = store.get_relationship_state()
     assert after_rel.trust == pytest.approx(before_rel.trust)
     assert after_rel.closeness == pytest.approx(before_rel.closeness)
     assert after_rel.tension == pytest.approx(before_rel.tension)
-    assert store.count_chat_messages() == before_message_count
-    assert len(store.list_memories(limit=50)) == before_memory_count
+    assert not any(
+        memory.metadata.get("writer") == "llm" for memory in store.list_memories(limit=50)
+    )
+
+    # ... but the transcript is still persisted (history stays complete).
+    assert store.count_chat_messages() == before_message_count + 2
+    messages = store.list_recent_chat_messages(limit=2)
+    assert messages[0].role == "user"
+    assert messages[1].role == "assistant"
 
 
-def test_analyze_turn_parse_failure_is_clean_no_op(
+def test_analyze_turn_parse_failure_persists_transcript_skips_kernel(
     store: MemoryStore,
     budget: BudgetConfig,
 ) -> None:
@@ -168,10 +175,11 @@ def test_analyze_turn_parse_failure_is_clean_no_op(
         budget=budget,
     )
 
+    # Kernel skipped, transcript persisted (regex memory may still run).
     after_rel = store.get_relationship_state()
     assert after_rel.trust == pytest.approx(before_rel.trust)
     assert after_rel.closeness == pytest.approx(before_rel.closeness)
-    assert store.count_chat_messages() == before_message_count
+    assert store.count_chat_messages() == before_message_count + 2
 
 
 def test_analyze_turn_disabled_returns_early(store: MemoryStore) -> None:
