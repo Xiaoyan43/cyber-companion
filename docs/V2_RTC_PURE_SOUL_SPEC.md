@@ -56,11 +56,12 @@ there is zero leak risk and none of the SD-1b/1c "model forgets the trailer" pro
 |-------|---------|-----------|
 | **PS-1** | Analyzer core: transcript → signals JSON → kernel + memory + persist (SQLite) | unit tests green w/ mock provider; kernel + memory move from a canned transcript |
 | **PS-2** | Wire to RTC: `POST /rtc/turn` + frontend per-turn post + `BackgroundTask` + reflection | speaking a few turns moves SQLite trust/closeness + writes a memory row, latency unchanged |
-| **PS-3** (later) | SHAPE: re-inject discretized state via `UpdateVoiceChat`, gated on bucket-change | next turn's `system_role` reflects current mood/relationship; no per-turn cache thrash |
-| **PS-4** (later) | Steering: `evaluate_behavior(transcript)` → mutter/deflect/terse directive in the injected block | would-be refuse/silent turns visibly change Boxi's next-turn stance |
+| **PS-3** | SHAPE: discretized kernel state (mood+relationship buckets) → Chinese stance block folded into `system_role` at `StartVoiceChat` (join-time, per-call) | new call's `system_role` reflects current mood/relationship; pure fn of the kernel, no API/schema change |
+| **PS-4** | Steering: kernel buckets → one Chinese stance *directive* appended to the PS-3 block (terse-sharp / comfort / warmer) | a sustained mood/relationship state visibly shifts Boxi's tone in the next call |
 
-PS-1 + PS-2 are this spec's deliverable (the user's ask). PS-3/PS-4 are outlined
-under "Later" and get their own briefs.
+PS-1 + PS-2 shipped (commits c0cbd6d/90fdfea/899e8e1/bfa9f06). PS-3 + PS-4 are
+specced in full below — **join-time injection** (`UpdateVoiceChat` can't update
+`system_role` mid-session; see PS-3 "Why join-time").
 
 ## Architecture
 
@@ -178,23 +179,104 @@ flow stays.
 
 ---
 
-## Later (own briefs) — the SHAPE half (answers the open design Qs)
+## PS-3 — Join-time state injection (kernel → stance block) `[Claude→Cursor]`
 
-- **PS-3 — state re-injection via `UpdateVoiceChat`.** Build a *compact, discretized*
-  state line from `mood_state` + `relationship_state` (buckets, not floats — e.g.
-  "情绪：有点烦 / 关系：信任中等、亲近上升、紧张偏高"), and **only** call
-  `UpdateVoiceChat` when the discretized tuple changes vs the last injected value
-  (stored in `schema_meta`), with an every-N-turn fallback. Rationale: pure E2E
-  almost certainly **prefix-caches `system_role`**; rewriting it every turn busts that
-  cache (latency + cost). Keep the persona prefix stable; mutate only a short volatile
-  tail. (Borrow eros-engine's `affinity_scope` idea: inject *composites/buckets*,
-  pick the scope, not raw axes.) Needs a new `UpdateVoiceChat` method in
-  `rtc/client.py`.
-- **PS-4 — steering (refuse/silent → mutter/deflect/terse).** Reuse the
-  `BehaviorDecision` from PS-1 step 2; map non-`reply` decisions to a **Chinese**
-  directive folded into the PS-3 block. **State-as-persona, not stage-direction**
-  ("你现在没耐心，敷衍一两句带过" works; "叹口气然后转移话题" risks literal narration).
-  Hard silence is dropped (dead air after the user speaks is broken voice UX).
+### Goal (one sentence)
+At each `StartVoiceChat`, fold a **compact, discretized Chinese stance block** (from
+`mood_state` + `relationship_state`) into `system_role`, so the pure-E2E agent opens
+each call carrying Boxi's current cross-session mood + relationship — extending VM-4's
+join-time memory injection.
+
+### Why join-time (not mid-session)
+`UpdateVoiceChat` supports only `Interrupt` / `ExternalTextToSpeech` /
+`FunctionCallResult` — **no mid-session `system_role`/config update** (config changes
+need Stop+Start; verified against the Volcengine + EMQX API refs, 2026-06-11). So state
+shapes the agent **once per call, at join**. That is sufficient: the kernel moves
+slowly (±0.1/turn, bucketed slower), calls are bounded, and **within a call Doubao
+keeps its own conversational/emotional context** — the kernel's real job is carrying
+*cross-session* stance, which join-time injection does well. (Mid-session would need the
+Doubao Dialog-WS transport, not the RTC OpenAPI path — out of scope.)
+
+### Mechanism — `backend/app/rtc/state_block.py` (new)
+Pure functions of the store (self-fetch like `sqlite_memory.load_sqlite_memory_context()`):
+
+```python
+def build_rtc_state_block(store: MemoryStore | None = None) -> str:
+    """Discretized Chinese stance block from the kernel. '' when fully neutral."""
+```
+- Read `store.get_mood_state()` + `store.get_relationship_state()`.
+- **Discretize to buckets** (qualitative reads better than floats + keeps it short):
+  low `<0.34` / mid `<0.67` / high `≥0.67`.
+- Render (`情绪` only when notable; `关系` always — it's the cross-session value):
+  ```
+  【你此刻的状态】
+  情绪：有点烦躁
+  和这个用户：信任中、亲近中、有点别扭
+  ```
+  - 情绪 — first match else omit: `annoyance≥.5→"有点烦躁"`, `worry≥.5→"有点担心ta"`,
+    `loneliness≥.5→"有点想找人说话"`, `boredom≥.5→"有点无聊"`, `energy≤.3→"没什么精神"`.
+  - 关系 — `信任{低/中/高}、亲近{低/中/高}`, append `、有点别扭` only when `tension≥.4`.
+- Return `""` when 情绪 omitted AND trust/closeness both mid AND tension low (nothing
+  worth saying). Coefficients/wording are **starting values — tune in implementation**.
+
+### Wiring — `backend/app/rtc/routes.py`
+In `_load_rtc_memory_context`, prepend the stance ahead of recalled memory:
+```python
+return _merge_memory_context(
+    build_rtc_state_block(), build_rtc_steering_directive(),  # PS-3, PS-4
+    sqlite_context, viking_context,
+)
+```
+`_merge_memory_context` already drops empty parts; `voice_chat.build_voice_chat_body`
+already appends `memory_context` to `system_role`. **No change to `voice_chat.py`.**
+
+---
+
+## PS-4 — Join-time steering directive (kernel → stance imperative) `[Claude→Cursor]`
+
+### Goal (one sentence)
+Turn PS-3's *described* state into **one imperative Chinese directive** appended to the
+block, so a sustained mood/relationship state actively steers Boxi's tone next call —
+**state-as-persona, not stage-direction.**
+
+### Mechanism — same `state_block.py`
+```python
+def build_rtc_steering_directive(store: MemoryStore | None = None) -> str:
+    """One Chinese stance directive from the kernel buckets. '' for the default persona."""
+```
+Derived purely from kernel buckets — **no behavior-engine call, no `schema_meta`, no
+PS-1 edit** (fully additive in the rtc layer). First match wins; else `""`:
+
+| Condition (kernel) | Directive (appended after the PS-3 block) |
+|---|---|
+| `worry≥.5` | `用户最近不太好，收一收毒舌，话短一点、稳一点。` |
+| `annoyance≥.5` or `tension≥.4` | `你对最近的互动有点不耐烦，可以更冲、更短，但别真羞辱用户。` |
+| `closeness≥.67` and `tension<.3` | `你和ta挺熟了，可以更随意、更贴一点，毒舌底色别丢。` |
+| else | `""` (default persona governs) |
+
+**Principle:** describe stance + a constraint, never literal actions —
+`你现在没耐心，话更短更冲` ✅ vs `叹口气然后转移话题` ❌ (risks literal narration / stilted
+delivery). Hard silence/refuse are **not** reproduced (dead air after the user speaks is
+broken voice UX); they degrade to terseness via the annoyance directive.
+
+### Done criteria (PS-3 + PS-4)
+1. `PYTHON_BIN=.venv/bin/python npm run check` green; pure-E2E path + V1 untouched.
+2. `backend/tests/test_rtc_state_block.py`: canned `mood_state`/`relationship_state` →
+   expected block + directive lines; fully-neutral kernel → both return `""`; each
+   steering branch fires on its bucket.
+3. Wiring test: with a non-neutral kernel the join-time `system_role` (assert on
+   `build_voice_chat_body` output or the merged context) contains the stance block.
+4. Diff confined to: `backend/app/rtc/state_block.py` (new), `backend/app/rtc/routes.py`
+   (one merge line), tests, `docs/SESSION_LOG.md`, `docs/TODO.md`. **No soul edits, no
+   new API, no `schema_meta`, no `UpdateVoiceChat`.**
+
+### Boundaries
+- **Join-time only** (per call). NOT mid-session. A long single call won't refresh
+  stance mid-way (accepted; Doubao handles in-call continuity).
+- Pure, read-only on the store; never raise into the join path (wrap; `''` on any error).
+- Chinese for all injected text; keep the whole block ~2–4 short lines.
+- Proactive (Boxi initiating mid-call via `ExternalTextToSpeech`) + revive-companion
+  timing are a **separate later item**, not PS-3/PS-4.
 
 ---
 
