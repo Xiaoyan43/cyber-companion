@@ -144,15 +144,31 @@ export function useRtcVoice({ onAgentPhaseChange }: UseRtcVoiceOptions = {}) {
       }
 
       const inputs = await VERTC.enumerateAudioCaptureDevices();
-      const mic = inputs.find(
+      const audioInputs = inputs.filter(
         (device) => device.deviceId && (!device.kind || device.kind === "audioinput"),
       );
-      if (!mic?.deviceId) {
+      if (audioInputs.length === 0) {
         throw new Error("未找到可用麦克风设备");
       }
 
+      // Pick a real capture device. The raw enumeration order can put a phantom
+      // Continuity/iPhone mic or a virtual device (Teams/Zoom) first, which would
+      // capture silence and make the agent hear nothing. Prefer the OS default,
+      // then a built-in device, and only then fall back.
+      const isVirtualOrPhantom = (label: string) =>
+        /teams|zoom|virtual|blackhole|soundflower|obs|aggregate|continuity|iphone|ipad/i.test(
+          label,
+        );
+      const isBuiltIn = (label: string) =>
+        /macbook|built-?in|内建|内置|默认|default/i.test(label);
+      const mic =
+        audioInputs.find((device) => device.deviceId === "default") ??
+        audioInputs.find((device) => isBuiltIn(device.label ?? "")) ??
+        audioInputs.find((device) => !isVirtualOrPhantom(device.label ?? "")) ??
+        audioInputs[0];
+
       // Match rtc-aigc-demo switchMic: publish first, then start capture.
-      engine.publishStream(MediaType.AUDIO);
+      await engine.publishStream(MediaType.AUDIO);
       await engine.startAudioCapture(mic.deviceId);
       engine.setCaptureVolume(StreamIndex.STREAM_INDEX_MAIN, 100);
       setMicActive(true);
@@ -304,6 +320,13 @@ export function useRtcVoice({ onAgentPhaseChange }: UseRtcVoiceOptions = {}) {
             userId: event.userId,
             renderDom: REMOTE_PLAYER_ID,
           });
+          // The remote stream arrives seconds after the join click, so the SDK's
+          // auto-play can be suppressed by the browser autoplay policy. Explicitly
+          // start playback; if blocked, surface the resume affordance.
+          void engine
+            .play(event.userId)
+            .then(() => setAutoplayBlocked(false))
+            .catch(() => setAutoplayBlocked(true));
         }
       });
 

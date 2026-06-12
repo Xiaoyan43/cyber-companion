@@ -3538,3 +3538,45 @@
 不要改动的边界：
 
 - O2.0 默认；SC2.0 toggle 休眠勿删。未改 kernel/schema/soul writers。
+
+## 2026-06-12 - Session: 纯 E2E「不出声」排障 — 根因=豆包 RT 凭证
+
+本次完成：
+
+- **根因（最终定位）**：纯 E2E 全程静音的真正原因是 **`.env` 的豆包端到端语音（S2S）凭证指向了无额度/错误的应用**。
+  正确配置 = `volcengine_standalone_proje…`（**不限 token**）应用：`DOUBAO_RT_APP_ID=1234567890` + 对应 Access Token。
+  排障中一度误填新版控制台的 **API Key（UUID）** 进 `token` → 触发 `InvalidStateError: Stream closed`、agent 不进房；
+  确认 **RTC AIGC StartVoiceChat S2S 仍走旧版 APP ID + Access Token**，API Key 仅用于新版直连 API，不用于 RTC。
+- **关键诊断手段**：临时在 `useRtcVoice` 加 `[RTC]` 日志（`enableAudioPropertiesReport` 本地/远端 linearVolume、
+  `onPublishResult`、`onRemoteAudioFirstFrame`、raw room messages）。决定性证据：本地麦 `volume>0` + `publishResult=0`
+  + `remote joined/publish/first frame` 均正常，但 **`BOT audio level` 全程 0** → 锁定「云端 agent 发静音流」=服务端凭证，
+  排除了 Mac/浏览器/播放/麦克风。**已在修好后清除全部诊断日志。**
+- **顺带修掉的客户端真 bug（保留）**：
+  1. 麦克风选设备：原来取「枚举到的第一个」，在多设备机器上会选到幽灵 Continuity/iPhone 麦或 Teams/Zoom 虚拟声卡 →
+     采到静音。改为优先 `deviceId==="default"` / 内建，跳过虚拟与幽灵设备。
+  2. 远端音频：进房点击数秒后远端流才到，自动播放可能被浏览器策略拦 → 远端 publish 时显式 `engine.play()`，失败则亮恢复横幅。
+- 过程旁证：曾出现 macOS Core Audio 卡死（截图音效全无）→ 用户 `killall coreaudiod` 恢复；与最终根因无关，是叠加烟雾。
+- 一笔未完成的 Codex WIP（task_id 房间作用域 + 前端音频/消息重写）已整体回退到 HEAD，备份在 `.rtc_wip_backup.patch`（可删）。
+
+下次接着做：
+
+- 决定 `.rtc_wip_backup.patch` 去留；若要 task_id 房间作用域/幽灵会话治理，按 spec 重新落地。
+- 可选：把「豆包 RT 凭证来源（不限 token 应用）」写进 `docs/RTC_DEMO_SETUP.md`，避免再被新版 API Key 误导。
+
+已知问题：
+
+- 新版火山控制台主推 API Key 接入，与 RTC AIGC 所需的旧版 APP ID+Token 易混；换 key 时务必用「端到端实时语音大模型 →
+  服务接口认证信息」里的 APP ID + Access Token，而非 API Key 管理页的 key。
+
+相关文件：
+
+- `frontend/src/rtc/useRtcVoice.ts`（麦克风选择 + 远端 play() 兜底；唯一保留改动）
+- `.env`（`DOUBAO_RT_APP_ID` / `DOUBAO_RT_ACCESS_TOKEN`，gitignored）
+
+测试结果：
+
+- 用户实机：纯 E2E **成功出声**（开场白 + 对话）。`frontend tsc --noEmit` 绿、无 lint。
+
+不要改动的边界：
+
+- 未改 provider 抽象 / memory schema / behavior 引擎 / soul writers / OutputMode 0。凭证只存 `.env`，勿写进任何已跟踪文件。
