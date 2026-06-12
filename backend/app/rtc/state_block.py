@@ -180,22 +180,3 @@ def build_rtc_emotion_tag(store: MemoryStore | None = None) -> str | None:
     except Exception:
         logger.exception("build_rtc_emotion_tag failed")
         return None
-
-
-def build_rtc_steering_directive(store: MemoryStore | None = None) -> str:
-    """One Chinese stance directive from the kernel buckets. '' for the default persona."""
-    try:
-        resolved = store if store is not None else get_memory_store()
-        mood = resolved.get_mood_state()
-        relationship = resolved.get_relationship_state()
-
-        if mood.worry >= _MOOD_THRESHOLD:
-            return "用户最近不太好，收一收毒舌，话短一点、稳一点。"
-        if mood.annoyance >= _MOOD_THRESHOLD or relationship.tension >= _TENSION_AWKWARD_THRESHOLD:
-            return "你对最近的互动有点不耐烦，可以更冲、更短，但别真羞辱用户。"
-        if relationship.closeness >= _BUCKET_HIGH and relationship.tension < 0.3:
-            return "你和ta挺熟了，可以更随意、更贴一点，毒舌底色别丢。"
-        return ""
-    except Exception:
-        logger.exception("build_rtc_steering_directive failed")
-        return ""

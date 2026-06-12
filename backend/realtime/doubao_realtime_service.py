@@ -15,8 +15,6 @@ import os
 import struct
 import time
 import uuid
-from pathlib import Path
-
 from loguru import logger
 
 from pipecat.frames.frames import (
@@ -30,7 +28,11 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
-from backend.app.memory.persona import load_persona_system_prompt
+from backend.app.memory.persona import (
+    load_persona_name,
+    load_rtc_speaking_style,
+    load_rtc_system_role,
+)
 from backend.realtime import doubao_realtime_protocol as proto
 
 WS_URL = "wss://openspeech.bytedance.com/api/v3/realtime/dialogue"
@@ -48,41 +50,9 @@ ENV_AUDIO_FORMAT = "DOUBAO_RT_AUDIO_FORMAT"
 
 DEFAULT_SPEAKER = "zh_male_yunzhou_jupiter_bigtts"
 DEFAULT_MODEL = "1.2.1.1"  # O2.0 — supports system_role / bot_name / speaking_style
+ENV_ENABLE_MUSIC = "DOUBAO_RT_ENABLE_MUSIC"
 # Pipecat LocalAudioTransport plays 16-bit PCM (paInt16). Dialog ``pcm`` = 32-bit float → noise.
 DEFAULT_AUDIO_FORMAT = "pcm_s16le"
-
-
-def _config_dir() -> Path:
-    configured = os.getenv("CYBER_COMPANION_CONFIG_DIR", "./config")
-    return Path(configured).expanduser().resolve()
-
-
-def _load_persona_name() -> str:
-    root = _config_dir()
-    for name in ("persona.json", "persona.example.json"):
-        path = root / name
-        if path.exists():
-            with path.open("r", encoding="utf-8") as handle:
-                persona = json.load(handle)
-            return str(persona.get("name") or "Boxi")
-    return "Boxi"
-
-
-def _load_speaking_style() -> str:
-    root = _config_dir()
-    for name in ("persona.json", "persona.example.json"):
-        path = root / name
-        if path.exists():
-            with path.open("r", encoding="utf-8") as handle:
-                persona = json.load(handle)
-            tone = persona.get("tone") or {}
-            sarcasm = tone.get("sarcasm", 0.65)
-            warmth = tone.get("warmth", 0.35)
-            return (
-                f"毒舌但偶尔心软（sarcasm≈{sarcasm}，warmth≈{warmth}），"
-                "说话简洁直接，别演客服腔。"
-            )
-    return "毒舌但偶尔心软，说话简洁直接，别演客服腔。"
 
 
 def _load_audio_format() -> str:
@@ -115,8 +85,22 @@ def _prepare_tts_pcm(audio: bytes, *, warned_ogg: bool) -> tuple[bytes | None, b
     return struct.pack(f"<{len(clipped)}h", *(int(sample * 32767.0) for sample in clipped)), warned_ogg
 
 
+def _enable_music() -> bool:
+    raw = os.getenv(ENV_ENABLE_MUSIC, "").strip()
+    if not raw:
+        return True
+    return raw.lower() in {"1", "true", "yes", "on"}
+
+
 def build_start_session_payload() -> dict:
     """StartSession JSON with Boxi persona injected."""
+    dialog_extra: dict[str, object] = {
+        "strict_audit": False,
+        "input_mod": "audio",
+        "model": os.getenv(ENV_MODEL, "").strip() or DEFAULT_MODEL,
+    }
+    if _enable_music():
+        dialog_extra["enable_music"] = True
     return {
         "asr": {
             "extra": {
@@ -135,14 +119,10 @@ def build_start_session_payload() -> dict:
             },
         },
         "dialog": {
-            "bot_name": _load_persona_name(),
-            "system_role": load_persona_system_prompt(),
-            "speaking_style": _load_speaking_style(),
-            "extra": {
-                "strict_audit": False,
-                "input_mod": "audio",
-                "model": os.getenv(ENV_MODEL, "").strip() or DEFAULT_MODEL,
-            },
+            "bot_name": load_persona_name(),
+            "system_role": load_rtc_system_role(),
+            "speaking_style": load_rtc_speaking_style(),
+            "extra": dialog_extra,
         },
     }
 

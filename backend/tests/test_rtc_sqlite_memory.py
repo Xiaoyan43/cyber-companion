@@ -57,6 +57,7 @@ def rtc_config() -> RtcConfig:
         viking_memory_transition_words="",
         viking_memory_types=(),
         enable_asr_twopass=False,
+        enable_music=True,
     )
 
 

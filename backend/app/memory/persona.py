@@ -31,35 +31,64 @@ def _config_dir() -> Path:
     return Path(configured).expanduser().resolve()
 
 
-def load_persona_system_prompt(config_dir: Path | None = None) -> str:
+def _persona_path(config_dir: Path | None = None) -> Path | None:
     root = config_dir or _config_dir()
     persona_path = root / "persona.json"
+    if persona_path.exists():
+        return persona_path
     example_path = root / "persona.example.json"
-    path = persona_path if persona_path.exists() else example_path
+    if example_path.exists():
+        return example_path
+    return None
 
-    if not path.exists():
-        return (
-            "You are Boxi, a sarcastic pixel companion trapped in a box. "
-            "Be blunt but helpful. Do not become a generic polite assistant."
-        )
 
+def load_persona(config_dir: Path | None = None) -> dict:
+    path = _persona_path(config_dir)
+    if path is None:
+        return {
+            "name": "Boxi",
+            "core_persona": "毒舌被困小人 + low-dose companionship",
+            "tone": {"sarcasm": 0.65, "warmth": 0.35, "directness": 0.85},
+        }
     with path.open("r", encoding="utf-8") as handle:
-        persona = json.load(handle)
+        return json.load(handle)
 
-    name = persona.get("name", "Boxi")
-    core = persona.get("core_persona", "毒舌被困小人 + low-dose companionship")
-    tone = persona.get("tone", {})
-    boundaries = persona.get("boundaries", [])
-    catchphrases = persona.get("catchphrases", [])
 
-    boundary_lines = "\n".join(f"- {item}" for item in boundaries)
-    catchphrase_line = " / ".join(catchphrases[:3])
+def load_persona_name(config_dir: Path | None = None) -> str:
+    return str(load_persona(config_dir).get("name") or "Boxi")
 
+
+def _tone_values(persona: dict) -> tuple[float, float, float]:
+    tone = persona.get("tone") or {}
     return (
-        f"You are {name}. {core}\n"
-        f"Tone: sarcasm={tone.get('sarcasm', 0.65)}, "
-        f"warmth={tone.get('warmth', 0.35)}, "
-        f"directness={tone.get('directness', 0.85)}.\n"
-        f"Boundaries:\n{boundary_lines}\n"
-        f"Catchphrases: {catchphrase_line}"
+        float(tone.get("sarcasm", 0.65)),
+        float(tone.get("warmth", 0.35)),
+        float(tone.get("directness", 0.85)),
+    )
+
+
+def load_chinese_persona_prompt(config_dir: Path | None = None) -> str:
+    """Unified Chinese persona — text chat, Soul LLM, and RTC S2S system_role."""
+    persona = load_persona(config_dir)
+    name = str(persona.get("name") or "Boxi")
+    core = str(persona.get("core_persona") or "毒舌被困小人 + low-dose companionship")
+    sarcasm, warmth, directness = _tone_values(persona)
+    return (
+        f"你是 {name}，{core}。用口语、简短回答，每次最多一两句。\n"
+        f"语气：讽刺 {sarcasm}、温暖 {warmth}、直接 {directness}。"
+    )
+
+
+def load_rtc_system_role(config_dir: Path | None = None) -> str:
+    return load_chinese_persona_prompt(config_dir)
+
+
+def load_persona_system_prompt(config_dir: Path | None = None) -> str:
+    return load_chinese_persona_prompt(config_dir)
+
+
+def load_rtc_speaking_style(config_dir: Path | None = None) -> str:
+    sarcasm, warmth, directness = _tone_values(load_persona(config_dir))
+    return (
+        f"口语化，每次一两句（讽刺≈{sarcasm}，温暖≈{warmth}，直接≈{directness}）。"
     )

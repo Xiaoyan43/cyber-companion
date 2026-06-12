@@ -69,6 +69,8 @@ class RtcConfig:
     viking_memory_types: tuple[str, ...]
     # Off by default: twopass ASR can finalize the same utterance twice → double reply.
     enable_asr_twopass: bool
+    # O2.0 singing — requires dialog.extra.enable_music (Volc S2S docs); on by default.
+    enable_music: bool
 
 
 def _env(name: str, default: str = "") -> str:
@@ -124,6 +126,7 @@ def load_rtc_config() -> RtcConfig:
         viking_memory_transition_words=_env(ENV_VIKING_MEMORY_TRANSITION),
         viking_memory_types=_env_csv(ENV_VIKING_MEMORY_TYPES),
         enable_asr_twopass=_env_bool("VOLC_RTC_ENABLE_ASR_TWOPASS", False),
+        enable_music=_env_bool("DOUBAO_RT_ENABLE_MUSIC", True),
     )
 
 

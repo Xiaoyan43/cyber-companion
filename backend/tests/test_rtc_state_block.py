@@ -18,7 +18,6 @@ from backend.app.rtc.state_block import (
     build_rtc_emotion_tag,
     build_rtc_speaking_style,
     build_rtc_state_block,
-    build_rtc_steering_directive,
     build_rtc_welcome_message,
 )
 
@@ -78,7 +77,6 @@ def _neutral_kernel(store: MemoryStore) -> None:
 def test_fully_neutral_kernel_returns_empty_blocks(store: MemoryStore) -> None:
     _neutral_kernel(store)
     assert build_rtc_state_block(store) == ""
-    assert build_rtc_steering_directive(store) == ""
     assert build_rtc_welcome_message(store, default=_DEFAULT_WELCOME) == _DEFAULT_WELCOME
 
 
@@ -154,42 +152,6 @@ def test_state_block_relationship_buckets(
     store.update_relationship_state(trust=trust, closeness=closeness, tension=tension)
     block = build_rtc_state_block(store)
     assert expected_fragment in block
-
-
-def test_steering_worry_comfort_directive(store: MemoryStore) -> None:
-    _neutral_kernel(store)
-    store.update_mood_state(worry=0.6)
-    assert build_rtc_steering_directive(store) == "用户最近不太好，收一收毒舌，话短一点、稳一点。"
-
-
-def test_steering_annoyance_terse_directive(store: MemoryStore) -> None:
-    _neutral_kernel(store)
-    store.update_mood_state(annoyance=0.6)
-    assert (
-        build_rtc_steering_directive(store)
-        == "你对最近的互动有点不耐烦，可以更冲、更短，但别真羞辱用户。"
-    )
-
-
-def test_steering_tension_terse_directive(store: MemoryStore) -> None:
-    _neutral_kernel(store)
-    store.update_relationship_state(tension=0.5)
-    assert (
-        build_rtc_steering_directive(store)
-        == "你对最近的互动有点不耐烦，可以更冲、更短，但别真羞辱用户。"
-    )
-
-
-def test_steering_high_closeness_warmer_directive(store: MemoryStore) -> None:
-    _neutral_kernel(store)
-    store.update_relationship_state(closeness=0.75, tension=0.1)
-    assert build_rtc_steering_directive(store) == "你和ta挺熟了，可以更随意、更贴一点，毒舌底色别丢。"
-
-
-def test_steering_worry_beats_annoyance(store: MemoryStore) -> None:
-    _neutral_kernel(store)
-    store.update_mood_state(worry=0.6, annoyance=0.7)
-    assert build_rtc_steering_directive(store) == "用户最近不太好，收一收毒舌，话短一点、稳一点。"
 
 
 def test_merged_context_prepends_state_before_sqlite(

@@ -57,11 +57,14 @@ there is zero leak risk and none of the SD-1b/1c "model forgets the trailer" pro
 | **PS-1** | Analyzer core: transcript → signals JSON → kernel + memory + persist (SQLite) | unit tests green w/ mock provider; kernel + memory move from a canned transcript |
 | **PS-2** | Wire to RTC: `POST /rtc/turn` + frontend per-turn post + `BackgroundTask` + reflection | speaking a few turns moves SQLite trust/closeness + writes a memory row, latency unchanged |
 | **PS-3** | SHAPE: discretized kernel state (mood+relationship buckets) → Chinese stance block folded into `system_role` at `StartVoiceChat` (join-time, per-call) | new call's `system_role` reflects current mood/relationship; pure fn of the kernel, no API/schema change |
-| **PS-4** | Steering: kernel buckets → one Chinese stance *directive* appended to the PS-3 block (terse-sharp / comfort / warmer) | a sustained mood/relationship state visibly shifts Boxi's tone in the next call |
+| **PS-4** | Steering: kernel buckets → one Chinese stance *directive* appended to the PS-3 block (terse-sharp / comfort / warmer) | **⚠ device A/B: ignored — wrong channel.** Superseded by PS-5/PS-6. |
+| **PS-5** | Tone via `speaking_style` (join-time) — kernel stance → the field the model actually obeys; stop appending to `system_role` | next call's tone shifts with the kernel (the PS-4 fix) |
+| **PS-6** | Emotion via `UpdateVoiceChat(SetTTSContext)` (mid-session, per-turn, off-path) — kernel → NL emotion tag for the next reply; `TagParse` on at join | pushing annoyance/worry over turns audibly shifts Boxi's next replies |
 
-PS-1 + PS-2 shipped (commits c0cbd6d/90fdfea/899e8e1/bfa9f06). PS-3 + PS-4 are
-specced in full below — **join-time injection** (`UpdateVoiceChat` can't update
-`system_role` mid-session; see PS-3 "Why join-time").
+PS-1 + PS-2 + PS-3/PS-4 shipped (commits c0cbd6d…a91b2cb). **PS-4's `system_role`
+stance was ignored on-device** — root-caused to a wrong-channel config, not a model
+limit. PS-5/PS-6 (below) reroute tone → `speaking_style` and emotion → the TTS tag
+channel (`SetTTSContext`), both RTC-supported.
 
 ## Architecture
 
@@ -325,3 +328,92 @@ broken voice UX); they degrade to terseness via the annoyance directive.
   **proactive timing** (Poisson "longing" curve P=1−e^(−λt) + Bayesian user-state
   inference + quiet hours). Top candidate for the *proactive* part of the later
   behavior work — maps onto our existing `loneliness` mood var. Not part of PS.
+
+---
+
+## PS-4 device postmortem → corrected tone/emotion channels (2026-06-12)
+
+Real-device A/B (SESSION_LOG) found pure E2E **ignored** the PS-4 stance directive.
+Root cause = **wrong channel**, not a model limit. The Doubao realtime model separates:
+`system_role` = *who* (background persona), `speaking_style` = *how it talks* (tone/manner),
+and a dedicated **TTS emotion channel** (指令标签). PS-3/PS-4 v1 appended the tone directive
+to `system_role` as a trailing memory block → read as context, not obeyed. **Fix: route tone
+→ `speaking_style` (PS-5) and emotion → the tag channel (PS-6).** PS-3's mood *description*
+in `system_role` may stay as light context; PS-4's `system_role` *directive* is **superseded.**
+
+### Emotion-tag facts (docs [6348/2139328](https://www.volcengine.com/docs/6348/2139328) + [6561/1257544](https://www.volcengine.com/docs/6561/1257544))
+- **Enable at join:** `StartVoiceChat.Config.TTSConfig.Context = {"TagParse": true,
+  "QuoteUserQuestion": true}` (QuoteUserQuestion: 2.0 models auto-match tone to the user's
+  question; lower priority than explicit tags).
+- **Tag forms** (embedded in reply text, parsed by TTS — **space required before `}}`**):
+  - NL (2.0, preferred): `{{"additions":{"context_texts":["语气更冲、更不耐烦"]} }}`
+  - structured: `{{"audio_params":{"emotion":"happy|sad|angry|surprised|fear|hate|excited",
+    "emotion_scale":1-5} }}`
+- **Mid-session injection (the lever):** `UpdateVoiceChat` `Command:"SetTTSContext"`,
+  `Message:"{\"Tag\":{\"additions\":{\"context_texts\":[\"…\"]}}}"` → sets emotion for the
+  **next** reply (whole-turn scope). Per-turn, off the audio path, over RTC.
+- Pure E2E with `TagParse` on: Doubao's fused model **auto-generates** tags from context
+  (already adds emotion); `SetTTSContext` lets the **kernel steer** it.
+
+## PS-5 — Tone via `speaking_style` (join-time) `[Claude→Cursor]`
+
+### Goal
+Move the kernel stance from `system_role` (ignored on-device) to **`speaking_style`** (the
+tone field the model obeys), built at `StartVoiceChat`.
+
+### Mechanism — `backend/app/rtc/state_block.py` + `voice_chat.py`
+```python
+def build_rtc_speaking_style(store: MemoryStore | None = None) -> str:
+    """Base style + kernel stance modifier → the speaking_style field. Never raises."""
+```
+- Base = current `PURE_SPEAKING_STYLE` ("毒舌但不恶毒，口语化，每次一两句").
+- Append a kernel modifier (reuse PS-4 buckets): worry≥.5 → "；用户最近不太好，收一收毒舌、稳一点";
+  annoyance≥.5 or tension≥.4 → "；现在更冲、更短"; closeness≥.67 & tension<.3 → "；和ta更熟，可更随意贴近".
+- Wire into `build_voice_chat_body` (pure): `speaking_style = build_rtc_speaking_style()`
+  (replaces the static constant). Keep `system_role`+`speaking_style` ≤ ~4000 chars.
+- **Stop appending the PS-4 steering directive to `system_role`** — drop
+  `build_rtc_steering_directive` from `_load_rtc_memory_context` (PS-3 mood-description may
+  stay as light context, or move here too).
+
+## PS-6 — Emotion via `SetTTSContext` (mid-session, per-turn, off-path) `[Claude→Cursor]`
+
+### Goal
+Give the **kernel** a real per-turn emotion lever: after each turn, inject an emotion tag for
+Boxi's next reply via `UpdateVoiceChat(SetTTSContext)` — off the audio path.
+
+### Tasks
+1. **Enable TagParse** — `build_voice_chat_body` (pure) adds
+   `TTSConfig.Context={"TagParse":true,"QuoteUserQuestion":true}`. (Absent → today's behavior.)
+2. **Client method** — `rtc/client.py`: `update_voice_chat(config, *, mode, room_id, command,
+   message)` mirroring `start/stop_voice_chat` (action `UpdateVoiceChat`; body `{AppId, RoomId,
+   TaskId(=mode_meta pure task), Command, Message}`). **Verify Command/Message shape vs docs
+   [6348/2123350](https://www.volcengine.com/docs/6348/2123350) + 6348/2139328 — docs win.**
+3. **Kernel→tag** — `state_block.build_rtc_emotion_tag(store) -> str | None`: map buckets to a
+   NL `context_texts` line (worry→"语气放软、关切、稍慢"; annoyance/tension→"更冲、更不耐烦但别凶";
+   loneliness≥.5→"更热络一点"; else `None`). Return the serialized `SetTTSContext` `Message`
+   (`{"Tag":{"additions":{"context_texts":[…]}}}`), or `None` when neutral.
+4. **Inject off-path** — in the PS-2 `/rtc/turn` background flow, **after** `analyze_turn`,
+   if `build_rtc_emotion_tag` is non-None, call `update_voice_chat(SetTTSContext, message)` for
+   the room. Inject per-turn (tag scopes to the *next* reply, so re-send each non-neutral turn;
+   if testing shows it persists, switch to change-gating via `schema_meta`). Failure-isolated —
+   a failed inject never disturbs the call.
+
+### Done criteria (PS-5 + PS-6)
+1. `PYTHON_BIN=.venv/bin/python npm run check` green; pure-E2E spoken latency untouched
+   (SetTTSContext runs between turns, off the audio path).
+2. Unit tests (`test_rtc_state_block.py` + a client test): `build_rtc_speaking_style` appends
+   the right modifier per bucket; `build_rtc_emotion_tag` emits the right `context_texts`/`None`
+   + serializes the Message; `update_voice_chat` builds the correct OpenAPI body (mock HTTP).
+3. **Device acceptance (the PS-4 re-test — the conclusion-overturning check):** push annoyance
+   up over a few turns → next replies sound terser/sharper; mention something stressful → worry
+   → softer/slower. If it shifts, pure E2E *can* do tone and Hybrid isn't required for it.
+4. Diff: `state_block.py`, `voice_chat.py`, `client.py`, `routes.py` (inject in `/rtc/turn`),
+   tests, `docs/SESSION_LOG.md`, `docs/TODO.md`. No kernel math change; no soul edit.
+
+### Boundaries (PS-5/PS-6)
+- `SetTTSContext` is the **only** mid-session lever — it sets TTS emotion, **not** persona/config
+  (config still can't change mid-session). Persona stays join-time.
+- NL tags (`additions`) preferred over the 7 structured codes for Boxi's nuance; the first spoken
+  sentence stays plain text (first-frame speed) — automatic since the tag targets the *next* reply.
+- Hybrid (OutputMode 1) gets emotion tags for free later by embedding `{{additions}}` directly in
+  the soul's reply text — note as a follow-on, not PS-5/PS-6.
