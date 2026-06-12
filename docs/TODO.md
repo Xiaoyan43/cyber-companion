@@ -1,5 +1,24 @@
 # TODO
 
+## Direction C — the being (2026-06-13: C locked; depth > latency; soul authors the words)
+
+Final form = **"a being with a world"** (see `docs/VISUAL_SPIKE_SPEC.md` header + memory
+`direction-c-soul-authored`). Soul-authored voice = **cascaded** (Phases 1–3, un-shelved);
+**pure E2E retained** as fast/present mode (revisit after VikingDB schemas); hybrid = dead end.
+
+- [ ] **Visual spike — light core + ink `[Claude spec ✓ → Cursor builds → Claude reviews]`.**
+  Throwaway page: BOTH materials (semi-figurative particles / light-in-ink) × 6 states incl. the
+  **two felt-vs-shown desyncs** (suppression + teasing) + thinking→speak. Shader, not fluid sim.
+  Picks the material. **Spec: `docs/VISUAL_SPIKE_SPEC.md`.**
+- [ ] **Felt-vs-shown split + teasing `[Claude spec ✓ → Cursor builds → updates PERSONA_AND_BEHAVIOR]`.**
+  One shared tone projection → `(felt, expressed_edge, is_performative)`; add `performative_sharp`
+  (positive zone: no worry/annoyance/tension + closeness high) with its OWN playful register (not
+  real-annoyance); real negatives win; suppression already exists (worry beats annoyance). Makes
+  desync-2 TRUE. **Spec: `docs/VISUAL_SPIKE_SPEC.md` (paired slice).**
+- [ ] (post-spike, staged) Wire material ← live kernel → ambient world drift → memory traces
+  (the echo world; reads existing kernel + `memories`, no new tables).
+- [ ] (deep-voice) Un-shelf cascaded soul-authored voice as primary (Phases 1–3); pure E2E → fast toggle.
+
 ## Soul Deepening (Claude spec 2026-06-09 → Cursor implements → Claude reviews)
 
 Spec: `docs/SOUL_DEEPENING_SPEC.md`. Incremental on the working app, **no rebuild**.
