@@ -15,7 +15,26 @@ from backend.app.memory.persona import (
 )
 
 
-def test_chinese_persona_prompt_unified_across_loaders(tmp_path: Path) -> None:
+def test_chinese_persona_prompt_uses_persona_prompt_when_set(tmp_path: Path) -> None:
+    full_prompt = "你是 Boxi。\n\n全文人设：透明盒子里的损友，嘴硬心软。"
+    persona = {
+        "name": "小盒",
+        "core_persona": "应被忽略",
+        "persona_prompt": full_prompt,
+        "tone": {"sarcasm": 0.8, "warmth": 0.2, "directness": 0.9},
+    }
+    (tmp_path / "persona.json").write_text(json.dumps(persona, ensure_ascii=False), encoding="utf-8")
+
+    expected = load_chinese_persona_prompt(tmp_path)
+    assert expected == full_prompt
+    assert load_rtc_system_role(tmp_path) == expected
+    assert load_persona_system_prompt(tmp_path) == expected
+    assert "应被忽略" not in expected
+    assert "讽刺" not in expected
+    assert load_persona_name(tmp_path) == "小盒"
+
+
+def test_chinese_persona_prompt_falls_back_to_name_core_tone(tmp_path: Path) -> None:
     persona = {
         "name": "小盒",
         "core_persona": "测试人设",
@@ -27,6 +46,7 @@ def test_chinese_persona_prompt_unified_across_loaders(tmp_path: Path) -> None:
     assert load_rtc_system_role(tmp_path) == expected
     assert load_persona_system_prompt(tmp_path) == expected
     assert "你是 小盒，测试人设" in expected
+    assert "讽刺 0.8" in expected
     assert "边界" not in expected
     assert "务实" not in expected
     assert load_persona_name(tmp_path) == "小盒"

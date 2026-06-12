@@ -1,5 +1,10 @@
 # Spec — SC2.0 verification env (model `2.2.0.0` + saturn voice + `character_manifest`)
 
+> **RESULT (2026-06-12) — SC2.0 REJECTED.** Device A/B: SC2.0's `saturn_`/`S_` voices carry a
+> **fixed vocal tone** (its role-play is built *around* that locked timbre), so emotion can't shift
+> mid-conversation → worse than O2.0 for a mood-shifting companion. Staying on **O2.0**. This spec is
+> kept as the experiment record; the `DOUBAO_RT_SERIES` toggle remains (dormant, O2.0 default).
+
 Make the pure-E2E RTC path switchable to the **SC2.0** realtime model (角色扮演/情感陪伴 line)
 so we can device-test whether it fixes the persona/tone adherence O2.0 lacked.
 **Additive — O2.0 (`1.2.1.1`) stays the default; SC2.0 is opt-in via env.**

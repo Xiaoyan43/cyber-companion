@@ -70,6 +70,9 @@ def _tone_values(persona: dict) -> tuple[float, float, float]:
 def load_chinese_persona_prompt(config_dir: Path | None = None) -> str:
     """Unified Chinese persona — text chat, Soul LLM, and RTC S2S system_role."""
     persona = load_persona(config_dir)
+    persona_prompt = persona.get("persona_prompt")
+    if persona_prompt and str(persona_prompt).strip():
+        return str(persona_prompt).strip()
     name = str(persona.get("name") or "Boxi")
     core = str(persona.get("core_persona") or "毒舌被困小人 + low-dose companionship")
     sarcasm, warmth, directness = _tone_values(persona)

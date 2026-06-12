@@ -3461,3 +3461,84 @@
 不要改动的边界：
 
 - O2.0 默认行为不变；未改 kernel/analyzer/soul；PS-6 `SetTTSContext` 路径不变。
+
+## 2026-06-12 - Session: O2.0 确认 + 人设定制 Phase 1（SC2.0 已否决）
+
+本次完成：
+
+- **PS arc 收尾 + 修复**：PS-1…PS-6 全部提交；`3d0426e` 修了 `8b977b0` 的 broken-commit
+  （persona refactor `load_rtc_system_role/speaking_style` + `enable_music` deps 未提交 → ImportError），
+  并删掉废弃的 `build_rtc_steering_directive`；`a91b2cb` 动态 WelcomeMessage + ASR twopass 关默认。
+- **关键结论（设备验证）**：PS-4「纯 E2E 不跟 tone」是**配置错**——tone 该进 `speaking_style` 而非
+  `system_role`；emotion 走 `UpdateVoiceChat(Command=SetTTSContext)`（NL `{{additions}}` 标签，per-turn
+  off-path）。PS-5/PS-6 落地后**语气已能随 kernel 变（用户实机确认，仍需更多验证）**。
+- **SC2.0 验证 = REJECTED**：saturn/克隆音色音色固定、情绪不能中途变，role-play 是围着这个固定音色做的，
+  对会变情绪的陪伴比 O2.0 差。`DOUBAO_RT_SERIES` toggle 留着但休眠，**O2.0 为准**（`docs/V2_RTC_SC2_VERIFY_SPEC.md` 记录）。
+- **O2.0 全人设定制 Phase 1**：`config/persona.example.json` 加了 `persona_prompt`（Boxi 全文人设，
+  **无行为规则**，安全交给豆包 API；统一影响文字/Soul/O2.0 RTC）。**loader 未接 → 当前 dormant。**
+
+下次接着做（新窗口 `推进`）：
+
+1. **接线 `load_chinese_persona_prompt`（`backend/app/memory/persona.py`）**：persona 含非空
+   `persona_prompt` 时直接返回它，否则保持现有 `name+core+tone` 拼装（向后兼容）；更新断言旧拼装格式的
+   人设测试；跑 `PYTHON_BIN=.venv/bin/python npm run check`。
+2. 用户实机：O2.0 上听新 Boxi 人设、调文案。
+3. 之后可选：`speaking_style` 去规则化；`external_rag`（深度 lore，O2.0 only）+ `dialog_id`（原生 20 轮
+   跨会话记忆）；然后 **VikingDB 自定义 schema**（事件/画像抽取规则 + 字段 + 权重，soul-aligned；见前期调研）。
+
+已知问题：
+
+- **emotion 标签副旗**：文档称纯 E2E **忽略顶层 `Config.TTSConfig`** → join-time `TagParse` 可能 no-op
+  （只有 runtime `SetTTSContext` 生效）；需验证标签是否真被解析，否则把 `Context.TagParse` 移到
+  `S2SConfig.ProviderParams.tts`。
+- `persona_prompt` 已加但 loader 未读 → 暂不生效。
+
+相关文件：
+
+- `config/persona.example.json`（`persona_prompt`）、`backend/app/memory/persona.py`（待改 loader）
+- `docs/V2_RTC_PURE_SOUL_SPEC.md`（PS-1…PS-6）、`docs/V2_RTC_SC2_VERIFY_SPEC.md`（SC2.0 REJECTED）
+- `backend/app/rtc/{voice_chat,state_block,client,routes,config}.py`（PS-5/6 + `DOUBAO_RT_SERIES` toggle）
+
+测试结果：
+
+- 上个代码 checkpoint：**334–339 passed + tsc green**。本会话后续仅文档 + persona 文案改动，无代码逻辑变更，未单独跑。
+
+不要改动的边界：
+
+- O2.0 默认；SC2.0 toggle 休眠**勿删**。不改 soul kernel/schema。**安全边界交给豆包 API，人设里不再写行为规则。**
+
+## 2026-06-12 - Session: O2.0 persona_prompt loader
+
+本次完成：
+
+- **`load_chinese_persona_prompt` 接线**：`persona.json` 含非空 `persona_prompt` 时直接返回（trim 后）；
+  否则保持 `name+core+tone` 拼装（向后兼容）。统一影响文字聊天、`load_persona_system_prompt`、
+  `load_rtc_system_role`、Doubao realtime `system_role`、Soul LLM。
+- **`config/persona.example.json`**：已含 Boxi 全文人设 `persona_prompt`（上轮 staged），本轮 loader 接通后生效。
+- **测试**：`test_persona_rtc.py` 拆成 `persona_prompt` 优先 + 旧拼装回退两例；
+  `test_doubao_realtime.py` 断言改为 `透明盒子`（匹配全文人设）。
+
+下次接着做：
+
+- 用户实机：O2.0 上听新 Boxi 人设、调 `persona_prompt` 文案。
+- O2.0 persona follow-on：`speaking_style` 去规则化；`external_rag` + `dialog_id`（见 `docs/TODO.md`）。
+
+已知问题：
+
+- emotion 标签副旗（join-time `TagParse` vs runtime `SetTTSContext`）仍待验证。
+- `speaking_style` 仍为 tone 数值拼装，未跟全文人设对齐。
+
+相关文件：
+
+- `backend/app/memory/persona.py`
+- `config/persona.example.json`
+- `backend/tests/{test_persona_rtc,test_doubao_realtime}.py`
+- `docs/TODO.md`, `docs/SESSION_LOG.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**340 passed** + tsc green
+
+不要改动的边界：
+
+- O2.0 默认；SC2.0 toggle 休眠勿删。未改 kernel/schema/soul writers。
