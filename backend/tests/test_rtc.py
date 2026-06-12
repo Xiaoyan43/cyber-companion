@@ -14,7 +14,11 @@ from backend.app.rtc.config import RtcConfig, mode_ready, resolve_rtc_user_id
 from backend.app.rtc.routes import router as rtc_router
 from backend.app.rtc.signer import sign_rtc_openapi_request
 from backend.app.rtc.token import AccessToken, mint_rtc_token
-from backend.app.memory.persona import load_rtc_speaking_style, load_rtc_system_role
+from backend.app.memory.persona import (
+    load_rtc_character_manifest,
+    load_rtc_speaking_style,
+    load_rtc_system_role,
+)
 from backend.app.rtc.client import update_voice_chat
 from backend.app.rtc.voice_chat import (
     build_memory_config,
@@ -42,6 +46,7 @@ def rtc_config() -> RtcConfig:
         rt_access_token="rt-token",
         rt_speaker="zh_male_yunzhou_jupiter_bigtts",
         rt_model="1.2.1.1",
+        rt_series="o",
         soul_public_url="https://example.com/v1/chat/completions",
         soul_api_key="soul-key",
         welcome_pure="hi pure",
@@ -135,6 +140,78 @@ def test_build_voice_chat_pure_music_opt_out(rtc_config: RtcConfig) -> None:
     )
     extra = body["Config"]["S2SConfig"]["ProviderParams"]["dialog"]["extra"]
     assert "enable_music" not in extra
+
+
+def test_build_voice_chat_sc_series_uses_character_manifest(
+    rtc_config: RtcConfig,
+    tmp_path: Path,
+) -> None:
+    from backend.app.memory.store import MemoryStore
+
+    neutral_store = MemoryStore(db_path=tmp_path / "rtc_sc_series.db")
+    neutral_store.update_mood_state(
+        annoyance=0.1,
+        worry=0.1,
+        loneliness=0.1,
+        boredom=0.1,
+        energy=0.5,
+    )
+    neutral_store.update_relationship_state(trust=0.5, closeness=0.5, tension=0.1)
+
+    sc_config = RtcConfig(
+        **{
+            **rtc_config.__dict__,
+            "rt_series": "sc",
+            "rt_model": "2.2.0.0",
+            "rt_speaker": "saturn_zh_male_boxi",
+            "enable_music": True,
+        }
+    )
+    memory_context = "【你此刻的状态】\n情绪：有点烦躁"
+    with patch("backend.app.rtc.state_block.get_memory_store", return_value=neutral_store):
+        body = build_voice_chat_body(
+            sc_config,
+            mode="pure",
+            room_id="room-sc",
+            target_user_id="user-a",
+            memory_context=memory_context,
+        )
+
+    dialog = body["Config"]["S2SConfig"]["ProviderParams"]["dialog"]
+    assert "character_manifest" in dialog
+    assert "bot_name" not in dialog
+    assert "system_role" not in dialog
+    assert "speaking_style" not in dialog
+    assert dialog["extra"] == {"model": "2.2.0.0"}
+    assert "enable_music" not in dialog["extra"]
+    assert load_rtc_character_manifest().splitlines()[0] in dialog["character_manifest"]
+    assert memory_context in dialog["character_manifest"]
+    assert (
+        body["Config"]["S2SConfig"]["ProviderParams"]["tts"]["speaker"]
+        == "saturn_zh_male_boxi"
+    )
+
+
+def test_build_voice_chat_sc_series_appends_ps5_stance_modifier(
+    rtc_config: RtcConfig,
+    tmp_path: Path,
+) -> None:
+    from backend.app.memory.store import MemoryStore
+
+    store = MemoryStore(db_path=tmp_path / "rtc_sc_stance.db")
+    store.update_mood_state(annoyance=0.6, worry=0.0, energy=0.5)
+    store.update_relationship_state(trust=0.5, closeness=0.5, tension=0.1)
+
+    sc_config = RtcConfig(**{**rtc_config.__dict__, "rt_series": "sc", "rt_model": "2.2.0.0"})
+    with patch("backend.app.rtc.state_block.get_memory_store", return_value=store):
+        body = build_voice_chat_body(
+            sc_config,
+            mode="pure",
+            room_id="room-sc",
+            target_user_id="user-a",
+        )
+    manifest = body["Config"]["S2SConfig"]["ProviderParams"]["dialog"]["character_manifest"]
+    assert "现在更冲、更短" in manifest
 
 
 def test_build_voice_chat_pure_enables_tts_tag_parse(rtc_config: RtcConfig) -> None:

@@ -41,6 +41,7 @@ def rtc_config() -> RtcConfig:
         rt_access_token="rt-token",
         rt_speaker="zh_male_yunzhou_jupiter_bigtts",
         rt_model="1.2.1.1",
+        rt_series="o",
         soul_public_url="https://example.com/v1/chat/completions",
         soul_api_key="soul-key",
         welcome_pure="hi pure",

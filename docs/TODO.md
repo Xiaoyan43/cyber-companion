@@ -182,6 +182,12 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
     client method. **The PS-4 re-test** (does pure E2E now follow tone?) — **pending user device A/B.**
   - [ ] (later, MIT-adoptable) proactive timing via `pearthink123/revive-companion` math
     (Poisson "longing" + Bayesian user-state) — feeds the proactive part, maps onto `loneliness`.
+- [x] **SC2.0 verification env `[Claude spec → Cursor builds → Claude reviews]`.** Make pure-E2E
+  RTC switchable to SC2.0 (`model=2.2.0.0` + saturn voice + `character_manifest`) to re-test the
+  PS-4 tone/persona finding; O2.0 stays default, opt-in via `DOUBAO_RT_SERIES=sc`.
+  **Spec: `docs/V2_RTC_SC2_VERIFY_SPEC.md`.** **User device A/B pending.**
+- [ ] **VikingDB custom schemas (after SC2.0) `[Claude]`.** Soul-aligned event/profile extraction
+  rules + fields + weights in the Viking 记忆库 console (per the in-depth investigation); spec to follow.
 - [ ] V2 Phase 4–9 — turn-taking polish, PixiJS room, room reactivity, actions, personal files, the box.
 
 ## Current Priority

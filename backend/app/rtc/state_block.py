@@ -148,6 +148,19 @@ def _kernel_emotion_context_text(
     return None
 
 
+def build_rtc_speaking_style_modifier(store: MemoryStore | None = None) -> str:
+    """PS-5 kernel modifier as manifest/speaking_style tail. '' when neutral."""
+    try:
+        resolved = store if store is not None else get_memory_store()
+        mood = resolved.get_mood_state()
+        relationship = resolved.get_relationship_state()
+        modifier = _kernel_speaking_modifier(mood, relationship)
+        return modifier.lstrip("；") if modifier else ""
+    except Exception:
+        logger.exception("build_rtc_speaking_style_modifier failed")
+        return ""
+
+
 def build_rtc_speaking_style(store: MemoryStore | None = None) -> str:
     """Base style + kernel stance modifier → the speaking_style field. Never raises."""
     try:

@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.app.memory.persona import load_persona_name, load_rtc_system_role
+from backend.app.memory.persona import (
+    load_persona_name,
+    load_rtc_character_manifest,
+    load_rtc_system_role,
+)
 from backend.app.rtc.config import RtcConfig, RtcMode, viking_memory_enabled
-from backend.app.rtc.state_block import build_rtc_speaking_style
+from backend.app.rtc.state_block import build_rtc_speaking_style, build_rtc_speaking_style_modifier
 from backend.app.rtc.viking_memory import (
     DEFAULT_MEMORY_TRANSITION,
     DEFAULT_RUNTIME_MEMORY_TYPES,
@@ -58,6 +62,41 @@ def _dialog_extra(config: RtcConfig) -> dict[str, Any]:
     return extra
 
 
+def _merge_dialog_context(*parts: str) -> str:
+    return "\n\n".join(part.strip() for part in parts if part.strip())
+
+
+def _build_o2_pure_dialog(config: RtcConfig, memory_context: str) -> dict[str, Any]:
+    system_role = load_rtc_system_role()
+    if memory_context.strip():
+        system_role = f"{system_role}\n\n{memory_context.strip()}"
+    return {
+        "bot_name": load_persona_name(),
+        "speaking_style": build_rtc_speaking_style(),
+        "system_role": system_role,
+        "extra": _dialog_extra(config),
+    }
+
+
+def _build_sc_pure_dialog(config: RtcConfig, memory_context: str) -> dict[str, Any]:
+    manifest_parts = [load_rtc_character_manifest()]
+    if memory_context.strip():
+        manifest_parts.append(memory_context.strip())
+    stance = build_rtc_speaking_style_modifier()
+    if stance:
+        manifest_parts.append(stance)
+    return {
+        "character_manifest": _merge_dialog_context(*manifest_parts),
+        "extra": {"model": config.rt_model},
+    }
+
+
+def _build_pure_dialog(config: RtcConfig, memory_context: str) -> dict[str, Any]:
+    if config.rt_series == "sc":
+        return _build_sc_pure_dialog(config, memory_context)
+    return _build_o2_pure_dialog(config, memory_context)
+
+
 def mode_meta(config: RtcConfig, mode: RtcMode) -> tuple[int, str, str, str]:
     if mode == "hybrid":
         return (
@@ -85,12 +124,6 @@ def build_voice_chat_body(
 ) -> dict[str, Any]:
     output_mode, bot_user_id, task_id, default_welcome = mode_meta(config, mode)
     resolved_welcome = welcome_message if welcome_message is not None else default_welcome
-    system_role = load_rtc_system_role()
-    if memory_context.strip():
-        system_role = f"{system_role}\n\n{memory_context.strip()}"
-    speaking_style = (
-        build_rtc_speaking_style() if mode == "pure" else _hybrid_speaking_style()
-    )
 
     if mode == "pure":
         asr_extra: dict[str, Any] = {
@@ -111,12 +144,19 @@ def build_voice_chat_body(
                 },
                 "asr": {"extra": asr_extra},
                 "tts": {"speaker": config.rt_speaker},
-                "dialog": {
-                    "bot_name": load_persona_name(),
-                    "speaking_style": speaking_style,
-                    "system_role": system_role,
-                    "extra": _dialog_extra(config),
-                },
+                "dialog": (
+                    _build_pure_dialog(config, memory_context)
+                    if mode == "pure"
+                    else {
+                        "bot_name": load_persona_name(),
+                        "speaking_style": _hybrid_speaking_style(),
+                        "system_role": _merge_dialog_context(
+                            load_rtc_system_role(),
+                            memory_context,
+                        ),
+                        "extra": _dialog_extra(config),
+                    }
+                ),
             },
         },
         "InterruptMode": 0,

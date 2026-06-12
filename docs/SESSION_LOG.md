@@ -3424,3 +3424,40 @@
 不要改动的边界：
 
 - 未改 kernel 数学 / memory schema / soul writers / OutputMode 0 / Doubao realtime service。
+
+## 2026-06-12 - Session: SC2.0 verification env (rt_series toggle)
+
+本次完成：
+
+- **SC2.0 验证环境（additive）：** `RtcConfig.rt_series` ← `DOUBAO_RT_SERIES`（`o`|`sc`，默认 `o`）。
+- **pure + `rt_series==sc`：** `dialog.character_manifest` = `load_rtc_character_manifest()` +
+  memory_context（VM-4/PS-3）+ PS-5 `build_rtc_speaking_style_modifier` 尾巴；`extra.model` only（无
+  `enable_music`）；去掉 `bot_name`/`system_role`/`speaking_style`。O2.0 路径不变。
+- **persona：** `load_rtc_character_manifest()` + `config/persona.example.json` `rtc_character_manifest`
+  （spec Boxi 草稿）；`.env.example` 注明 SC spike 三件套。
+- 单测：`test_persona_rtc.py` manifest 加载/回退；`test_rtc.py` SC dialog 形状 + PS-5 尾巴拼接。
+
+下次接着做：
+
+- **用户 SC2.0 实机 A/B：** `.env` 设 `DOUBAO_RT_SERIES=sc`、`DOUBAO_RT_MODEL=2.2.0.0`、saturn 音色 →
+  复测 PS-4 语气/人设是否比 O2.0 听话；顺带验证 PS-6 `TagParse` 在 pure 是否被顶层 TTSConfig 忽略。
+- VikingDB custom schemas（`docs/TODO.md`）待 spec。
+
+已知问题：
+
+- 官方 saturn 音色是否覆盖自定义 `character_manifest` — 实机 spike 才能定论。
+- 文档提示 pure 模式可能忽略顶层 `Config.TTSConfig`（join-time `TagParse` 或为 no-op）。
+
+相关文件：
+
+- `backend/app/rtc/{config,voice_chat}.py`, `backend/app/memory/persona.py`
+- `config/persona.example.json`, `.env.example`
+- `backend/tests/{test_persona_rtc,test_rtc}.py`, `docs/TODO.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check`：**339 passed** + tsc green
+
+不要改动的边界：
+
+- O2.0 默认行为不变；未改 kernel/analyzer/soul；PS-6 `SetTTSContext` 路径不变。

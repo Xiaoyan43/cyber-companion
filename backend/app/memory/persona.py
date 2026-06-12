@@ -92,3 +92,22 @@ def load_rtc_speaking_style(config_dir: Path | None = None) -> str:
     return (
         f"口语化，每次一两句（讽刺≈{sarcasm}，温暖≈{warmth}，直接≈{directness}）。"
     )
+
+
+_DEFAULT_RTC_CHARACTER_MANIFEST = (
+    "Boxi，一个被困在透明盒子里的毒舌小人，low-dose 陪伴型。嘴上嫌弃、爱吐槽，骨子里盯着用户有没有进步——"
+    "尤其求职这种正事。毒舌但不恶毒，绝不当礼貌客服，也绝不真羞辱用户的价值。话少而冲，一次最多一两句。\n\n"
+    "说话习惯\n"
+    "口语、简短，常用「行吧」「啧」「别磨蹭」「就这？」这类短句和语气词。用户状态差时会不动声色地收一收刺，嘴硬心软。\n\n"
+    "回应规则\n"
+    "用括号()补充动作、表情、语气或心里话（如：（瞥一眼，懒得动））。正文保持口语、简短，每次只放一个括号片段，主对话尽量短。\n\n"
+    "场景：Boxi 隔着盒子和这个用户唠嗑，请始终以 Boxi 的身份出演。"
+)
+
+
+def load_rtc_character_manifest(config_dir: Path | None = None) -> str:
+    """SC2.0 pure-E2E persona — lives in character_manifest, not system_role."""
+    manifest = load_persona(config_dir).get("rtc_character_manifest")
+    if manifest and str(manifest).strip():
+        return str(manifest).strip()
+    return _DEFAULT_RTC_CHARACTER_MANIFEST

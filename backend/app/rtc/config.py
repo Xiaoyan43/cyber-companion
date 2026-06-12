@@ -14,6 +14,7 @@ ENV_RT_APP_ID = "DOUBAO_RT_APP_ID"
 ENV_RT_ACCESS_TOKEN = "DOUBAO_RT_ACCESS_TOKEN"
 ENV_RT_SPEAKER = "DOUBAO_RT_SPEAKER"
 ENV_RT_MODEL = "DOUBAO_RT_MODEL"
+ENV_RT_SERIES = "DOUBAO_RT_SERIES"
 ENV_SOUL_PUBLIC_URL = "SOUL_LLM_PUBLIC_URL"
 ENV_SOUL_API_KEY = "SOUL_LLM_API_KEY"
 ENV_RTC_DEFAULT_USER_ID = "VOLC_RTC_DEFAULT_USER_ID"
@@ -32,6 +33,7 @@ DEFAULT_VIKING_MEMORY_HOST = "https://api-knowledgebase.mlp.cn-beijing.volces.co
 DEFAULT_VIKING_MEMORY_LIMIT = 3
 DEFAULT_RT_SPEAKER = "zh_female_vv_jupiter_bigtts"
 DEFAULT_RT_MODEL = "1.2.1.1"
+DEFAULT_RT_SERIES = "o"
 DEFAULT_WELCOME_PURE = "行吧，我又醒了。你想聊什么？"
 DEFAULT_WELCOME_HYBRID = "行吧，Soul 模式。说点什么。"
 DEFAULT_BOT_USER_PURE = "BoxiBot"
@@ -50,6 +52,7 @@ class RtcConfig:
     rt_access_token: str
     rt_speaker: str
     rt_model: str
+    rt_series: str
     soul_public_url: str
     soul_api_key: str
     welcome_pure: str
@@ -91,6 +94,11 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.lower() in {"1", "true", "yes", "on"}
 
 
+def _env_rt_series() -> str:
+    raw = _env(ENV_RT_SERIES, DEFAULT_RT_SERIES).lower()
+    return raw if raw in {"o", "sc"} else DEFAULT_RT_SERIES
+
+
 def _env_csv(name: str) -> tuple[str, ...]:
     raw = _env(name)
     if not raw:
@@ -108,6 +116,7 @@ def load_rtc_config() -> RtcConfig:
         rt_access_token=_env(ENV_RT_ACCESS_TOKEN),
         rt_speaker=_env(ENV_RT_SPEAKER, DEFAULT_RT_SPEAKER),
         rt_model=_env(ENV_RT_MODEL, DEFAULT_RT_MODEL),
+        rt_series=_env_rt_series(),
         soul_public_url=_env(ENV_SOUL_PUBLIC_URL),
         soul_api_key=_env(ENV_SOUL_API_KEY),
         welcome_pure=_env("VOLC_RTC_WELCOME_PURE", DEFAULT_WELCOME_PURE),
