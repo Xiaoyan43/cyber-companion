@@ -3474,24 +3474,20 @@
   off-path）。PS-5/PS-6 落地后**语气已能随 kernel 变（用户实机确认，仍需更多验证）**。
 - **SC2.0 验证 = REJECTED**：saturn/克隆音色音色固定、情绪不能中途变，role-play 是围着这个固定音色做的，
   对会变情绪的陪伴比 O2.0 差。`DOUBAO_RT_SERIES` toggle 留着但休眠，**O2.0 为准**（`docs/V2_RTC_SC2_VERIFY_SPEC.md` 记录）。
-- **O2.0 全人设定制 Phase 1**：`config/persona.example.json` 加了 `persona_prompt`（Boxi 全文人设，
-  **无行为规则**，安全交给豆包 API；统一影响文字/Soul/O2.0 RTC）。**loader 未接 → 当前 dormant。**
+- **O2.0 全人设定制 Phase 1（完成）**：`config/persona.example.json` 加 `persona_prompt`（Boxi 全文人设，
+  **无行为规则**，安全交给豆包 API）；`load_chinese_persona_prompt` 已读它 → 统一对文字/Soul/O2.0 RTC **生效**，`npm run check` 绿。（loader 接线另见下一条 session 记录。）
 
 下次接着做（新窗口 `推进`）：
 
-1. **接线 `load_chinese_persona_prompt`（`backend/app/memory/persona.py`）**：persona 含非空
-   `persona_prompt` 时直接返回它，否则保持现有 `name+core+tone` 拼装（向后兼容）；更新断言旧拼装格式的
-   人设测试；跑 `PYTHON_BIN=.venv/bin/python npm run check`。
-2. 用户实机：O2.0 上听新 Boxi 人设、调文案。
-3. 之后可选：`speaking_style` 去规则化；`external_rag`（深度 lore，O2.0 only）+ `dialog_id`（原生 20 轮
-   跨会话记忆）；然后 **VikingDB 自定义 schema**（事件/画像抽取规则 + 字段 + 权重，soul-aligned；见前期调研）。
+1. **用户实机**：O2.0 上听新 Boxi 全文人设、按口味调 `persona_prompt` 文案。
+2. 可选：`speaking_style` 去规则化；`external_rag`（深度 lore，O2.0 only）+ `dialog_id`（原生 20 轮跨会话记忆）。
+3. **VikingDB 自定义 schema**（事件/画像抽取规则 + 字段 + 权重，soul-aligned；见前期调研）。
 
 已知问题：
 
 - **emotion 标签副旗**：文档称纯 E2E **忽略顶层 `Config.TTSConfig`** → join-time `TagParse` 可能 no-op
   （只有 runtime `SetTTSContext` 生效）；需验证标签是否真被解析，否则把 `Context.TagParse` 移到
   `S2SConfig.ProviderParams.tts`。
-- `persona_prompt` 已加但 loader 未读 → 暂不生效。
 
 相关文件：
 
