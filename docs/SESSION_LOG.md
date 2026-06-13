@@ -3824,3 +3824,49 @@
 不要改动的边界：
 
 - 纯前端；未改后端 / behavior 契约 / provider；无 away-delivery / OS 通知。
+
+## 2026-06-14 — Session: PI 实机验证 PASS + 公开发布 GitHub (Claude)
+
+本次完成：
+
+- **主动发起 (Proactive Initiation) 全系列完成 + 实机验证 PASS。** PI-1（longing 计时）/ PI-2
+  （理由选择 + soul 撰写开场白）/ PI-3（前端「她在主动联系」呈现）/ PI-4（尊重边界 + 成本闸）
+  + PI-1 follow-ups（校准 λ、Δt cap、`force_proactive`、语音 turn = `source='chat'` 已确认）——
+  全部 Cursor 实现、Claude review **逐条 PASS**。PI-2 真机 DeepSeek smoke PASS（开场白短、口吻对、
+  不 nag）。**用户实机确认：她现在会主动找你。**
+- **项目已公开发布到 GitHub（public, MIT）：** https://github.com/Xiaoyan43/cyber-companion 。
+  加 `LICENSE`(MIT) + 面向公众 `README`；复用清单核对（无 copyleft 进入分发代码，仅 ffmpeg 系统二进制）；
+  安全审计（当前 tree + **全 history** 均无任何密钥/token）；真实火山/豆包 App ID → 占位、真实档案测试数据
+  匿名化（保留作者名 Chris Wang）；用 **git-filter-repo 重写全部历史**清除这些值（99 commits，hash 已变，
+  dev 历史保留）；`.firecrawl/`、`.claude/` 加 gitignore。
+
+下次接着做：
+
+- 主动发起：实机体验后**定稿 longing λ**（现为验证值 0.06，按手感往下调到不吵的节奏）。
+- 从「未完成」清单挑下一条：视觉（改 asset-based 表情图，不再用实时 shader——见前期结论）/ 语音情绪
+  （纯 E2E 上是 no-op，cascaded 才行）/ cascaded soul-authored 语音设为主 / VikingDB 自定义 schema /
+  felt-shown + 逗你 行为切片。
+
+已知问题：
+
+- **repo 现在 public**——之后所有 commit 都会公开，别把密钥/个人数据写进 tracked 文件或 commit message；
+  密钥仍只在 `.env`(gitignored)。
+- git 历史已被 filter-repo 重写（本地 hash 变，已对齐 origin/master）；本地 `refs/codex/*` 是 agent 残留，
+  无害、不会被 push。默认分支 `master`（可在 Settings 改 main，纯命名）。
+- BSD-3 改编的 3 文件（`tlv.ts`/`rtcMessages.ts`/`token.py`）严格合规可加一行来源 header（复用清单已记录）。
+
+相关文件：
+
+- `LICENSE`, `README.md`, `.gitignore`
+- `backend/app/behavior/{longing,proactive_reason,proactive_opener,engine}.py`、`docs/PROACTIVE_INITIATION_SPEC.md`、`docs/TODO.md`
+- 公开仓库：https://github.com/Xiaoyan43/cyber-companion
+
+测试结果：
+
+- 全程 `npm run check` 绿（PI 收尾 379 passed + tsc）；发布前 RTC 70 passed；PI-2 真机 DeepSeek smoke PASS；
+  **PI 主动发起 实机 用户 PASS。**
+
+不要改动的边界：
+
+- repo public——secrets 只在 env，个人数据别进 tracked/commit。不重写已发布历史（除非用户要求）。
+  O2.0 默认、SC2.0 toggle 勿删；不改 soul kernel/schema。
