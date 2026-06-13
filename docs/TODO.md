@@ -6,10 +6,12 @@ Final form = **"a being with a world"** (see `docs/VISUAL_SPIKE_SPEC.md` header 
 `direction-c-soul-authored`). Soul-authored voice = **cascaded** (Phases 1–3, un-shelved);
 **pure E2E retained** as fast/present mode (revisit after VikingDB schemas); hybrid = dead end.
 
-- [ ] **Visual spike — light core + ink `[Claude spec ✓ → Cursor builds → Claude reviews]`.**
-  Throwaway page: BOTH materials (semi-figurative particles / light-in-ink) × 6 states incl. the
-  **two felt-vs-shown desyncs** (suppression + teasing) + thinking→speak. Shader, not fluid sim.
-  Picks the material. **Spec: `docs/VISUAL_SPIKE_SPEC.md`.**
+- [~] **Visual spike — light core + ink `[built → user reviewed]`.** Throwaway page shipped
+  (`experiments/being-spike/`, both materials × 6 states). **DECISION (2026-06-14): light+ink shader
+  (材质 B) REJECTED — too GPU-heavy for the dev machine (low-GPU 2019 MBP, Iris Plus 655) and the
+  iPhone-SE2 box target.** No real-time shaders / fluid / heavy-WebGL going forward; any future avatar
+  画面 must be asset-based sprites / CSS / low-frame. **UI direction is ON HOLD — user hasn't chosen a
+  画面; do not pick one.** Spec: `docs/VISUAL_SPIKE_SPEC.md`.
 - [x] **Felt-vs-shown split + teasing `[Claude impl — restricted behavior contract; PERSONA_AND_BEHAVIOR updated]`.**
   `behavior/tone.py` `project_tone` = ONE shared projection → `(felt, expressed_edge, is_performative,
   register, tone_mode)` read by text chat, RTC `state_block`, and (later) the material. New
@@ -20,8 +22,10 @@ Final form = **"a being with a world"** (see `docs/VISUAL_SPIKE_SPEC.md` header 
   reads as a mood. Thresholds consolidated (was dup'd mood.py/state_block.py). **398 backend + tsc green**
   (+ `test_tone.py`, RTC playful + engine streak tests). Spec: `docs/VISUAL_SPIKE_SPEC.md` (paired slice).
   *v1 limit: streak armed on text path; pure-E2E voice reads but doesn't yet advance it.*
-- [ ] (post-spike, staged) Wire material ← live kernel → ambient world drift → memory traces
-  (the echo world; reads existing kernel + `memories`, no new tables).
+- [ ] (post-spike, staged — **BLOCKED: UI direction on hold**) Wire material ← live kernel → ambient
+  world drift → memory traces (the echo world; reads existing kernel + `memories`, no new tables).
+  The kernel side is ready: `behavior/tone.py` already exposes `(felt, expressed_edge, is_performative)`
+  for whatever lightweight renderer is chosen later.
 - [ ] (deep-voice) Un-shelf cascaded soul-authored voice as primary (Phases 1–3); pure E2E → fast toggle.
 
 ## Proactive initiation (PI) — 2026-06-13: the missing companion pillar
