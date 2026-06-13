@@ -50,3 +50,6 @@ recordings/
 .firecrawl/
 .claude/
 
+# Reference drop — vendor/API docs the user hands to Claude; never publish (copyright)
+reference/
+
