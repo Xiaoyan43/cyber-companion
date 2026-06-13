@@ -5,6 +5,11 @@ from __future__ import annotations
 import json
 import logging
 
+from backend.app.behavior.tone import (
+    ToneRegister,
+    performative_active_from_metadata,
+    project_tone,
+)
 from backend.app.memory.database import MoodStateRecord, RelationshipStateRecord
 from backend.app.memory.persona import load_rtc_speaking_style
 from backend.app.memory.store import MemoryStore, get_memory_store
@@ -122,30 +127,50 @@ def build_rtc_welcome_message(
         return default
 
 
+# register → channel-specific phrasing. Every surface renders the same shared
+# tone projection (`project_tone`) into its own words — one personality.
+_SPEAKING_MODIFIER_BY_REGISTER: dict[ToneRegister, str] = {
+    "comfort": "；用户最近不太好，收一收毒舌、稳一点",
+    "real_sharp": "；现在更冲、更短",
+    "playful": "；心情不错，嘴上损ta、其实在逗、带笑意",
+    "warm": "；和ta更熟，可更随意贴近",
+    "lonely": "",
+    "neutral": "",
+}
+
+_EMOTION_TEXT_BY_REGISTER: dict[ToneRegister, str | None] = {
+    "comfort": "语气放软、关切、稍慢",
+    "real_sharp": "更冲、更不耐烦但别凶",
+    "playful": "嘴上凶、其实带笑、是逗ta",
+    "warm": None,
+    "lonely": "更热络一点",
+    "neutral": None,
+}
+
+
+def _kernel_register(
+    mood: MoodStateRecord,
+    relationship: RelationshipStateRecord,
+) -> ToneRegister:
+    return project_tone(
+        mood,
+        relationship,
+        performative_active=performative_active_from_metadata(mood.metadata),
+    ).register
+
+
 def _kernel_speaking_modifier(
     mood: MoodStateRecord,
     relationship: RelationshipStateRecord,
 ) -> str:
-    if mood.worry >= _MOOD_THRESHOLD:
-        return "；用户最近不太好，收一收毒舌、稳一点"
-    if mood.annoyance >= _MOOD_THRESHOLD or relationship.tension >= _TENSION_AWKWARD_THRESHOLD:
-        return "；现在更冲、更短"
-    if relationship.closeness >= _BUCKET_HIGH and relationship.tension < 0.3:
-        return "；和ta更熟，可更随意贴近"
-    return ""
+    return _SPEAKING_MODIFIER_BY_REGISTER[_kernel_register(mood, relationship)]
 
 
 def _kernel_emotion_context_text(
     mood: MoodStateRecord,
     relationship: RelationshipStateRecord,
 ) -> str | None:
-    if mood.worry >= _MOOD_THRESHOLD:
-        return "语气放软、关切、稍慢"
-    if mood.annoyance >= _MOOD_THRESHOLD or relationship.tension >= _TENSION_AWKWARD_THRESHOLD:
-        return "更冲、更不耐烦但别凶"
-    if mood.loneliness >= _MOOD_THRESHOLD:
-        return "更热络一点"
-    return None
+    return _EMOTION_TEXT_BY_REGISTER[_kernel_register(mood, relationship)]
 
 
 def build_rtc_speaking_style_modifier(store: MemoryStore | None = None) -> str:

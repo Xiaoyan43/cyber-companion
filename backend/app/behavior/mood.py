@@ -1,3 +1,4 @@
+from backend.app.behavior.tone import project_tone
 from backend.app.behavior.types import ToneMode
 from backend.app.memory.database import MemoryRecord, MoodStateRecord, RelationshipStateRecord
 
@@ -8,16 +9,8 @@ def choose_tone_mode(
     *,
     overwhelmed: bool,
 ) -> ToneMode:
-    if overwhelmed or mood.worry >= 0.65 or mood.mood in {"sad", "worried"}:
-        return "comfort"
-    if (
-        mood.annoyance >= 0.6
-        and relationship.trust >= 0.4
-        and relationship.familiarity >= 0.3
-        and relationship.tension < 0.5
-    ):
-        return "tease"
-    return "normal"
+    """Back-compat shim — tone derivation now lives in the shared projection."""
+    return project_tone(mood, relationship, overwhelmed=overwhelmed).tone_mode
 
 
 def apply_user_message_mood_delta(

@@ -3870,3 +3870,53 @@
 
 - repo public——secrets 只在 env，个人数据别进 tracked/commit。不重写已发布历史（除非用户要求）。
   O2.0 默认、SC2.0 toggle 勿删；不改 soul kernel/schema。
+
+## 2026-06-14 — Felt-vs-shown tone projection + 逗你 (Direction C 行为切片, Claude)
+
+本次完成：
+
+- **统一情绪投射 `backend/app/behavior/tone.py`（`project_tone`）。** 把原先分散在
+  `behavior/mood.py:choose_tone_mode` 与 `rtc/state_block.py:_kernel_speaking_modifier /
+  _kernel_emotion_context_text` 的口吻推导收敛为**一个共享投射** →
+  `(felt, expressed_edge, is_performative, register, tone_mode)`。文字聊天、RTC 语音、
+  （后续）视觉材质都读这一个投射 → 一个人格、各表面不再各自漂移。不变式：**光核永不撒谎**
+  （felt=真实内心）/ **墨=外在表现**（expressed_edge 利↔柔）；`is_performative` 是解耦器。
+- **新增 `performative_sharp` / `playful`（desync-2 逗你）。** 仅在正向区
+  （无 worry/annoyance/tension + closeness≥0.67 + energy ok）触发：核暖、墨利、`is_performative=True`，
+  且有**独立口吻**（`嘴上损ta、其实在逗、带笑意`）区别于真火（`更冲、更不耐烦但别凶`）。
+  优先级：真实 worry/annoyance/tension 永远赢；desync-1 压抑（worry 盖过 annoyance → 软墨 + 利核）保留。
+- **Live trigger（v1）= 正向连击**（`mood.metadata.positive_zone_streak ≥ 2`），逗你像“情绪”而非每回合抛硬币；
+  任何负向事件（空/低值/啰嗦/崩溃/拒绝）立即清零。streak 在**文字路径**推进；纯 E2E 语音目前只**读**已点亮标志。
+- 阈值统一到 `tone.py`（原 0.5/0.4/0.67 在 mood.py 与 state_block.py 重复）；各表面只做 `register → 自己的话术`
+  映射（`local_responses.behavior_tone_instruction`、`state_block` speaking_style/emotion-tag），措辞仍按通道区分。
+- `choose_tone_mode` 保留为薄壳（委托 `project_tone`，旧测试不破）；`BehaviorDecision` 新增 `tone` 字段携带投射。
+- 更新 `docs/PERSONA_AND_BEHAVIOR.md`（新「Felt-vs-Shown Tone Projection」节）、`docs/TODO.md`。
+
+下次接着做：
+
+- （staged）把材质 ← live kernel：让前端/材质读 `(felt, expressed_edge, is_performative)`（回声世界第一步）。
+- 让纯 E2E 语音 turn 也推进 streak（`/rtc/turn` off-path 路径），消除 v1 单边限制。
+- 或从未完成清单挑下一条（视觉 asset 表情 / cascaded 语音设主 / VikingDB 自定义 schema）。
+
+已知问题：
+
+- streak 仅文字路径推进；纯 E2E 语音只读不写（已在 doc/TODO 标注的 v1 限制）。
+- 文字 comfort 阈值从 0.65 降到统一的 0.5（与 RTC 对齐）——更早进入关切，属有意收敛，无测试钉死旧值。
+
+相关文件：
+
+- `backend/app/behavior/tone.py`（新）、`types.py`、`mood.py`、`engine.py`、`local_responses.py`
+- `backend/app/rtc/state_block.py`
+- `backend/tests/test_tone.py`（新）、`test_behavior.py`、`test_rtc_state_block.py`
+- `docs/PERSONA_AND_BEHAVIOR.md`、`docs/TODO.md`、`docs/SESSION_LOG.md`
+
+测试结果：
+
+- `.venv/bin/python -m pytest backend/tests -q` — **398 passed**（含 `test_tone.py` 14 + RTC playful + engine streak）。
+- `cd frontend && npx tsc --noEmit` — 通过（前端未改动）。
+
+不要改动的边界：
+
+- 未改 memory schema / provider 抽象 / file permission policy / soul kernel 数值含义。
+- RTC 既有钉死话术全部保留（worry/annoyance/tension/closeness/loneliness 分支字符串不变）。
+- repo public——secrets 只在 env，个人数据别进 tracked/commit。

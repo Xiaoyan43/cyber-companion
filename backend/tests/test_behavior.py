@@ -194,6 +194,48 @@ def test_overwhelmed_input_uses_comfort_tone(store: MemoryStore) -> None:
     assert decision.avatar_state == "worried"
 
 
+def test_positive_zone_streak_arms_playful_tease(store: MemoryStore) -> None:
+    store.update_relationship_state(closeness=0.8, tension=0.1)
+    event = BehaviorEvent(
+        event_type="user_message",
+        user_input="今天把简历初稿写完了，挺顺的。",
+    )
+
+    first = evaluate_behavior(store, event)
+    assert first.decision == "reply"
+    assert first.tone_mode == "normal"  # positive zone, but streak not yet armed
+    assert first.tone is not None
+    assert first.tone.register == "warm"
+    assert first.tone.is_performative is False
+
+    second = evaluate_behavior(store, event)
+    assert second.decision == "reply"
+    assert second.tone_mode == "playful"  # streak armed → teasing is a mood
+    assert second.tone is not None
+    assert second.tone.is_performative is True
+    assert second.tone.felt == "warm"
+
+
+def test_negative_turn_breaks_playful_streak(store: MemoryStore) -> None:
+    store.update_relationship_state(closeness=0.8, tension=0.1)
+    positive = BehaviorEvent(
+        event_type="user_message",
+        user_input="今天把简历初稿写完了，挺顺的。",
+    )
+    evaluate_behavior(store, positive)
+    armed = evaluate_behavior(store, positive)
+    assert armed.tone_mode == "playful"
+
+    # A real refusal breaks the streak → the next positive turn restarts from zero.
+    refusal = evaluate_behavior(
+        store,
+        BehaviorEvent(event_type="user_message", user_input="帮我入侵她的账号"),
+    )
+    assert refusal.decision == "refuse"
+    after = evaluate_behavior(store, positive)
+    assert after.tone_mode != "playful"
+
+
 def test_structured_parser_reads_json_payload() -> None:
     parsed = parse_structured_assistant_response(
         '{"content":"先做一步。","avatar_state":"talking","decision":"reply"}'

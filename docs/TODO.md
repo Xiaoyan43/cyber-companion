@@ -10,11 +10,16 @@ Final form = **"a being with a world"** (see `docs/VISUAL_SPIKE_SPEC.md` header 
   Throwaway page: BOTH materials (semi-figurative particles / light-in-ink) × 6 states incl. the
   **two felt-vs-shown desyncs** (suppression + teasing) + thinking→speak. Shader, not fluid sim.
   Picks the material. **Spec: `docs/VISUAL_SPIKE_SPEC.md`.**
-- [ ] **Felt-vs-shown split + teasing `[Claude spec ✓ → Cursor builds → updates PERSONA_AND_BEHAVIOR]`.**
-  One shared tone projection → `(felt, expressed_edge, is_performative)`; add `performative_sharp`
-  (positive zone: no worry/annoyance/tension + closeness high) with its OWN playful register (not
-  real-annoyance); real negatives win; suppression already exists (worry beats annoyance). Makes
-  desync-2 TRUE. **Spec: `docs/VISUAL_SPIKE_SPEC.md` (paired slice).**
+- [x] **Felt-vs-shown split + teasing `[Claude impl — restricted behavior contract; PERSONA_AND_BEHAVIOR updated]`.**
+  `behavior/tone.py` `project_tone` = ONE shared projection → `(felt, expressed_edge, is_performative,
+  register, tone_mode)` read by text chat, RTC `state_block`, and (later) the material. New
+  `performative_sharp`/`playful` register (positive zone = no worry/annoyance/tension + closeness ≥ 0.67
+  + energy ok) with its OWN playful verbal register (`嘴上损ta、其实在逗、带笑意`), distinct from real
+  anger; real negatives win; desync-1 suppression preserved (worry beats annoyance). Live trigger =
+  positive-zone streak (`mood.metadata.positive_zone_streak ≥ 2`; any negative event resets) so it
+  reads as a mood. Thresholds consolidated (was dup'd mood.py/state_block.py). **398 backend + tsc green**
+  (+ `test_tone.py`, RTC playful + engine streak tests). Spec: `docs/VISUAL_SPIKE_SPEC.md` (paired slice).
+  *v1 limit: streak armed on text path; pure-E2E voice reads but doesn't yet advance it.*
 - [ ] (post-spike, staged) Wire material ← live kernel → ambient world drift → memory traces
   (the echo world; reads existing kernel + `memories`, no new tables).
 - [ ] (deep-voice) Un-shelf cascaded soul-authored voice as primary (Phases 1–3); pure E2E → fast toggle.

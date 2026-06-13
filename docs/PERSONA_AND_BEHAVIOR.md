@@ -63,6 +63,49 @@ Suggested internal state:
 
 These should change slowly. Do not reset emotions after every message.
 
+## Felt-vs-Shown Tone Projection
+
+Direction C — the being. One shared helper (`backend/app/behavior/tone.py`,
+`project_tone`) turns the kernel (`mood_state` + `relationship_state`) into the
+tone every surface speaks with: **text chat, cascaded voice, pure-E2E RTC, and
+(later) the visual material all read this one projection — one personality, not
+per-surface drift.** Spec: `docs/VISUAL_SPIKE_SPEC.md` (paired slice).
+
+The invariant: **the light core never lies** — `felt` is always the true inner
+feeling; **the ink is the outward performance** — `expressed_edge` (crisp `1.0` ↔
+diffuse `0.0`). `is_performative` is the decoupler that lets the two diverge.
+
+`project_tone` returns `(felt, expressed_edge, is_performative, register, tone_mode)`.
+Precedence — **real states always win**:
+
+| register | when | felt | edge | performative | reads as |
+|---|---|---|---|---|---|
+| `comfort` | worry ≥ 0.5 / overwhelmed / sad·worried | worried (or sharp if also annoyed) | soft | no | cares; softens delivery |
+| `real_sharp` | annoyance ≥ 0.5 or tension ≥ 0.4 | sharp | crisp | no | genuinely annoyed |
+| `playful` | positive zone **and** armed streak | warm | crisp | **yes** | good mood, playing sharp (teasing) |
+| `warm` | positive zone, not yet armed | warm | mid | no | relaxed, close |
+| `lonely` | loneliness ≥ 0.5 | lonely | mid | no | wants contact |
+| `neutral` | otherwise | neutral | mid | no | present, waiting |
+
+- **desync-1 (suppression)** falls out of precedence: real `worry` wins the
+  *expression* (soft ink) even while `annoyance` is high, so the core stays `sharp`
+  underneath — felt and shown diverge honestly. (No new logic; it already existed.)
+- **desync-2 (teasing)** is the new `performative_sharp` path: a warm core wearing a
+  sharp edge **on purpose**. It has its own verbal register
+  (`嘴上损ta、其实在逗、带笑意`), distinct from real anger (`更冲、更不耐烦但别凶`).
+- **Positive zone** = absence-of-negatives + `closeness ≥ 0.67` + `energy ≥ 0.3`
+  (no "happy" field exists, so it is defined by what is *not* there + closeness).
+- **Live trigger (v1):** teasing arms only after a streak of clean positive-zone
+  reply turns (`mood.metadata.positive_zone_streak ≥ 2`), so it reads as a mood, not
+  a per-turn coin-flip. Any negative message event (empty / low-value / rambling /
+  overwhelmed / refusal) resets the streak immediately. The streak is advanced on the
+  **text-chat** path; pure-E2E voice turns currently *read* the armed flag (via
+  `state_block`) but do not yet advance it — a known v1 limitation.
+- Thresholds are consolidated here (was duplicated 0.5/0.4/0.67 across `mood.py`
+  and `rtc/state_block.py`); each surface only maps `register → its own words`
+  (`local_responses.behavior_tone_instruction`, `state_block` speaking_style /
+  emotion-tag), so phrasing stays channel-appropriate while the decision is shared.
+
 ## Idle And Proactive Scheduling
 
 The companion feels alive by reacting to time, not only to user messages. Two

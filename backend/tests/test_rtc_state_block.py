@@ -10,6 +10,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from backend.app.behavior.tone import PERFORMATIVE_STREAK_THRESHOLD, POSITIVE_STREAK_KEY
 from backend.app.memory.store import MemoryStore
 from backend.app.rtc.config import RtcConfig
 from backend.app.rtc.routes import _load_rtc_memory_context, router as rtc_router
@@ -212,6 +213,30 @@ def test_build_rtc_speaking_style_worry_beats_annoyance(store: MemoryStore) -> N
     store.update_mood_state(worry=0.6, annoyance=0.7)
     assert "收一收毒舌、稳一点" in build_rtc_speaking_style(store)
     assert "现在更冲、更短" not in build_rtc_speaking_style(store)
+
+
+def test_build_rtc_playful_when_positive_zone_armed(store: MemoryStore) -> None:
+    # Positive zone (calm + close) AND a teasing streak armed in metadata →
+    # the playful register surfaces in both voice channels (desync-2).
+    _neutral_kernel(store)
+    store.update_relationship_state(closeness=0.8, tension=0.1)
+    store.update_mood_state(metadata={POSITIVE_STREAK_KEY: PERFORMATIVE_STREAK_THRESHOLD})
+
+    style = build_rtc_speaking_style(store)
+    assert "嘴上损ta、其实在逗、带笑意" in style
+    assert "和ta更熟" not in style
+
+    tag = build_rtc_emotion_tag(store)
+    assert tag is not None
+    assert "嘴上凶、其实带笑、是逗ta" in tag
+
+
+def test_build_rtc_positive_zone_unarmed_stays_warm(store: MemoryStore) -> None:
+    # Same calm + close state but no streak → warm, not playful.
+    _neutral_kernel(store)
+    store.update_relationship_state(closeness=0.8, tension=0.1)
+    assert "和ta更熟，可更随意贴近" in build_rtc_speaking_style(store)
+    assert build_rtc_emotion_tag(store) is None
 
 
 def test_build_rtc_emotion_tag_neutral_returns_none(store: MemoryStore) -> None:

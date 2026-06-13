@@ -16,9 +16,9 @@ from backend.app.behavior.proactive_reason import fallback_line_for_reason, pick
 from backend.app.behavior.mood import (
     apply_idle_tick_mood_delta,
     apply_user_message_mood_delta,
-    choose_tone_mode,
     find_stale_job_memory,
 )
+from backend.app.behavior.tone import in_positive_zone, next_positive_streak, project_tone
 from backend.app.behavior.tick_policy import mark_local_line_spoken, recently_spoke_locally
 from backend.app.behavior.rules import (
     is_empty_input,
@@ -77,7 +77,6 @@ def _evaluate_user_message(store: MemoryStore, user_input: str) -> BehaviorDecis
     rambling = is_rambling(user_input)
     overwhelmed = mentions_overwhelmed(user_input)
     refused = matches_refuse_pattern(user_input)
-    tone_mode = choose_tone_mode(mood, relationship, overwhelmed=overwhelmed)
 
     updated_mood = apply_user_message_mood_delta(
         mood,
@@ -87,6 +86,24 @@ def _evaluate_user_message(store: MemoryStore, user_input: str) -> BehaviorDecis
         overwhelmed=overwhelmed,
         refused=refused,
     )
+    # Felt-vs-shown projection: arm playful teasing only after a streak of clean
+    # positive-zone reply turns, so it reads as a mood, not a per-turn glitch.
+    # Any negative message event (empty / low-value / rambling / overwhelmed /
+    # refusal) resets the streak immediately. (spec paired slice)
+    clean_turn = not (empty or low_value or rambling or overwhelmed or refused)
+    positive_turn = clean_turn and in_positive_zone(
+        mood, relationship, overwhelmed=overwhelmed
+    )
+    streak_metadata, performative_active = next_positive_streak(
+        updated_mood.metadata, positive_turn=positive_turn
+    )
+    projection = project_tone(
+        mood,
+        relationship,
+        overwhelmed=overwhelmed,
+        performative_active=performative_active,
+    )
+    tone_mode = projection.tone_mode
     store.update_mood_state(
         mood=updated_mood.mood,
         energy=updated_mood.energy,
@@ -94,7 +111,7 @@ def _evaluate_user_message(store: MemoryStore, user_input: str) -> BehaviorDecis
         boredom=updated_mood.boredom,
         worry=updated_mood.worry,
         loneliness=updated_mood.loneliness,
-        metadata=updated_mood.metadata,
+        metadata=streak_metadata,
     )
 
     if empty:
@@ -105,6 +122,7 @@ def _evaluate_user_message(store: MemoryStore, user_input: str) -> BehaviorDecis
             reason="empty_user_input",
             local_response=local_response_for_decision("silent"),
             tone_mode=tone_mode,
+            tone=projection,
         )
 
     if refused:
@@ -143,6 +161,7 @@ def _evaluate_user_message(store: MemoryStore, user_input: str) -> BehaviorDecis
                 "silent" if updated_mood.annoyance >= 0.55 else "mutter",
             ),
             tone_mode=tone_mode,
+            tone=projection,
         )
 
     if rambling:
@@ -152,6 +171,7 @@ def _evaluate_user_message(store: MemoryStore, user_input: str) -> BehaviorDecis
             should_call_llm=True,
             reason="user_rambling",
             tone_mode=tone_mode,
+            tone=projection,
         )
 
     if overwhelmed:
@@ -164,6 +184,7 @@ def _evaluate_user_message(store: MemoryStore, user_input: str) -> BehaviorDecis
         should_call_llm=True,
         reason="user_message_needs_response",
         tone_mode=tone_mode,
+        tone=projection,
     )
 
 

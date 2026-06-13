@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from backend.app.behavior.proactive_reason import ProactiveReason
+    from backend.app.behavior.tone import ToneProjection
     from backend.app.providers.types import ChatCompletionResult
 
 BehaviorDecisionType = Literal[
@@ -15,7 +16,7 @@ BehaviorDecisionType = Literal[
     "observe",
 ]
 
-ToneMode = Literal["normal", "comfort", "tease"]
+ToneMode = Literal["normal", "comfort", "tease", "playful"]
 BehaviorEventType = Literal["user_message", "idle_tick", "app_tick", "proactive_check"]
 
 
@@ -34,6 +35,7 @@ class BehaviorDecision:
     reason: str
     local_response: str | None = None
     tone_mode: ToneMode = "normal"
+    tone: "ToneProjection | None" = None
     proactive_reason: "ProactiveReason | None" = None
     proactive_llm_used: bool = False
     proactive_completion: "ChatCompletionResult | None" = None

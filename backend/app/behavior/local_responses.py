@@ -36,6 +36,12 @@ def behavior_tone_instruction(decision: str, tone_mode: ToneMode) -> str | None:
     if decision == "proactive":
         return "[Behavior tone]\nProactively nudge the user on stale progress. Stay sharp, not cruel."
 
+    if tone_mode == "playful":
+        return (
+            "[Behavior tone]\n心情不错，在逗ta：嘴上损ta、其实带笑意，是玩笑不是真凶。"
+            "Playful teasing in a good mood — loving jabs, not real annoyance. Stay helpful."
+        )
+
     if tone_mode == "tease":
         return "[Behavior tone]\nLight teasing is allowed, but stay helpful."
 
