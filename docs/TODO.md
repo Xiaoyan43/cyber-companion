@@ -34,10 +34,11 @@ Deepening, not from-scratch — the tick loop already exists (`useBehaviorTicks`
   `proactive_llm` gate + daily LLM cap (PI-4 cost hook) + triple canned fallback; 363 tests green.
   **Real-provider smoke PASS** (DeepSeek, 2026-06-14): 4 reasons → short in-voice openers
   (11–20字), no guilt/nag; check-in invoked the 盒子 persona ("别让我以为盒子里就我一个活物").
-- [x] **PI-1 follow-ups (from review) `[done @ this commit]`.** (a) Validation λ
-  `longing_lambda_base_per_hour=0.06` + `force_proactive` dev trigger on
-  `/behavior/evaluate`. (b) `proactive_max_delta_seconds` Δt cap. (c) RTC voice
-  turns confirmed `source='chat'` via `persist_chat_turn` — no query change needed.
+- [x] **PI-1 follow-ups (from review) `[done @ b16e2e0; Claude review PASS]`.** (a) Validation λ
+  `longing_lambda_base_per_hour=0.06` + `force_proactive` dev trigger on `/behavior/evaluate`
+  (skips only timing gates; **enable/backoff/daily-cap/cost stay enforced**). (b)
+  `proactive_max_delta_seconds=600` Δt cap. (c) RTC voice turns confirmed `source='chat'`
+  (`persist_chat_turn` line 32) — counted, no query change. 379 tests green.
 - [ ] **PI-3 — Delivery feels like initiation (in-app) `[Cursor]`.** Avatar + attention cue; surfaces
   after idle without a user action. (Away-delivery = desktop/box platform follow-on.)
 - [x] **PI-4 — Respect + cost brake `[done @ 52f4390; Claude review PASS]`.** ignore-backoff
