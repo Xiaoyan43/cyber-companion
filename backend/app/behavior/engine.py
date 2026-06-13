@@ -45,7 +45,14 @@ def evaluate_behavior(
         return _evaluate_user_message(store, event.user_input)
 
     if event.event_type == "proactive_check":
-        return _evaluate_proactive_check(store, budget=budget, rng=rng, now=now)
+        force_proactive = bool(event.metadata.get("force_proactive"))
+        return _evaluate_proactive_check(
+            store,
+            budget=budget,
+            rng=rng,
+            now=now,
+            force_proactive=force_proactive,
+        )
 
     if event.event_type == "idle_tick":
         return _evaluate_idle_tick(store)
@@ -166,12 +173,13 @@ def _evaluate_proactive_check(
     budget: BudgetConfig | None = None,
     rng: random.Random | None = None,
     now: datetime | None = None,
+    force_proactive: bool = False,
 ) -> BehaviorDecision:
     config = budget or load_budget_config()
     mood = store.get_mood_state()
     relationship = store.get_relationship_state()
 
-    if recently_spoke_locally(mood):
+    if not force_proactive and recently_spoke_locally(mood):
         return BehaviorDecision(
             decision="observe",
             avatar_state="idle",
@@ -185,6 +193,7 @@ def _evaluate_proactive_check(
         relationship=relationship,
         last_user_message_at=store.get_last_user_chat_created_at(),
         now=now,
+        skip_timing_gates=force_proactive,
     )
     if gate.blocked:
         return BehaviorDecision(
@@ -207,7 +216,8 @@ def _evaluate_proactive_check(
     check_metadata = mark_proactive_check(mood.metadata, now=aware_now)
     store.update_mood_state(metadata=check_metadata)
 
-    if not should_fire_longing(longing, rng=rng):
+    fired = force_proactive or should_fire_longing(longing, rng=rng)
+    if not fired:
         return BehaviorDecision(
             decision="observe",
             avatar_state="idle",

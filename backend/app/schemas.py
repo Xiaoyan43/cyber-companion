@@ -58,6 +58,7 @@ class BehaviorDecisionSchema(BaseModel):
 class BehaviorEvaluateRequest(BaseModel):
     user_input: str = ""
     event_type: Literal["user_message", "proactive_check", "idle_tick"] = "user_message"
+    force_proactive: bool = False
 
 
 class ProviderStatusSchema(BaseModel):

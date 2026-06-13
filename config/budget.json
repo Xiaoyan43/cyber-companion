@@ -23,12 +23,16 @@
   "proactive_min_gap_minutes": 30,
   "proactive_min_fire_gap_hours": 6,
   "proactive_daily_max": 2,
+  "proactive_max_delta_seconds": 600,
   "longing_silence_hours_scale": 48,
   "longing_closeness_weight": 0.55,
   "longing_loneliness_weight": 0.45,
-  "longing_lambda_base_per_hour": 0.004,
+  "longing_lambda_base_per_hour": 0.06,
   "longing_lambda_longing_gain": 2.5,
   "proactive_llm": true,
   "proactive_max_output_tokens": 80,
-  "proactive_llm_daily_max": 5
+  "proactive_llm_daily_max": 5,
+  "_validation_notes": {
+    "longing_lambda_base_per_hour": "Validation-period rate (0.06); lower toward ~0.004 after on-device tuning."
+  }
 }

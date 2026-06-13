@@ -3750,3 +3750,39 @@
 不要改动的边界：
 
 - 未做 PI-3 前端；未改 provider 抽象 / memory schema / PI-1 longing timing / PI-2 opener 核心逻辑（仅加 gate + 成本接线）。
+
+## 2026-06-14 — PI-1 follow-ups (calibration, Δt cap, voice cooldown)
+
+本次完成：
+
+- **(a) 校准 + 验证触发**：`longing_lambda_base_per_hour` 调至 0.06（`budget.json` / `budget.example.json`，附 `_validation_notes`）；`POST /behavior/evaluate` 新增 `force_proactive`（默认 false）——跳过 Poisson 与计时闸（post-convo / fire_gap / quiet_hours / 180s local cooldown），仍保留 `enable_proactive`、ignore-backoff、daily cap、PI-4 成本闸。
+- **(b) Cap Δt**：`proactive_max_delta_seconds`（默认 600）在 `longing._resolve_delta_seconds` clamp，长间隔重开不再 p≈1 立刻开火。
+- **(c) 语音 turn 冷却结论**：RTC `POST /rtc/turn` → `analyze_turn` → `persist_chat_turn` 用户消息已是 `source='chat'`；`get_last_user_chat_created_at` 无需改查询。已在 `store.py` 注释 + 测试记录。
+- `backend/tests/test_pi1_followups.py`（7 tests）；更新 `docs/PERSONA_AND_BEHAVIOR.md`、`docs/COST_AND_TOKEN_BUDGET.md`、`docs/TODO.md`。
+
+下次接着做：
+
+- PI-3：前端 delivery 感（avatar + attention cue）。
+- λ 按设备口味从 0.06 回调 toward ~0.004。
+
+已知问题：
+
+- `force_proactive` 仅供 dev/smoke，前端 tick 未接此参数（手动 curl/Postman 验证）。
+- Pure E2E RTC 若未走 `/rtc/turn` off-path 分析，则不会写入 SQLite chat — 那是已知 PS 路径限制，非本切片 bug。
+
+相关文件：
+
+- `backend/app/behavior/longing.py`, `engine.py`
+- `backend/app/schemas.py`, `backend/app/main.py`
+- `backend/app/memory/budget.py`, `store.py`
+- `config/budget.json`, `config/budget.example.json`
+- `backend/tests/test_pi1_followups.py`
+- `docs/PERSONA_AND_BEHAVIOR.md`, `docs/COST_AND_TOKEN_BUDGET.md`, `docs/TODO.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check` — 379 passed + tsc green
+
+不要改动的边界：
+
+- 未改 PI-2 opener / PI-4 闸核心；未做 PI-3 前端。

@@ -89,8 +89,15 @@ Guards so the box does not nag:
   post-conversation gap (`proactive_min_gap_minutes`, default 30), quiet hours
   (`proactive_quiet_hours`, default 23:00–08:00), daily cap (`proactive_daily_max`,
   default 2), and hours-level fire gap (`proactive_min_fire_gap_hours`, default 6)
-  between real initiations (`last_proactive_fired_at`). Longing rate knobs:
-  `longing_lambda_base_per_hour`, `longing_lambda_longing_gain`, silence/closeness/loneliness weights.
+  between real initiations (`last_proactive_fired_at`). App-reopen uses capped Δt
+  (`proactive_max_delta_seconds`, default 600) so a long tab gap cannot force
+  `p ≈ 1` on the first check. Longing rate knobs: `longing_lambda_base_per_hour`
+  (validation default 0.06 in `budget*.json`; settle toward ~0.004 for production),
+  `longing_lambda_longing_gain`, silence/closeness/loneliness weights.
+- **Dev validation:** `POST /behavior/evaluate` accepts `force_proactive=true` on
+  `proactive_check` — skips Poisson roll and timing gates (post-convo gap, fire gap,
+  quiet hours, 180s local-line cooldown) but still honors `enable_proactive`,
+  ignore-backoff, daily cap, and PI-4 cost brake. For repeatable full-chain smoke.
 - **Proactive opener LLM** (`proactive_llm`, default on): one short soul-authored line per
   fire when allowed; `proactive_llm_daily_max` rate-limits LLM openers. Over the shared
   spend brake (`monthly_usd_limit` / `daily_llm_turn_limit` via `usage_guard`) → canned

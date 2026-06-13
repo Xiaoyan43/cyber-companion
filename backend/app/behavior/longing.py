@@ -134,6 +134,7 @@ def check_proactive_availability(
     relationship: RelationshipStateRecord,
     last_user_message_at: str | None,
     now: datetime | None = None,
+    skip_timing_gates: bool = False,
 ) -> ProactiveGateResult:
     aware = _aware_now(now)
 
@@ -143,26 +144,27 @@ def check_proactive_availability(
     if has_pending_proactive_reply(mood.metadata):
         return ProactiveGateResult(blocked=True, reason="awaiting_user_reply")
 
-    fire_gap_hours = max(0.0, budget.proactive_min_fire_gap_hours)
-    if fire_gap_hours > 0:
-        hours_since_fire = _hours_since(
-            str(mood.metadata.get("last_proactive_fired_at") or ""),
-            now=aware,
-        )
-        if hours_since_fire is not None and hours_since_fire < fire_gap_hours:
-            return ProactiveGateResult(blocked=True, reason="proactive_fire_gap")
+    if not skip_timing_gates:
+        fire_gap_hours = max(0.0, budget.proactive_min_fire_gap_hours)
+        if fire_gap_hours > 0:
+            hours_since_fire = _hours_since(
+                str(mood.metadata.get("last_proactive_fired_at") or ""),
+                now=aware,
+            )
+            if hours_since_fire is not None and hours_since_fire < fire_gap_hours:
+                return ProactiveGateResult(blocked=True, reason="proactive_fire_gap")
 
-    gap_minutes = max(0, budget.proactive_min_gap_minutes)
-    if gap_minutes > 0:
-        last_user = _parse_iso_timestamp(last_user_message_at)
-        if last_user is not None:
-            elapsed_minutes = (aware.astimezone(timezone.utc) - last_user.astimezone(timezone.utc)).total_seconds() / 60.0
-            if elapsed_minutes < gap_minutes:
-                return ProactiveGateResult(blocked=True, reason="post_conversation_cooldown")
+        gap_minutes = max(0, budget.proactive_min_gap_minutes)
+        if gap_minutes > 0:
+            last_user = _parse_iso_timestamp(last_user_message_at)
+            if last_user is not None:
+                elapsed_minutes = (aware.astimezone(timezone.utc) - last_user.astimezone(timezone.utc)).total_seconds() / 60.0
+                if elapsed_minutes < gap_minutes:
+                    return ProactiveGateResult(blocked=True, reason="post_conversation_cooldown")
 
-    quiet = budget.proactive_quiet_hours
-    if len(quiet) >= 2 and _in_quiet_hours(aware, int(quiet[0]), int(quiet[1])):
-        return ProactiveGateResult(blocked=True, reason="quiet_hours")
+        quiet = budget.proactive_quiet_hours
+        if len(quiet) >= 2 and _in_quiet_hours(aware, int(quiet[0]), int(quiet[1])):
+            return ProactiveGateResult(blocked=True, reason="quiet_hours")
 
     daily_max = max(0, budget.proactive_daily_max)
     if daily_max > 0 and _daily_proactive_count(mood.metadata, now=aware) >= daily_max:
@@ -171,12 +173,21 @@ def check_proactive_availability(
     return ProactiveGateResult(blocked=False)
 
 
-def _resolve_delta_seconds(metadata: dict[str, object], *, now: datetime) -> float:
+def _resolve_delta_seconds(
+    metadata: dict[str, object],
+    *,
+    now: datetime,
+    max_delta_seconds: float | None = None,
+) -> float:
     last_check = _parse_iso_timestamp(metadata.get("last_proactive_check_at"))
     if last_check is None:
-        return _DEFAULT_CHECK_INTERVAL_SECONDS
-    elapsed = (now.astimezone(timezone.utc) - last_check.astimezone(timezone.utc)).total_seconds()
-    return max(1.0, elapsed)
+        elapsed = _DEFAULT_CHECK_INTERVAL_SECONDS
+    else:
+        elapsed = (now.astimezone(timezone.utc) - last_check.astimezone(timezone.utc)).total_seconds()
+        elapsed = max(1.0, elapsed)
+    if max_delta_seconds is not None and max_delta_seconds > 0:
+        return min(elapsed, max_delta_seconds)
+    return elapsed
 
 
 def mark_proactive_check(metadata: dict[str, object], *, now: datetime) -> dict[str, object]:
@@ -218,7 +229,11 @@ def snapshot_longing(
         closeness_weight=budget.longing_closeness_weight,
         loneliness_weight=budget.longing_loneliness_weight,
     )
-    delta_seconds = _resolve_delta_seconds(metadata, now=aware)
+    delta_seconds = _resolve_delta_seconds(
+        metadata,
+        now=aware,
+        max_delta_seconds=budget.proactive_max_delta_seconds,
+    )
     lambda_rate = compute_lambda_rate(longing=intensity, budget=budget)
     fire_probability = poisson_fire_probability(lambda_rate=lambda_rate, delta_seconds=delta_seconds)
     return LongingSnapshot(

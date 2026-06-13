@@ -605,7 +605,11 @@ def evaluate_behavior_route(request: BehaviorEvaluateRequest) -> BehaviorDecisio
     budget = load_budget_config()
     decision = evaluate_behavior(
         store,
-        BehaviorEvent(event_type=request.event_type, user_input=request.user_input),
+        BehaviorEvent(
+            event_type=request.event_type,
+            user_input=request.user_input,
+            metadata={"force_proactive": request.force_proactive},
+        ),
         budget=budget,
     )
     if request.event_type == "proactive_check" and decision.decision == "proactive":

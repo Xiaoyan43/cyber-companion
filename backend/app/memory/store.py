@@ -89,6 +89,12 @@ class MemoryStore:
         return int(row["total"])
 
     def get_last_user_chat_created_at(self) -> str | None:
+        """Last user turn for post-conversation proactive cooldown.
+
+        Includes text chat and RTC voice turns — both persist via
+        ``persist_chat_turn`` with ``source='chat'`` (see ``turn_analyzer`` /
+        ``companion_brain``).
+        """
         with connect(self.db_path) as connection:
             row = connection.execute(
                 """

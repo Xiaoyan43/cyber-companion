@@ -50,17 +50,19 @@ This requires memory retrieval and summaries. Full-history prompting is not acce
   "longing_silence_hours_scale": 48,
   "longing_closeness_weight": 0.55,
   "longing_loneliness_weight": 0.45,
-  "longing_lambda_base_per_hour": 0.004,
-  "longing_lambda_longing_gain": 2.5
+  "longing_lambda_base_per_hour": 0.06,
+  "longing_lambda_longing_gain": 2.5,
+  "proactive_max_delta_seconds": 600
 }
 ```
 
-### Proactive initiation (PI-1)
+`longing_lambda_base_per_hour` is set to **0.06** in the shipped configs as a
+validation-period rate (fires a couple times/day at high longing). Lower toward
+**~0.004** after on-device tuning. `_validation_notes` in `budget*.json` records
+the same intent.
 
-Local `proactive_check` timing uses the longing model in `behavior/longing.py`
-(no LLM). Knobs above default to a quiet companion: low base Poisson rate,
-2 proactive lines/day max, 30-minute post-conversation cooldown, no outreach
-during quiet hours. Set `enable_proactive` to `false` to disable entirely.
+`proactive_max_delta_seconds` caps the Δt used in the Poisson fire probability so
+app-reopen after a long absence does not force an immediate proactive line.
 
 ### Proactive opener (PI-2 + PI-4)
 
@@ -80,6 +82,17 @@ or over the shared spend brake → canned fallback from `proactive_reason.fallba
   `monthly_usd_limit` / `daily_llm_turn_limit` / reasoning-model rules as chat).
   Successful proactive LLM turns persist real `usage`/`cost` on the behavior_tick
   line with `should_call_llm=true`, so they count toward the same caps.
+
+### Proactive initiation (PI-1)
+
+Local `proactive_check` timing uses the longing model in `behavior/longing.py`
+(no LLM). Set `enable_proactive` to `false` to disable entirely. Dev smoke:
+`force_proactive=true` on `/behavior/evaluate` skips timing/Poisson but keeps
+safety gates (see `docs/PERSONA_AND_BEHAVIOR.md`).
+
+Post-conversation cooldown uses `get_last_user_chat_created_at` (`source='chat'`).
+RTC voice turns via `POST /rtc/turn` → `analyze_turn` → `persist_chat_turn` also
+use `source='chat'`, so voice counts the same as text for this gate.
 
 ### Enforcement (implemented)
 
