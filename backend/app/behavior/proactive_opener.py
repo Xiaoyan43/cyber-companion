@@ -14,9 +14,10 @@ from backend.app.memory.context_builder import _format_impression_block, _format
 from backend.app.memory.database import MoodStateRecord
 from backend.app.memory.persona import load_chinese_persona_prompt
 from backend.app.memory.store import MemoryStore
+from backend.app.memory.usage_guard import evaluate_llm_budget_gate
 from backend.app.providers.exceptions import ProviderError
 from backend.app.providers.router import ProviderRouter
-from backend.app.providers.types import ChatCompletionRequest, ChatMessage
+from backend.app.providers.types import ChatCompletionRequest, ChatCompletionResult, ChatMessage
 
 _PROACTIVE_OPENER_INSTRUCTION = (
     "[Proactive opener task]\n"
@@ -130,7 +131,7 @@ def generate_proactive_opener(
     budget: BudgetConfig,
     router: ProviderRouter,
     provider_name: str | None = None,
-) -> str | None:
+) -> ChatCompletionResult | None:
     messages = build_proactive_messages(store, reason)
     request = ChatCompletionRequest(
         messages=messages,
@@ -139,7 +140,9 @@ def generate_proactive_opener(
     resolved_provider = _pick_proactive_provider(router, provider_name)
     result = router.complete(request, provider_name=resolved_provider)
     line = _sanitize_opener_line(result.content)
-    return line or None
+    if not line:
+        return None
+    return replace(result, content=line)
 
 
 def resolve_proactive_opener(
@@ -158,12 +161,22 @@ def resolve_proactive_opener(
 
     fallback = (decision.local_response or "").strip() or fallback_line_for_reason(reason)
     mood = store.get_mood_state()
+    aware = _aware_now(now)
 
     if not proactive_llm_allowed(budget, mood, now=now):
         return replace(decision, local_response=fallback, proactive_llm_used=False)
 
     try:
-        line = generate_proactive_opener(
+        target_model = router.get_provider(provider_name).status().model
+    except ProviderError:
+        target_model = "mock-boxi"
+
+    gate = evaluate_llm_budget_gate(store, budget, target_model=target_model, now=aware)
+    if not gate.allowed:
+        return replace(decision, local_response=fallback, proactive_llm_used=False)
+
+    try:
+        completion = generate_proactive_opener(
             store,
             reason,
             budget=budget,
@@ -173,13 +186,13 @@ def resolve_proactive_opener(
     except Exception:
         return replace(decision, local_response=fallback, proactive_llm_used=False)
 
-    if not line:
+    if completion is None:
         return replace(decision, local_response=fallback, proactive_llm_used=False)
 
-    aware = _aware_now(now)
     store.update_mood_state(metadata=mark_proactive_llm_used(mood.metadata, now=aware))
     return replace(
         decision,
-        local_response=line,
+        local_response=completion.content,
         proactive_llm_used=True,
+        proactive_completion=completion,
     )

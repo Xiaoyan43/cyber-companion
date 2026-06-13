@@ -45,6 +45,7 @@ This requires memory retrieval and summaries. Full-history prompting is not acce
   "enable_proactive": true,
   "proactive_quiet_hours": [23, 8],
   "proactive_min_gap_minutes": 30,
+  "proactive_min_fire_gap_hours": 6,
   "proactive_daily_max": 2,
   "longing_silence_hours_scale": 48,
   "longing_closeness_weight": 0.55,
@@ -61,12 +62,24 @@ Local `proactive_check` timing uses the longing model in `behavior/longing.py`
 2 proactive lines/day max, 30-minute post-conversation cooldown, no outreach
 during quiet hours. Set `enable_proactive` to `false` to disable entirely.
 
-### Proactive opener (PI-2)
+### Proactive opener (PI-2 + PI-4)
 
 When longing fires, `proactive_llm` (default on) lets the route author one short
 line via the provider (`proactive_max_output_tokens`, default 80).
-`proactive_llm_daily_max` rate-limits LLM openers (cost hook for PI-4). Off or
-failure → canned fallback from `proactive_reason.fallback_line_for_reason`.
+`proactive_llm_daily_max` rate-limits LLM openers per UTC day. Off, over cap,
+or over the shared spend brake → canned fallback from `proactive_reason.fallback_line_for_reason`
+(cost 0).
+
+**PI-4 respect + cost brake:**
+
+- `proactive_pending_since` — after a proactive fire, no second initiation until
+  the user speaks (`awaiting_user_reply` gate). Ignored outreach stays quiet.
+- `proactive_min_fire_gap_hours` (default 6) — minimum hours between real fires
+  (`last_proactive_fired_at`), separate from the 30-minute post-conversation gap.
+- Proactive LLM calls run through `evaluate_llm_budget_gate` (same
+  `monthly_usd_limit` / `daily_llm_turn_limit` / reasoning-model rules as chat).
+  Successful proactive LLM turns persist real `usage`/`cost` on the behavior_tick
+  line with `should_call_llm=true`, so they count toward the same caps.
 
 ### Enforcement (implemented)
 

@@ -39,7 +39,7 @@ Deepening, not from-scratch — the tick loop already exists (`useBehaviorTicks`
   app-reopen doesn't force an instant fire. (c) Verify RTC voice turns count toward post-convo cooldown.
 - [ ] **PI-3 — Delivery feels like initiation (in-app) `[Cursor]`.** Avatar + attention cue; surfaces
   after idle without a user action. (Away-delivery = desktop/box platform follow-on.)
-- [ ] **PI-4 — Respect + cost brake `[Claude spec ✓ → Cursor → update PERSONA_AND_BEHAVIOR + COST]`.**
+- [ ] **PI-4 — Respect + cost brake `[done @ this commit; Claude review pending]`.**
   Caps (hours cooldown, daily max, quiet hours), ignore-backoff (escalating silence not nagging),
   proactive LLM budget brake (partially closes the cloud-voice/proactive cost-guard gap).
 

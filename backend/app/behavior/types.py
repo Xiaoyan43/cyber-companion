@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from backend.app.behavior.proactive_reason import ProactiveReason
+    from backend.app.providers.types import ChatCompletionResult
 
 BehaviorDecisionType = Literal[
     "reply",
@@ -35,3 +36,4 @@ class BehaviorDecision:
     tone_mode: ToneMode = "normal"
     proactive_reason: "ProactiveReason | None" = None
     proactive_llm_used: bool = False
+    proactive_completion: "ChatCompletionResult | None" = None

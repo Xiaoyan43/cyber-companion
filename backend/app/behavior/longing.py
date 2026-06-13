@@ -115,6 +115,18 @@ def _daily_proactive_count(metadata: dict[str, object], *, now: datetime) -> int
         return 0
 
 
+def has_pending_proactive_reply(metadata: dict[str, object]) -> bool:
+    return bool(metadata.get("proactive_pending_since"))
+
+
+def clear_proactive_pending(metadata: dict[str, object]) -> dict[str, object]:
+    if "proactive_pending_since" not in metadata:
+        return metadata
+    updated = dict(metadata)
+    updated.pop("proactive_pending_since", None)
+    return updated
+
+
 def check_proactive_availability(
     *,
     budget: BudgetConfig,
@@ -127,6 +139,18 @@ def check_proactive_availability(
 
     if not budget.enable_proactive:
         return ProactiveGateResult(blocked=True, reason="proactive_disabled")
+
+    if has_pending_proactive_reply(mood.metadata):
+        return ProactiveGateResult(blocked=True, reason="awaiting_user_reply")
+
+    fire_gap_hours = max(0.0, budget.proactive_min_fire_gap_hours)
+    if fire_gap_hours > 0:
+        hours_since_fire = _hours_since(
+            str(mood.metadata.get("last_proactive_fired_at") or ""),
+            now=aware,
+        )
+        if hours_since_fire is not None and hours_since_fire < fire_gap_hours:
+            return ProactiveGateResult(blocked=True, reason="proactive_fire_gap")
 
     gap_minutes = max(0, budget.proactive_min_gap_minutes)
     if gap_minutes > 0:
@@ -163,6 +187,9 @@ def mark_proactive_check(metadata: dict[str, object], *, now: datetime) -> dict[
 
 def mark_proactive_fired(metadata: dict[str, object], *, now: datetime) -> dict[str, object]:
     updated = mark_proactive_check(metadata, now=now)
+    fired_at = now.astimezone(timezone.utc).isoformat()
+    updated["last_proactive_fired_at"] = fired_at
+    updated["proactive_pending_since"] = fired_at
     today = now.date().isoformat()
     if updated.get("proactive_daily_date") != today:
         updated["proactive_daily_date"] = today

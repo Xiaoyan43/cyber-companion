@@ -6,6 +6,7 @@ from datetime import datetime
 from backend.app.behavior.local_responses import local_response_for_decision
 from backend.app.behavior.longing import (
     check_proactive_availability,
+    clear_proactive_pending,
     mark_proactive_check,
     mark_proactive_fired,
     should_fire_longing,
@@ -60,6 +61,10 @@ def evaluate_behavior(
 def _evaluate_user_message(store: MemoryStore, user_input: str) -> BehaviorDecision:
     mood = store.get_mood_state()
     relationship = store.get_relationship_state()
+    cleared_metadata = clear_proactive_pending(mood.metadata)
+    if cleared_metadata is not mood.metadata:
+        store.update_mood_state(metadata=cleared_metadata)
+        mood = store.get_mood_state()
     empty = is_empty_input(user_input)
     low_value = is_low_value_input(user_input)
     rambling = is_rambling(user_input)

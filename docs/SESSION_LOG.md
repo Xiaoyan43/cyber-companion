@@ -3714,3 +3714,39 @@
 不要改动的边界：
 
 - 未做 PI-3/4 全量；未改 provider 抽象 / memory schema / PI-1 longing timing。
+
+## 2026-06-14 — PI-4 Respect boundaries + cost brake
+
+本次完成：
+
+- **ignore-backoff**：`mark_proactive_fired` 写入 `proactive_pending_since`；`check_proactive_availability` 在存在未回复 proactive 时 block（`awaiting_user_reply`）；`user_message` 路径 `clear_proactive_pending` 解锁。
+- **小时级发起间隔**：`proactive_min_fire_gap_hours`（默认 6）+ `last_proactive_fired_at` gate（`proactive_fire_gap`）。
+- **成本闸**：`resolve_proactive_opener` 在 LLM 前走 `evaluate_llm_budget_gate`（monthly/daily/reasoning）；超预算 → canned 回退；成功时 `proactive_completion` 落库真实 usage/cost，`should_call_llm=true` 计入 caps。
+- `BudgetConfig` + `config/budget*.json` 新增 `proactive_min_fire_gap_hours`；`backend/tests/test_proactive_pi4.py`（9 tests）。
+- 更新 `docs/PERSONA_AND_BEHAVIOR.md`、`docs/COST_AND_TOKEN_BUDGET.md`、`docs/TODO.md`。
+
+下次接着做：
+
+- PI-3：前端 delivery 感（avatar + attention cue）。
+- PI-1 follow-ups：λ 校准、`proactive_max_delta_seconds`、RTC voice 计入 post-convo cooldown。
+
+已知问题：
+
+- Proactive opener 尚未在真实 DeepSeek 上 smoke（PI-2 遗留）。
+- `proactive_min_fire_gap_hours` 与 `proactive_daily_max` 同时生效时，高 longing 日仍最多 2–3 次（设计预期）。
+
+相关文件：
+
+- `backend/app/behavior/longing.py`, `engine.py`, `proactive_opener.py`, `types.py`
+- `backend/app/memory/budget.py`, `chat_persistence.py`
+- `config/budget.json`, `config/budget.example.json`
+- `backend/tests/test_proactive_pi4.py`
+- `docs/PERSONA_AND_BEHAVIOR.md`, `docs/COST_AND_TOKEN_BUDGET.md`, `docs/TODO.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check` — 372 passed + tsc green
+
+不要改动的边界：
+
+- 未做 PI-3 前端；未改 provider 抽象 / memory schema / PI-1 longing timing / PI-2 opener 核心逻辑（仅加 gate + 成本接线）。

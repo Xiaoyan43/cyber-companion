@@ -81,7 +81,12 @@ def persist_local_behavior_line(
     if not content:
         raise ValueError("missing local_response")
 
-    result = build_local_completion(decision, user_input="")
+    if decision.proactive_llm_used and decision.proactive_completion is not None:
+        result = decision.proactive_completion
+    else:
+        result = build_local_completion(decision, user_input="")
+
+    should_call_llm = decision.proactive_llm_used if decision.decision == "proactive" else decision.should_call_llm
     assistant_metadata: dict[str, Any] = {
         "provider": result.provider,
         "model": result.model,
@@ -99,7 +104,7 @@ def persist_local_behavior_line(
         },
         "decision": decision.decision,
         "avatar_state": decision.avatar_state,
-        "should_call_llm": decision.should_call_llm,
+        "should_call_llm": should_call_llm,
         "behavior_event": event_type,
         "behavior_reason": decision.reason,
     }

@@ -32,6 +32,7 @@ class BudgetConfig:
     enable_proactive: bool = True
     proactive_quiet_hours: tuple[int, ...] = (23, 8)
     proactive_min_gap_minutes: int = 30
+    proactive_min_fire_gap_hours: float = 6.0
     proactive_daily_max: int = 2
     longing_silence_hours_scale: float = 48.0
     longing_closeness_weight: float = 0.55
@@ -83,6 +84,7 @@ def load_budget_config(config_dir: Path | None = None) -> BudgetConfig:
         enable_proactive=bool(payload.get("enable_proactive", True)),
         proactive_quiet_hours=_parse_quiet_hours(payload.get("proactive_quiet_hours")),
         proactive_min_gap_minutes=int(payload.get("proactive_min_gap_minutes", 30)),
+        proactive_min_fire_gap_hours=float(payload.get("proactive_min_fire_gap_hours", 6.0)),
         proactive_daily_max=int(payload.get("proactive_daily_max", 2)),
         longing_silence_hours_scale=float(payload.get("longing_silence_hours_scale", 48.0)),
         longing_closeness_weight=float(payload.get("longing_closeness_weight", 0.55)),

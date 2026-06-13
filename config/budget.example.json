@@ -21,6 +21,7 @@
   "enable_proactive": true,
   "proactive_quiet_hours": [23, 8],
   "proactive_min_gap_minutes": 30,
+  "proactive_min_fire_gap_hours": 6,
   "proactive_daily_max": 2,
   "longing_silence_hours_scale": 48,
   "longing_closeness_weight": 0.55,
