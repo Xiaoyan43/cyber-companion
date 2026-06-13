@@ -17,6 +17,15 @@
   "llm_summary": true,
   "allow_reasoning_model": false,
   "allow_cloud_stt": false,
-  "allow_cloud_tts": false
+  "allow_cloud_tts": false,
+  "enable_proactive": true,
+  "proactive_quiet_hours": [23, 8],
+  "proactive_min_gap_minutes": 30,
+  "proactive_daily_max": 2,
+  "longing_silence_hours_scale": 48,
+  "longing_closeness_weight": 0.55,
+  "longing_loneliness_weight": 0.45,
+  "longing_lambda_base_per_hour": 0.004,
+  "longing_lambda_longing_gain": 2.5
 }
 

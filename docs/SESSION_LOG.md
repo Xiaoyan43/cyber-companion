@@ -3580,3 +3580,100 @@
 不要改动的边界：
 
 - 未改 provider 抽象 / memory schema / behavior 引擎 / soul writers / OutputMode 0。凭证只存 `.env`，勿写进任何已跟踪文件。
+
+## 2026-06-13 - Visual Spike: being (光核 + 墨)
+
+本次完成：
+
+- 按 `docs/VISUAL_SPIKE_SPEC.md` 做一次性 throwaway 视觉 spike，未动 `frontend/` 产品代码。
+- 新增自包含页 `experiments/being-spike/index.html`：WebGL2 单文件，无外部依赖。
+- **材质 A（半具象光粒子）**：320 粒 capped GPU 点精灵 + 噪声场运动；墨层用与 B 相同的 SDF shader 作底（`u_inkOnly`），粒子 = 光核（felt）。
+- **材质 B（光核透墨）**：domain-warp fbm/curl + SDF 墨形；`u_edge` 控制 smoothstep 宽度（利↔柔）；核 = bloom + 颜色/脉冲 uniform；纸绢 = 程序化 fbm 叠乘。
+- 6 个手动状态按钮：idle、真凶(annoyed)、温柔(warm)、desync-1 压抑、desync-2 逗你、thinking→speaking（~4.2s 连续过渡：核收缩抖动 → 墨散开 → 聚拢流进说话）。
+- 顶部材质 A/B 切换；左上角标注「光核=内心 / 墨=表现」。
+
+下次接着做：
+
+- 用户在浏览器打开 spike，对比 A/B 材质，选定方向。
+- Claude review spike；若选 B，再考虑是否迁入产品 renderer（另开切片）。
+- felt-vs-shown 行为切片（`performative_sharp`）仍按 spec 配对文档，不在此次。
+
+已知问题：
+
+- 未在真机 SE2 上实测帧率；shader 为单 pass、无流体 sim，理论上可跑。
+- 材质 A 粒子轮廓偏抽象，desync 主要靠墨边 + 粒子色温对比阅读。
+
+相关文件：
+
+- `experiments/being-spike/index.html`
+- `docs/VISUAL_SPIKE_SPEC.md`
+
+测试结果：
+
+- 本地可用 `python3 -m http.server` 于 repo 根目录，打开 `http://localhost:8000/experiments/being-spike/` 查看（或直接 file:// 打开 index.html）。
+- 未接 STT/LLM/TTS；未改 behavior contract / SQLite / frontend 产品。
+
+不要改动的边界：
+
+- throwaway，勿 accrete 产品 scope；不接 soul、回声世界、记忆。
+- 不改 provider 抽象 / memory schema / behavior 引擎 decision contract。
+
+### 同日追加 — 材质 B 深化（用户选 B）
+
+- 默认材质切为 B。
+- 墨 alpha 空间变化：`spatialThick = smoothstep(0.18, 0.82, distNorm)`，核中心薄透、边缘浓遮。
+- 核边染色：墨缘 rim band × 核距 × pulse，screen blend 微弱同色相光晕（闪随核）。
+- 边缘模式联动核透出：犀利 = `sharpClip` 硬切 + 紧 falloff；温柔 = 宽 bloom + `softBleed` 渗入墨晕；同一 `u_edge` 驱动。
+
+### 同日追加 — 光核呼吸/颤动
+
+- 新增 `evalCoreLife()`：`breath`（纯 sin，周期准确）+ `organicWave` 多频正弦闪烁（非方波）+ `tremble` 位置/半径微颤。
+- idle：~4s 呼吸，亮度 ±15%、半径 ±5%，极轻微颤。
+- 真凶/desync-1：~0.2s 有机闪烁 + 14Hz 颤动。
+- 温柔/desync-2：~6s 慢呼吸 + `haloSoft` 羽化光晕。
+- thinking→speaking：缩小 30%、10Hz 低幅颤、亮度降低，聚拢说话时渐恢复。
+
+### 同日追加 — 对标参考图（暖墨美学）
+
+- 纸底改 sepia/umber + 烘焙 256² 纸纹贴图。
+- 墨色改暖褐炭（非冷灰紫）；双层 SDF（主体 + 飞白 wisp）+ 各向异性笔触 noise。
+- 核：不规则轮廓 + 白热中心→琥珀衰减；薄墨区暖染 + rim screen 染色加强。
+- **诚实边界**：氛围/透光/色调可逼近 ~75–85%；真实水墨照片级笔触细节需纸纹资产或多 pass，流体仍不做。
+
+## 2026-06-13 — PI-1 Longing model (timing)
+
+本次完成：
+
+- 新增 `backend/app/behavior/longing.py`：longing 强度 L 来自 `last_meaningful_interaction_at × closeness` + 当前 loneliness（修正与 idle loneliness 反号）；Poisson 触发 `p = 1 - exp(-λ·Δt)`，λ 随 L 增大；可注入 seeded RNG。
+- 可用性闸门：对话后冷却（30min）、quiet hours（23–08）、daily cap（2）；`enable_proactive` 总开关。
+- `proactive_check` 接入 longing 模型，替换 stale-job-only 硬触发；命中后 stale job 优先，否则 check-in 本地句。
+- `BudgetConfig` + `config/budget*.json` 新增 proactive/longing 旋钮；更新 `docs/PERSONA_AND_BEHAVIOR.md`、`docs/COST_AND_TOKEN_BUDGET.md`。
+- `backend/tests/test_longing.py` + 更新 behavior/memory 测试；revive-companion MIT 核证记入 `docs/OPEN_SOURCE_REUSE.md`（Level 1，无代码复制）。
+
+下次接着做：
+
+- PI-2：reason picker + soul-authored opener（LLM，rate-limited）。
+- 或用户指定的下一 slice。
+
+已知问题：
+
+- PI-4 ignore-backoff / 成本闸尚未做；Bayesian 学习用户在线时段未做（固定 quiet hours）。
+- 默认 lambda 偏保守，真实长 idle 下触发可能较慢——可按 feel 调 `longing_lambda_*`。
+
+相关文件：
+
+- `backend/app/behavior/longing.py`
+- `backend/app/behavior/engine.py`
+- `backend/app/memory/budget.py`
+- `backend/app/memory/store.py`
+- `config/budget.json`, `config/budget.example.json`
+- `backend/tests/test_longing.py`
+- `docs/PERSONA_AND_BEHAVIOR.md`, `docs/COST_AND_TOKEN_BUDGET.md`, `docs/OPEN_SOURCE_REUSE.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check` — 350 passed + tsc green
+
+不要改动的边界：
+
+- 未做 PI-2/3/4；未改 provider 抽象 / memory schema / file permission policy。

@@ -24,10 +24,10 @@ Final form = **"a being with a world"** (see `docs/VISUAL_SPIKE_SPEC.md` header 
 Deepening, not from-scratch — the tick loop already exists (`useBehaviorTicks` →
 `POST /behavior/evaluate` → persist line). **Spec: `docs/PROACTIVE_INITIATION_SPEC.md`.**
 
-- [ ] **PI-1 — Longing model (timing) `[Claude spec ✓ → Cursor → update PERSONA_AND_BEHAVIOR + COST]`.**
+- [x] **PI-1 — Longing model (timing) `[Claude spec ✓ → Cursor → update PERSONA_AND_BEHAVIOR + COST]`.**
   `behavior/longing.py`: longing from `last_meaningful_interaction_at × closeness` (fix the inverted
   `mood.py:74` sign), stochastic Poisson fire, availability gate (quiet hours / post-convo cooldown /
-  daily cap). Replaces the hard 0.55 threshold. Seedable RNG. Reuse `pearthink123/revive-companion` (verify MIT).
+  daily cap). Replaces stale-job-only fire gate. Seedable RNG. Reuse `pearthink123/revive-companion` (MIT, Level 1).
 - [ ] **PI-2 — Reason + soul-authored opener `[Claude spec ✓ → Cursor → update PERSONA_AND_BEHAVIOR]`.**
   Reason picker (reminder / follow-up / memory callback / check-in) → short in-voice opener via the
   soul (not canned); `proactive_llm` gate + canned fallback; rate-limited.

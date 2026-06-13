@@ -87,6 +87,20 @@ class MemoryStore:
         assert row is not None
         return int(row["total"])
 
+    def get_last_user_chat_created_at(self) -> str | None:
+        with connect(self.db_path) as connection:
+            row = connection.execute(
+                """
+                SELECT created_at FROM messages
+                WHERE source = 'chat' AND role = 'user'
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+            ).fetchone()
+        if row is None:
+            return None
+        return str(row["created_at"])
+
     def list_recent_chat_messages(self, limit: int) -> list[MessageRecord]:
         if limit <= 0:
             return []

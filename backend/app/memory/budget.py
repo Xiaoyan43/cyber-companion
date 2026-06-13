@@ -28,6 +28,16 @@ class BudgetConfig:
     monthly_usd_limit: float = 10.0
     daily_llm_turn_limit: int = 200
     allow_reasoning_model: bool = False
+    # Proactive initiation (PI-1 longing model). Defaults are conservative / quiet.
+    enable_proactive: bool = True
+    proactive_quiet_hours: tuple[int, ...] = (23, 8)
+    proactive_min_gap_minutes: int = 30
+    proactive_daily_max: int = 2
+    longing_silence_hours_scale: float = 48.0
+    longing_closeness_weight: float = 0.55
+    longing_loneliness_weight: float = 0.45
+    longing_lambda_base_per_hour: float = 0.004
+    longing_lambda_longing_gain: float = 2.5
 
 
 def _config_dir() -> Path:
@@ -67,4 +77,22 @@ def load_budget_config(config_dir: Path | None = None) -> BudgetConfig:
         monthly_usd_limit=float(payload.get("monthly_usd_limit", 10.0)),
         daily_llm_turn_limit=int(payload.get("daily_llm_turn_limit", 200)),
         allow_reasoning_model=bool(payload.get("allow_reasoning_model", False)),
+        enable_proactive=bool(payload.get("enable_proactive", True)),
+        proactive_quiet_hours=_parse_quiet_hours(payload.get("proactive_quiet_hours")),
+        proactive_min_gap_minutes=int(payload.get("proactive_min_gap_minutes", 30)),
+        proactive_daily_max=int(payload.get("proactive_daily_max", 2)),
+        longing_silence_hours_scale=float(payload.get("longing_silence_hours_scale", 48.0)),
+        longing_closeness_weight=float(payload.get("longing_closeness_weight", 0.55)),
+        longing_loneliness_weight=float(payload.get("longing_loneliness_weight", 0.45)),
+        longing_lambda_base_per_hour=float(payload.get("longing_lambda_base_per_hour", 0.004)),
+        longing_lambda_longing_gain=float(payload.get("longing_lambda_longing_gain", 2.5)),
     )
+
+
+def _parse_quiet_hours(raw: object) -> tuple[int, ...]:
+    if not isinstance(raw, list) or len(raw) < 2:
+        return (23, 8)
+    try:
+        return (int(raw[0]), int(raw[1]))
+    except (TypeError, ValueError):
+        return (23, 8)

@@ -10,6 +10,7 @@ from backend.app.behavior.parser import (
 )
 from backend.app.behavior.rules import is_rambling
 from backend.app.behavior.types import BehaviorEvent
+from backend.app.memory.budget import BudgetConfig
 from backend.app.memory.database import connect
 from backend.app.memory.store import MemoryStore
 
@@ -75,13 +76,37 @@ def test_stale_job_progress_triggers_proactive(store: MemoryStore) -> None:
     assert "求职" in (decision.local_response or "")
 
 
+def _hot_proactive_budget() -> BudgetConfig:
+    return BudgetConfig(
+        enable_proactive=True,
+        proactive_min_gap_minutes=0,
+        proactive_daily_max=10,
+        longing_lambda_base_per_hour=80.0,
+    )
+
+
 def test_proactive_check_returns_observe_without_stale_job(store: MemoryStore) -> None:
-    decision = evaluate_behavior(store, BehaviorEvent(event_type="proactive_check"))
+    decision = evaluate_behavior(
+        store,
+        BehaviorEvent(event_type="proactive_check"),
+        budget=BudgetConfig(longing_lambda_base_per_hour=0.0),
+    )
     assert decision.decision == "observe"
-    assert decision.reason == "no_stale_job_progress"
+    assert decision.reason == "longing_poisson_miss"
 
 
 def test_proactive_check_uses_stale_job_memory(store: MemoryStore) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime(2026, 6, 13, 12, 0, tzinfo=timezone.utc)
+    store.update_relationship_state(
+        closeness=0.85,
+        last_meaningful_interaction_at=(now - timedelta(hours=30)).isoformat(),
+    )
+    store.update_mood_state(
+        loneliness=0.75,
+        metadata={"last_proactive_check_at": (now - timedelta(hours=1)).isoformat()},
+    )
     memory = store.create_memory(
         type="job_progress",
         content="Applied to two backend roles.",
@@ -89,7 +114,12 @@ def test_proactive_check_uses_stale_job_memory(store: MemoryStore) -> None:
     )
     _age_memory(store, memory.id, "2020-01-01T00:00:00+00:00")
 
-    decision = evaluate_behavior(store, BehaviorEvent(event_type="proactive_check"))
+    decision = evaluate_behavior(
+        store,
+        BehaviorEvent(event_type="proactive_check"),
+        budget=_hot_proactive_budget(),
+        now=now,
+    )
     assert decision.decision == "proactive"
     assert decision.local_response is not None
 
@@ -111,6 +141,17 @@ def test_idle_tick_observe_when_calm(store: MemoryStore) -> None:
 
 
 def test_proactive_check_respects_local_line_cooldown(store: MemoryStore) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime(2026, 6, 13, 12, 0, tzinfo=timezone.utc)
+    store.update_relationship_state(
+        closeness=0.85,
+        last_meaningful_interaction_at=(now - timedelta(hours=30)).isoformat(),
+    )
+    store.update_mood_state(
+        loneliness=0.75,
+        metadata={"last_proactive_check_at": (now - timedelta(hours=1)).isoformat()},
+    )
     memory = store.create_memory(
         type="job_progress",
         content="Applied to two backend roles.",
@@ -118,10 +159,20 @@ def test_proactive_check_respects_local_line_cooldown(store: MemoryStore) -> Non
     )
     _age_memory(store, memory.id, "2020-01-01T00:00:00+00:00")
 
-    first = evaluate_behavior(store, BehaviorEvent(event_type="proactive_check"))
+    first = evaluate_behavior(
+        store,
+        BehaviorEvent(event_type="proactive_check"),
+        budget=_hot_proactive_budget(),
+        now=now,
+    )
     assert first.decision == "proactive"
 
-    second = evaluate_behavior(store, BehaviorEvent(event_type="proactive_check"))
+    second = evaluate_behavior(
+        store,
+        BehaviorEvent(event_type="proactive_check"),
+        budget=_hot_proactive_budget(),
+        now=now + timedelta(seconds=5),
+    )
     assert second.decision == "observe"
     assert second.reason == "local_line_cooldown"
 

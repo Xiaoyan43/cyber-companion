@@ -446,3 +446,11 @@ Version: ~4.66.20 (matches rtc-aigc-demo)
 Used for: V2 RTC Stage 2c — `frontend/src/rtc/useRtcVoice.ts`.
 Local files: frontend/package.json, frontend/src/rtc/**
 Notes: Level 4 (dependency). Join flow mirrors official demo.
+
+Name: revive-companion (Poisson longing timing — reference only)
+URL: https://github.com/pearthink123/revive-companion
+License: MIT (verified via PyPI + repo README badge, 2026-06-13)
+Version/commit: v2.0.0 concept / PoissonLove module
+Used for: PI-1 proactive timing — Poisson `p = 1 - exp(-λ·Δt)` with λ rising in longing intensity.
+Local files: backend/app/behavior/longing.py, backend/app/behavior/engine.py, backend/app/memory/budget.py
+Notes: Level 1 (learn/reference). No code copied; Bayesian user-availability deferred to a later PI slice.

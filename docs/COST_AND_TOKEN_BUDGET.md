@@ -41,9 +41,25 @@ This requires memory retrieval and summaries. Full-history prompting is not acce
   "max_output_tokens_per_turn": 300,
   "allow_reasoning_model": false,
   "allow_cloud_stt": false,
-  "allow_cloud_tts": false
+  "allow_cloud_tts": false,
+  "enable_proactive": true,
+  "proactive_quiet_hours": [23, 8],
+  "proactive_min_gap_minutes": 30,
+  "proactive_daily_max": 2,
+  "longing_silence_hours_scale": 48,
+  "longing_closeness_weight": 0.55,
+  "longing_loneliness_weight": 0.45,
+  "longing_lambda_base_per_hour": 0.004,
+  "longing_lambda_longing_gain": 2.5
 }
 ```
+
+### Proactive initiation (PI-1)
+
+Local `proactive_check` timing uses the longing model in `behavior/longing.py`
+(no LLM). Knobs above default to a quiet companion: low base Poisson rate,
+2 proactive lines/day max, 30-minute post-conversation cooldown, no outreach
+during quiet hours. Set `enable_proactive` to `false` to disable entirely.
 
 ### Enforcement (implemented)
 

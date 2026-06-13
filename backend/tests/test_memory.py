@@ -187,10 +187,37 @@ def test_behavior_evaluate_persists_idle_tick_mutter(client: TestClient) -> None
     assert messages[0]["metadata"]["behavior_event"] == "idle_tick"
 
 
-def test_behavior_evaluate_persists_proactive_check(client: TestClient) -> None:
+def test_behavior_evaluate_persists_proactive_check(client: TestClient, monkeypatch) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    from backend.app.memory.budget import BudgetConfig
     from backend.app.memory.store import get_memory_store
 
+    monkeypatch.setattr(
+        "backend.app.behavior.engine.load_budget_config",
+        lambda: BudgetConfig(
+            enable_proactive=True,
+            proactive_min_gap_minutes=0,
+            proactive_daily_max=10,
+            proactive_quiet_hours=(0, 0),
+            longing_lambda_base_per_hour=80.0,
+        ),
+    )
+    monkeypatch.setattr(
+        "backend.app.behavior.engine.should_fire_longing",
+        lambda snapshot, rng=None: True,
+    )
+
     store = get_memory_store()
+    now = datetime(2026, 6, 13, 12, 0, tzinfo=timezone.utc)
+    store.update_relationship_state(
+        closeness=0.85,
+        last_meaningful_interaction_at=(now - timedelta(hours=30)).isoformat(),
+    )
+    store.update_mood_state(
+        loneliness=0.75,
+        metadata={"last_proactive_check_at": (now - timedelta(hours=1)).isoformat()},
+    )
     memory = store.create_memory(
         type="job_progress",
         content="Applied to two backend roles.",

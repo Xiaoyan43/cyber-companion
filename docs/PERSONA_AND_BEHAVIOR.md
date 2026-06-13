@@ -68,16 +68,25 @@ These should change slowly. Do not reset emotions after every message.
 The companion feels alive by reacting to time, not only to user messages. Two
 local tick events drive this, and neither calls the LLM:
 
-- `idle_tick`: raises `boredom` (+0.05) and `loneliness` (+0.03), lowers
-  `energy` (-0.02). Past a threshold it surfaces a short `mutter` (annoyed) or
+- `idle_tick`: raises `boredom` (+0.05) and `loneliness` (+0.03 × `(1-closeness)`),
+  lowers `energy` (-0.02). Past a threshold it surfaces a short `mutter` (annoyed) or
   drops to a `sleepy`/low-energy `observe`. Otherwise it just updates state.
-- `proactive_check`: if job progress has gone stale, surfaces a `proactive`
-  nudge; otherwise `observe`.
+- `proactive_check`: **longing model** (`behavior/longing.py`) computes intensity
+  `L ∈ [0,1]` from silence since `last_meaningful_interaction_at` **× closeness**
+  (not the inverted idle loneliness term) plus current `loneliness`. Each check
+  rolls a Poisson draw `p = 1 - exp(-λ·Δt)` with λ rising in `L`; on hit it
+  surfaces `proactive` (stale job nudge if memory exists, else a short check-in).
+  Otherwise `observe`.
 
 Guards so the box does not nag:
 
 - A 180s local-line cooldown (`mood.metadata.last_local_line_at`) blocks repeated
-  unsolicited lines.
+  unsolicited lines (idle mutters and proactive alike).
+- **Proactive availability** (`config/budget.json`): `enable_proactive`,
+  post-conversation gap (`proactive_min_gap_minutes`, default 30), quiet hours
+  (`proactive_quiet_hours`, default 23:00–08:00), daily cap (`proactive_daily_max`,
+  default 2). Longing rate knobs: `longing_lambda_base_per_hour`,
+  `longing_lambda_longing_gain`, silence/closeness/loneliness weights.
 - The client polls idle every ~90s and proactive every ~300s, only after the
   user has been quiet, pausing while a turn is sending or while TTS is speaking,
   and skipping entirely when the tab is hidden.

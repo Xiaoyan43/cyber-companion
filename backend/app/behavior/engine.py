@@ -1,6 +1,17 @@
 from __future__ import annotations
 
+import random
+from datetime import datetime
+
 from backend.app.behavior.local_responses import local_response_for_decision
+from backend.app.behavior.longing import (
+    check_proactive_availability,
+    mark_proactive_check,
+    mark_proactive_fired,
+    proactive_checkin_line,
+    should_fire_longing,
+    snapshot_longing,
+)
 from backend.app.behavior.mood import (
     apply_idle_tick_mood_delta,
     apply_user_message_mood_delta,
@@ -17,15 +28,23 @@ from backend.app.behavior.rules import (
     mentions_overwhelmed,
 )
 from backend.app.behavior.types import BehaviorDecision, BehaviorEvent
+from backend.app.memory.budget import BudgetConfig, load_budget_config
 from backend.app.memory.store import MemoryStore
 
 
-def evaluate_behavior(store: MemoryStore, event: BehaviorEvent) -> BehaviorDecision:
+def evaluate_behavior(
+    store: MemoryStore,
+    event: BehaviorEvent,
+    *,
+    budget: BudgetConfig | None = None,
+    rng: random.Random | None = None,
+    now: datetime | None = None,
+) -> BehaviorDecision:
     if event.event_type == "user_message":
         return _evaluate_user_message(store, event.user_input)
 
     if event.event_type == "proactive_check":
-        return _evaluate_proactive_check(store)
+        return _evaluate_proactive_check(store, budget=budget, rng=rng, now=now)
 
     if event.event_type == "idle_tick":
         return _evaluate_idle_tick(store)
@@ -136,8 +155,17 @@ def _evaluate_user_message(store: MemoryStore, user_input: str) -> BehaviorDecis
     )
 
 
-def _evaluate_proactive_check(store: MemoryStore) -> BehaviorDecision:
+def _evaluate_proactive_check(
+    store: MemoryStore,
+    *,
+    budget: BudgetConfig | None = None,
+    rng: random.Random | None = None,
+    now: datetime | None = None,
+) -> BehaviorDecision:
+    config = budget or load_budget_config()
     mood = store.get_mood_state()
+    relationship = store.get_relationship_state()
+
     if recently_spoke_locally(mood):
         return BehaviorDecision(
             decision="observe",
@@ -146,22 +174,63 @@ def _evaluate_proactive_check(store: MemoryStore) -> BehaviorDecision:
             reason="local_line_cooldown",
         )
 
-    stale_job = find_stale_job_memory(store.list_memories(limit=100))
-    if stale_job is None:
+    gate = check_proactive_availability(
+        budget=config,
+        mood=mood,
+        relationship=relationship,
+        last_user_message_at=store.get_last_user_chat_created_at(),
+        now=now,
+    )
+    if gate.blocked:
         return BehaviorDecision(
             decision="observe",
             avatar_state="idle",
             should_call_llm=False,
-            reason="no_stale_job_progress",
+            reason=gate.reason or "proactive_gate",
         )
 
-    store.update_mood_state(metadata=mark_local_line_spoken(mood.metadata))
+    longing = snapshot_longing(
+        closeness=relationship.closeness,
+        loneliness=mood.loneliness,
+        last_meaningful_interaction_at=relationship.last_meaningful_interaction_at,
+        metadata=mood.metadata,
+        budget=config,
+        now=now,
+    )
+
+    aware_now = now if now is not None else datetime.now().astimezone()
+    check_metadata = mark_proactive_check(mood.metadata, now=aware_now)
+    store.update_mood_state(metadata=check_metadata)
+
+    if not should_fire_longing(longing, rng=rng):
+        return BehaviorDecision(
+            decision="observe",
+            avatar_state="idle",
+            should_call_llm=False,
+            reason="longing_poisson_miss",
+        )
+
+    stale_job = find_stale_job_memory(store.list_memories(limit=100))
+    fired_metadata = mark_proactive_fired(check_metadata, now=aware_now)
+    fired_metadata = mark_local_line_spoken(fired_metadata)
+    store.update_mood_state(metadata=fired_metadata)
+
+    if stale_job is not None:
+        return BehaviorDecision(
+            decision="proactive",
+            avatar_state="worried",
+            should_call_llm=False,
+            reason="stale_job_progress",
+            local_response=local_response_for_decision("proactive"),
+            tone_mode="normal",
+        )
+
     return BehaviorDecision(
         decision="proactive",
         avatar_state="worried",
         should_call_llm=False,
-        reason="stale_job_progress",
-        local_response=local_response_for_decision("proactive"),
+        reason="longing_checkin",
+        local_response=proactive_checkin_line(),
         tone_mode="normal",
     )
 
