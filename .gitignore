@@ -46,3 +46,7 @@ recordings/
 # OS
 .DS_Store
 
+# Scratch / tooling — never publish (vendor doc scrapes, local agent config)
+.firecrawl/
+.claude/
+

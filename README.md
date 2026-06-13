@@ -1,65 +1,76 @@
-# Cyber Companion
+# Cyber Companion · 赛博伴侣
 
-Low-cost AI desktop companion prototype.
+> A low-cost AI desktop companion — *a small person trapped in a box* — that remembers you,
+> has moods, lets a relationship with you evolve, and reaches out to you on her own.
 
-The MVP is a desktop software prototype before hardware integration. It presents a pixel-style character that feels like a small person trapped inside a box, with chat, configurable LLM providers, local long-term memory, personality, and eventually voice.
+Most AI "companions" are a pretty shell over a stateless chatbot. This is the opposite: the
+investment is in the **soul** — persistent memory, an emotional/relationship kernel, and
+proactive behaviour — so it feels less like a tool you query and more like *someone who's there*.
 
-## Current Direction
+Her name is **Boxi**. Default personality: `毒舌被困小人` — sharp-tongued and a little trapped,
+but under the edge she actually cares.
 
-- Personality: `毒舌被困小人 + low-dose companionship`
-- First platform: local desktop/web prototype
-- Default provider: DeepSeek
-- Optional providers: OpenAI, local models
-- Memory: SQLite plus JSON configuration
-- Voice: staged after text MVP
-- Filesystem access: explicit sandbox folders only
+## What makes it different — the "soul"
 
-## Start Here
+- **A subjectivity kernel.** Boxi has a private mood (annoyance, worry, loneliness, energy) and a
+  *relationship state* with you that moves over time — trust, closeness, familiarity, tension. Her
+  tone is a function of both.
+- **Real long-term memory.** Typed memories in SQLite (profile, projects, reminders, events…),
+  LLM-based extraction with a deterministic fallback, background reflection that consolidates and
+  forms impressions, and cross-memory links — not "stuff the whole transcript into the prompt."
+- **Proactive initiation.** She reaches out *on her own timeline* — a "longing" model
+  (closeness × silence, stochastic Poisson timing), about a real reason (a due reminder, something
+  you said you'd do, a memory worth recalling), in her own voice, with genuine restraint: quiet
+  hours, daily caps, and an ignore-backoff so she never nags.
+- **A behaviour engine, not a yes-man.** She can reply, stay silent, refuse, mutter, or interrupt —
+  decided locally before any model call.
+- **Voice.** A cascaded speech pipeline (streaming STT → the soul → streaming TTS) plus realtime
+  explorations, with the soul authoring her words.
 
-Read these files in order:
+## Architecture
 
-1. `docs/PROJECT_BRIEF.md`
-2. `docs/ARCHITECTURE.md`
-3. `docs/MVP_ROADMAP.md`
-4. `docs/SESSION_PROTOCOL.md`
-5. `docs/TODO.md`
-6. `docs/SESSION_LOG.md`
-7. `docs/OPEN_SOURCE_REUSE.md`
-8. `docs/CURSOR_PHASE_PLAYBOOK.md`
+- **Frontend:** React + TypeScript (Vite) — pixel-style character + chat.
+- **Backend:** Python + FastAPI — provider abstraction, memory engine, behaviour engine,
+  file-permission gateway.
+- **Storage:** SQLite (memory) + JSON config (persona, providers, budgets, permissions).
+- **Models:** DeepSeek (chat) and Doubao / Volcengine (voice) behind a provider layer; mock
+  providers for offline dev.
+- Secrets are environment-only; cloud calls are budget-gated; file access is sandboxed to explicit
+  allowed folders.
 
-When opening a new AI coding session, the user can say `推进`. The agent should then read the files above and continue from the next unfinished task.
+## Status
 
-## Development Setup
+A working **text + voice MVP** with the full soul stack (memory, kernel, behaviour, proactive
+initiation, reflection). The visual direction (*"a being with a world"*) and the hardware form
+(an old iPhone as the "box") are in exploration. This is a personal prototype — expect rough edges.
 
-Backend:
+## Quickstart
+
+Requires Python 3.11+, Node 18+, and a `DEEPSEEK_API_KEY` (or run fully offline in mock mode).
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r backend/requirements-dev.txt
-npm run dev:backend
-```
+# backend env
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r backend/requirements-dev.txt
+cp .env.example .env   # add DEEPSEEK_API_KEY, or set CYBER_COMPANION_PROVIDER_MODE=mock
 
-Frontend:
-
-```bash
+# run
 npm install
-npm run dev:frontend
+npm run dev:backend     # FastAPI on :8000
+npm run dev:frontend    # Vite on :5173
+npm run check           # typecheck + tests
 ```
 
-Run lightweight checks:
+Then open `http://127.0.0.1:5173`.
 
-```bash
-npm run check
-```
+## Design record
 
-Check a running backend:
+The [`docs/`](docs/) folder is the full design history — architecture, memory design, and the
+soul-deepening / proactive-initiation specs, plus a detailed session log. It also documents *how*
+this was built: an AI pair-programming workflow (an implementer, a reviewer/architect, and a UI
+agent) running a written spec → review → checkpoint loop.
 
-```bash
-npm run health
-```
+## License
 
-Local endpoints:
-
-- Frontend: `http://127.0.0.1:5173`
-- Backend health check: `http://127.0.0.1:8000/health`
+MIT © 2026 Chris Wang — see [LICENSE](LICENSE). Third-party components and their licenses are
+tracked in [docs/OPEN_SOURCE_REUSE.md](docs/OPEN_SOURCE_REUSE.md).

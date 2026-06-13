@@ -200,7 +200,7 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
     **Spec: `docs/V2_RTC_VIKING_MEMORY_SPEC.md`**（跨 session 按 Slice VM-1…5 推进，新窗口说 `推进`）。
     - [x] **VM-1** — 稳定 `VOLC_RTC_DEFAULT_USER_ID` + `MemoryConfig` 注入 `StartVoiceChat`；
       `GET /rtc/status` → `viking_memory_enabled`。
-    - [x] **VM-2** — 记忆库 `friend` + IAM 授权；跨会话召回 **用户 PASS**（Alex / 海岛市）。
+    - [x] **VM-2** — 记忆库 `friend` + IAM 授权；跨会话召回 **用户 PASS**（昵称/城市 召回）。
       `SearchMemory` → `system_role` 注入；档案优先 + 过滤矛盾 event；`MemoryConfig` 默认 `profile_v1`。
     - [x] **VM-3** — 通话结束字幕 → `POST /rtc/memory/session` → Viking `AddSession`；leave 时自动上传。
     - [x] **VM-4** — SQLite 文字记忆注入 `system_role`（近期对话 + 计划要点 + 摘要/印象；

@@ -3111,7 +3111,7 @@
 
 本次完成：
 
-- **跨会话召回用户 PASS：** 新 RTC 通话问「我叫什么 / 我在哪」→ 正确回答 **Alex / 海岛市**。
+- **跨会话召回用户 PASS：** 新 RTC 通话问「我叫什么 / 我在哪」→ 正确回答 **昵称 / 常驻城市**（真实档案，公开版已匿名化）。
 - **根因：** Viking 写入成功，但 `SearchMemory` 注入含一条失败轮次的 event（「你还没告诉我名字」），盖过 `profile_v1`。
 - **修复：** `search_user_memories` + `format_memories_for_system_role` — 档案优先、可读化 profile、过滤矛盾 event；
   `MemoryConfig` 运行时默认仅 `profile_v1`；`agent/start` 打日志（hits/chars）。
