@@ -103,6 +103,10 @@ def persist_local_behavior_line(
         "behavior_event": event_type,
         "behavior_reason": decision.reason,
     }
+    if decision.proactive_reason is not None:
+        assistant_metadata["proactive_reason_kind"] = decision.proactive_reason.kind
+    if decision.proactive_llm_used:
+        assistant_metadata["proactive_llm"] = True
     assistant_message = store.create_message(
         role="assistant",
         content=content,

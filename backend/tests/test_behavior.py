@@ -81,15 +81,22 @@ def _hot_proactive_budget() -> BudgetConfig:
         enable_proactive=True,
         proactive_min_gap_minutes=0,
         proactive_daily_max=10,
+        proactive_quiet_hours=(0, 0),
         longing_lambda_base_per_hour=80.0,
     )
 
 
 def test_proactive_check_returns_observe_without_stale_job(store: MemoryStore) -> None:
+    from datetime import datetime, timezone
+
     decision = evaluate_behavior(
         store,
         BehaviorEvent(event_type="proactive_check"),
-        budget=BudgetConfig(longing_lambda_base_per_hour=0.0),
+        budget=BudgetConfig(
+            longing_lambda_base_per_hour=0.0,
+            proactive_quiet_hours=(0, 0),
+        ),
+        now=datetime(2026, 6, 13, 12, 0, tzinfo=timezone.utc),
     )
     assert decision.decision == "observe"
     assert decision.reason == "longing_poisson_miss"

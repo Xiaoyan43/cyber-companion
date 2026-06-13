@@ -61,6 +61,13 @@ Local `proactive_check` timing uses the longing model in `behavior/longing.py`
 2 proactive lines/day max, 30-minute post-conversation cooldown, no outreach
 during quiet hours. Set `enable_proactive` to `false` to disable entirely.
 
+### Proactive opener (PI-2)
+
+When longing fires, `proactive_llm` (default on) lets the route author one short
+line via the provider (`proactive_max_output_tokens`, default 80).
+`proactive_llm_daily_max` rate-limits LLM openers (cost hook for PI-4). Off or
+failure → canned fallback from `proactive_reason.fallback_line_for_reason`.
+
 ### Enforcement (implemented)
 
 Before every would-be LLM turn, `/chat/complete` runs a spend brake

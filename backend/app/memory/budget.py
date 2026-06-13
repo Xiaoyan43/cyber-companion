@@ -38,6 +38,9 @@ class BudgetConfig:
     longing_loneliness_weight: float = 0.45
     longing_lambda_base_per_hour: float = 0.004
     longing_lambda_longing_gain: float = 2.5
+    proactive_llm: bool = True
+    proactive_max_output_tokens: int = 80
+    proactive_llm_daily_max: int = 5
 
 
 def _config_dir() -> Path:
@@ -86,6 +89,9 @@ def load_budget_config(config_dir: Path | None = None) -> BudgetConfig:
         longing_loneliness_weight=float(payload.get("longing_loneliness_weight", 0.45)),
         longing_lambda_base_per_hour=float(payload.get("longing_lambda_base_per_hour", 0.004)),
         longing_lambda_longing_gain=float(payload.get("longing_lambda_longing_gain", 2.5)),
+        proactive_llm=bool(payload.get("proactive_llm", True)),
+        proactive_max_output_tokens=int(payload.get("proactive_max_output_tokens", 80)),
+        proactive_llm_daily_max=int(payload.get("proactive_llm_daily_max", 5)),
     )
 
 

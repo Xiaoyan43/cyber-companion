@@ -194,7 +194,7 @@ def test_behavior_evaluate_persists_proactive_check(client: TestClient, monkeypa
     from backend.app.memory.store import get_memory_store
 
     monkeypatch.setattr(
-        "backend.app.behavior.engine.load_budget_config",
+        "backend.app.main.load_budget_config",
         lambda: BudgetConfig(
             enable_proactive=True,
             proactive_min_gap_minutes=0,
@@ -206,6 +206,10 @@ def test_behavior_evaluate_persists_proactive_check(client: TestClient, monkeypa
     monkeypatch.setattr(
         "backend.app.behavior.engine.should_fire_longing",
         lambda snapshot, rng=None: True,
+    )
+    monkeypatch.setattr(
+        "backend.app.main.resolve_proactive_opener",
+        lambda store, decision, **kwargs: decision,
     )
 
     store = get_memory_store()

@@ -26,5 +26,8 @@
   "longing_closeness_weight": 0.55,
   "longing_loneliness_weight": 0.45,
   "longing_lambda_base_per_hour": 0.004,
-  "longing_lambda_longing_gain": 2.5
+  "longing_lambda_longing_gain": 2.5,
+  "proactive_llm": true,
+  "proactive_max_output_tokens": 80,
+  "proactive_llm_daily_max": 5
 }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -584,6 +585,36 @@ class MemoryStore:
             reminder_id = int(cursor.lastrowid)
             row = connection.execute("SELECT * FROM reminders WHERE id = ?", (reminder_id,)).fetchone()
         assert row is not None
+        return ReminderRecord(
+            id=row["id"],
+            created_at=row["created_at"],
+            due_at=row["due_at"],
+            title=row["title"],
+            details=row["details"],
+            status=row["status"],
+            source_message_id=row["source_message_id"],
+        )
+
+    def find_due_reminder(self, *, now: datetime | None = None) -> ReminderRecord | None:
+        aware = now if now is not None else datetime.now(timezone.utc)
+        if aware.tzinfo is None:
+            aware = aware.replace(tzinfo=timezone.utc)
+        now_iso = aware.astimezone(timezone.utc).isoformat()
+
+        with connect(self.db_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM reminders
+                WHERE status = 'pending' AND due_at IS NOT NULL AND due_at <= ?
+                ORDER BY due_at ASC, id ASC
+                LIMIT 5
+                """,
+                (now_iso,),
+            ).fetchall()
+
+        if not rows:
+            return None
+        row = rows[0]
         return ReminderRecord(
             id=row["id"],
             created_at=row["created_at"],

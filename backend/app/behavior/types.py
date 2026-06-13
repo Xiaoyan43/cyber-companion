@@ -1,5 +1,8 @@
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from backend.app.behavior.proactive_reason import ProactiveReason
 
 BehaviorDecisionType = Literal[
     "reply",
@@ -30,3 +33,5 @@ class BehaviorDecision:
     reason: str
     local_response: str | None = None
     tone_mode: ToneMode = "normal"
+    proactive_reason: "ProactiveReason | None" = None
+    proactive_llm_used: bool = False

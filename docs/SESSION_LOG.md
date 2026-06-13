@@ -3677,3 +3677,40 @@
 不要改动的边界：
 
 - 未做 PI-2/3/4；未改 provider 抽象 / memory schema / file permission policy。
+
+## 2026-06-13 — PI-2 Reason picker + soul-authored opener
+
+本次完成：
+
+- 新增 `backend/app/behavior/proactive_reason.py`：理由选择器（due reminder → commitment/follow-up → memory callback → check-in），含 canned fallback 行。
+- 新增 `backend/app/behavior/proactive_opener.py`：route 层 compact context + provider 撰写一句开场白（无 signals trailer）；`proactive_llm` 门控、`proactive_llm_daily_max` 限频 hook；失败/关闭/无 key → mock 或 canned 回退。
+- `engine._evaluate_proactive_check`：PI-1 fire 后只返回 `decision=proactive` + `proactive_reason` + fallback（不调 provider）。
+- `POST /behavior/evaluate` proactive 路径调用 `resolve_proactive_opener` 后再落库；metadata 记 `proactive_reason_kind` / `proactive_llm`。
+- `store.find_due_reminder`；`BudgetConfig` + `config/budget*.json` 新增 `proactive_llm`、`proactive_max_output_tokens`、`proactive_llm_daily_max`。
+- 更新 `docs/PERSONA_AND_BEHAVIOR.md`、`docs/COST_AND_TOKEN_BUDGET.md`；`backend/tests/test_proactive_opener.py`（13 tests）。
+
+下次接着做：
+
+- PI-3：前端 delivery 感（avatar + attention cue）。
+- PI-4：ignore-backoff + proactive 成本闸（hook 已留）。
+
+已知问题：
+
+- 无 API key 时 proactive LLM 自动回退 mock provider（开发环境）或 canned；PI-4 全量 cost brake 尚未接 daily/monthly LLM cap。
+- PI-1 timing 未改；用户本地未提交的 `docs/PROACTIVE_INITIATION_SPEC.md` / `docs/TODO.md` 改动未纳入本 commit。
+
+相关文件：
+
+- `backend/app/behavior/proactive_reason.py`, `proactive_opener.py`, `engine.py`, `types.py`
+- `backend/app/main.py`, `backend/app/memory/chat_persistence.py`, `store.py`, `budget.py`
+- `config/budget.json`, `config/budget.example.json`
+- `backend/tests/test_proactive_opener.py`, `test_behavior.py`, `test_longing.py`, `test_memory.py`
+- `docs/PERSONA_AND_BEHAVIOR.md`, `docs/COST_AND_TOKEN_BUDGET.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check` — 363 passed + tsc green
+
+不要改动的边界：
+
+- 未做 PI-3/4 全量；未改 provider 抽象 / memory schema / PI-1 longing timing。

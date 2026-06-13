@@ -30,7 +30,7 @@ def _quiet_budget(**overrides: object) -> BudgetConfig:
         "enable_proactive": True,
         "proactive_min_gap_minutes": 0,
         "proactive_daily_max": 10,
-        "proactive_quiet_hours": (23, 8),
+        "proactive_quiet_hours": (0, 0),
         "longing_silence_hours_scale": 24.0,
         "longing_closeness_weight": 0.6,
         "longing_loneliness_weight": 0.4,
@@ -204,7 +204,7 @@ def test_proactive_check_fires_with_high_longing_and_seeded_rng(store: MemorySto
         now=now,
     )
     assert decision.decision == "proactive"
-    assert decision.reason == "longing_checkin"
+    assert decision.reason == "check_in"
 
 
 def test_proactive_check_stale_job_when_memory_exists(store: MemoryStore) -> None:
@@ -236,15 +236,18 @@ def test_proactive_check_stale_job_when_memory_exists(store: MemoryStore) -> Non
         now=now,
     )
     assert decision.decision == "proactive"
-    assert decision.reason == "stale_job_progress"
+    assert decision.reason == "commitment_followup"
 
 
 def test_proactive_check_misses_when_lambda_zero(store: MemoryStore) -> None:
+    from datetime import datetime, timezone
+
     decision = evaluate_behavior(
         store,
         BehaviorEvent(event_type="proactive_check"),
-        budget=_quiet_budget(),
+        budget=_quiet_budget(proactive_quiet_hours=(0, 0)),
         rng=random.Random(0),
+        now=datetime(2026, 6, 13, 12, 0, tzinfo=timezone.utc),
     )
     assert decision.decision == "observe"
     assert decision.reason == "longing_poisson_miss"

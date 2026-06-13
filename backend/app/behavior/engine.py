@@ -8,10 +8,10 @@ from backend.app.behavior.longing import (
     check_proactive_availability,
     mark_proactive_check,
     mark_proactive_fired,
-    proactive_checkin_line,
     should_fire_longing,
     snapshot_longing,
 )
+from backend.app.behavior.proactive_reason import fallback_line_for_reason, pick_proactive_reason
 from backend.app.behavior.mood import (
     apply_idle_tick_mood_delta,
     apply_user_message_mood_delta,
@@ -215,23 +215,19 @@ def _evaluate_proactive_check(
     fired_metadata = mark_local_line_spoken(fired_metadata)
     store.update_mood_state(metadata=fired_metadata)
 
-    if stale_job is not None:
-        return BehaviorDecision(
-            decision="proactive",
-            avatar_state="worried",
-            should_call_llm=False,
-            reason="stale_job_progress",
-            local_response=local_response_for_decision("proactive"),
-            tone_mode="normal",
-        )
-
+    proactive_reason = pick_proactive_reason(
+        store,
+        longing_intensity=longing.intensity,
+        now=aware_now,
+    )
     return BehaviorDecision(
         decision="proactive",
-        avatar_state="worried",
-        should_call_llm=False,
-        reason="longing_checkin",
-        local_response=proactive_checkin_line(),
+        avatar_state=proactive_reason.avatar_state,
+        should_call_llm=True,
+        reason=proactive_reason.kind,
+        local_response=fallback_line_for_reason(proactive_reason),
         tone_mode="normal",
+        proactive_reason=proactive_reason,
     )
 
 

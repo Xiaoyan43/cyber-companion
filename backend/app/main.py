@@ -11,6 +11,7 @@ from starlette.responses import Response
 
 from backend.app.behavior.completion import build_budget_block_completion, build_local_completion
 from backend.app.behavior.engine import evaluate_behavior
+from backend.app.behavior.proactive_opener import resolve_proactive_opener
 from backend.app.behavior.kernel import apply_signals_to_kernel
 from backend.app.behavior.parser import SignalStreamFilter, parse_structured_assistant_response
 from backend.app.behavior.types import BehaviorEvent
@@ -601,10 +602,19 @@ def _decision_to_schema(decision, *, saved_message_id: int | None = None) -> Beh
 @app.post("/behavior/evaluate", response_model=BehaviorDecisionSchema)
 def evaluate_behavior_route(request: BehaviorEvaluateRequest) -> BehaviorDecisionSchema:
     store = get_memory_store()
+    budget = load_budget_config()
     decision = evaluate_behavior(
         store,
         BehaviorEvent(event_type=request.event_type, user_input=request.user_input),
+        budget=budget,
     )
+    if request.event_type == "proactive_check" and decision.decision == "proactive":
+        decision = resolve_proactive_opener(
+            store,
+            decision,
+            budget=budget,
+            router=get_provider_router(),
+        )
     saved_message_id: int | None = None
     if request.event_type in {"idle_tick", "proactive_check"} and should_persist_local_behavior_line(
         decision,
@@ -614,7 +624,6 @@ def evaluate_behavior_route(request: BehaviorEvaluateRequest) -> BehaviorDecisio
             decision,
             event_type=request.event_type,
         )
-        budget = load_budget_config()
         if budget.behavior_tick_retention > 0:
             store.prune_behavior_tick_messages(budget.behavior_tick_retention)
     return _decision_to_schema(decision, saved_message_id=saved_message_id)
