@@ -39,7 +39,7 @@ Deepening, not from-scratch — the tick loop already exists (`useBehaviorTicks`
   (skips only timing gates; **enable/backoff/daily-cap/cost stay enforced**). (b)
   `proactive_max_delta_seconds=600` Δt cap. (c) RTC voice turns confirmed `source='chat'`
   (`persist_chat_turn` line 32) — counted, no query change. 379 tests green.
-- [ ] **PI-3 — Delivery feels like initiation (in-app) `[Cursor]`.** Avatar + attention cue; surfaces
+- [x] **PI-3 — Delivery feels like initiation (in-app) `[done @ this commit]`.** Avatar + attention cue; surfaces
   after idle without a user action. (Away-delivery = desktop/box platform follow-on.)
 - [x] **PI-4 — Respect + cost brake `[done @ 52f4390; Claude review PASS]`.** ignore-backoff
   (`proactive_pending_since` blocks `awaiting_user_reply` until a user msg clears it), hours fire-gap

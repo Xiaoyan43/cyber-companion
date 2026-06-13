@@ -9,6 +9,12 @@ import { fetchStoredMessages } from "./api/messages";
 import { avatarStates, stateLines, type AvatarState } from "./avatar/types";
 import { useAvatarState } from "./avatar/useAvatarState";
 import { useBehaviorTicks } from "./avatar/useBehaviorTicks";
+import {
+  PROACTIVE_ATTENTION_MS,
+  proactiveAvatarHoldDuration,
+  resolveBehaviorMessageId,
+  shouldSkipDuplicateBehaviorMessage,
+} from "./avatar/proactiveDelivery";
 import { useMoodRest } from "./avatar/useMoodRest";
 import {
   completionToTurnSummary,
@@ -89,6 +95,10 @@ function App() {
   const [chatViewCleared, setChatViewCleared] = useState(
     () => sessionStorage.getItem(CHAT_VIEW_CLEARED_KEY) === "1",
   );
+  const [proactiveAttention, setProactiveAttention] = useState(false);
+  const [proactiveAttentionMessageId, setProactiveAttentionMessageId] = useState<number | null>(
+    null,
+  );
   const [apiHealth, setApiHealth] = useState<ApiHealth>({
     status: "checking",
     detail: "checking local API",
@@ -105,6 +115,7 @@ function App() {
     runChatFetchSequence,
     runEmptySubmitSequence,
     scheduleReturnToIdle,
+    scheduleReturnForMs,
     cancelScheduledReturn,
     returnToRestState,
     applyRestStateIfResting,
@@ -112,6 +123,8 @@ function App() {
   applyRestStateRef.current = applyRestStateIfResting;
   returnToRestStateRef.current = returnToRestState;
   const messageListRef = useRef<HTMLDivElement>(null);
+  const proactiveAttentionTimerRef = useRef<number | null>(null);
+  const lastProactiveScrollRef = useRef<number | null>(null);
   const nextMessageIdRef = useRef(1);
   const chatEpochRef = useRef(0);
   const ttsEpochRef = useRef(0);
@@ -219,11 +232,36 @@ function App() {
   }, [messages]);
 
   useEffect(() => {
+    const lastProactive = [...messages].reverse().find((message) => message.initiation === "proactive");
+    if (!lastProactive || lastProactive.id === lastProactiveScrollRef.current) {
+      return;
+    }
+
+    lastProactiveScrollRef.current = lastProactive.id;
+    requestAnimationFrame(() => {
+      const target = messageListRef.current?.querySelector(
+        `[data-message-id="${lastProactive.id}"]`,
+      );
+      target?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      if (proactiveAttentionTimerRef.current !== null) {
+        window.clearTimeout(proactiveAttentionTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     const verifyWindow = window as Window & {
       __uiVerify?: {
         refreshMoodRest?: () => Promise<string>;
         returnToRestState?: () => void;
         getAvatarStateLabel?: () => string;
+        triggerProactiveCheck?: (force?: boolean) => Promise<BehaviorDecision>;
+        handleBehaviorDecision?: (decision: BehaviorDecision) => Promise<void>;
       };
     };
 
@@ -236,6 +274,10 @@ function App() {
       returnToRestState: () => returnToRestStateRef.current(),
       getAvatarStateLabel: () =>
         document.querySelector(".state-label")?.textContent?.trim() ?? "",
+      triggerProactiveCheck: async (force = true) => {
+        const { evaluateBehavior } = await import("./api/behavior");
+        return evaluateBehavior("proactive_check", "", { forceProactive: force });
+      },
     };
   }, [moodRest.refreshMood]);
 
@@ -467,29 +509,107 @@ function App() {
   speakReplyRef.current = speakReply;
   stopSpeakingRef.current = stopSpeaking;
 
+  const triggerProactiveAttention = useCallback((messageId: number) => {
+    if (proactiveAttentionTimerRef.current !== null) {
+      window.clearTimeout(proactiveAttentionTimerRef.current);
+    }
+
+    setProactiveAttention(true);
+    setProactiveAttentionMessageId(messageId);
+    proactiveAttentionTimerRef.current = window.setTimeout(() => {
+      setProactiveAttention(false);
+      setProactiveAttentionMessageId(null);
+      proactiveAttentionTimerRef.current = null;
+    }, PROACTIVE_ATTENTION_MS);
+  }, []);
+
   const handleBehaviorDecision = useCallback(
     async (decision: BehaviorDecision) => {
       const avatar = parseAvatarState(decision.avatar_state);
       const localLine = decision.local_response?.trim() ?? "";
 
-      if (
-        localLine &&
-        (decision.decision === "mutter" || decision.decision === "proactive")
-      ) {
+      if (decision.decision === "proactive" && localLine) {
         chatEpochRef.current += 1;
-        const messageId = decision.saved_message_id ?? allocateMessageId();
+        const messageId = resolveBehaviorMessageId(
+          decision.saved_message_id,
+          allocateMessageId,
+        );
         if (typeof decision.saved_message_id === "number") {
           nextMessageIdRef.current = Math.max(nextMessageIdRef.current, messageId + 1);
         }
-        setMessages((current) => [
-          ...current,
-          {
-            id: messageId,
-            speaker: "boxi",
-            text: localLine,
-            meta: { decision: decision.decision },
-          },
-        ]);
+
+        let appended = false;
+        setMessages((current) => {
+          if (shouldSkipDuplicateBehaviorMessage(current, messageId)) {
+            return current;
+          }
+
+          appended = true;
+          return [
+            ...current,
+            {
+              id: messageId,
+              speaker: "boxi",
+              text: localLine,
+              meta: {
+                decision: decision.decision,
+                shouldCallLlm: decision.should_call_llm,
+              },
+              initiation: "proactive",
+            },
+          ];
+        });
+
+        if (!appended) {
+          return;
+        }
+
+        triggerProactiveAttention(messageId);
+        cancelScheduledReturn();
+        setManualState(avatar);
+        scheduleReturnForMs(avatar, proactiveAvatarHoldDuration(avatar, localLine));
+
+        const shouldAttemptTts = ttsEnabledRef.current && !ttsMutedRef.current;
+        if (!shouldAttemptTts) {
+          return;
+        }
+
+        const spoke = await speakReplyRef.current({
+          text: localLine,
+          decision: decision.decision,
+          avatarState: decision.avatar_state,
+        });
+        if (!spoke) {
+          scheduleReturnForMs(avatar, proactiveAvatarHoldDuration(avatar, localLine));
+        }
+        return;
+      }
+
+      if (decision.decision === "mutter" && localLine) {
+        chatEpochRef.current += 1;
+        const messageId = resolveBehaviorMessageId(
+          decision.saved_message_id,
+          allocateMessageId,
+        );
+        if (typeof decision.saved_message_id === "number") {
+          nextMessageIdRef.current = Math.max(nextMessageIdRef.current, messageId + 1);
+        }
+
+        setMessages((current) => {
+          if (shouldSkipDuplicateBehaviorMessage(current, messageId)) {
+            return current;
+          }
+
+          return [
+            ...current,
+            {
+              id: messageId,
+              speaker: "boxi",
+              text: localLine,
+              meta: { decision: decision.decision },
+            },
+          ];
+        });
         cancelScheduledReturn();
         setManualState(avatar);
 
@@ -518,7 +638,13 @@ function App() {
         }
       }
     },
-    [cancelScheduledReturn, scheduleReturnToIdle, setManualState],
+    [
+      cancelScheduledReturn,
+      scheduleReturnForMs,
+      scheduleReturnToIdle,
+      setManualState,
+      triggerProactiveAttention,
+    ],
   );
 
   const { markUserActivity: markBehaviorActivity } = useBehaviorTicks({
@@ -529,6 +655,19 @@ function App() {
     },
   });
   markBehaviorActivityRef.current = markBehaviorActivity;
+
+  useEffect(() => {
+    const verifyWindow = window as Window & {
+      __uiVerify?: {
+        handleBehaviorDecision?: (decision: BehaviorDecision) => Promise<void>;
+      };
+    };
+
+    verifyWindow.__uiVerify = {
+      ...verifyWindow.__uiVerify,
+      handleBehaviorDecision,
+    };
+  }, [handleBehaviorDecision]);
 
   const {
     enabled: pushToTalkEnabled,
@@ -641,10 +780,13 @@ function App() {
         <div className="status-strip">
           <span className="status-dot" aria-hidden="true" />
           <span>Boxi</span>
+          {proactiveAttention ? (
+            <span className="proactive-attention-dot" aria-label="Boxi reached out" />
+          ) : null}
           <span className="state-label">{avatarState}</span>
         </div>
 
-        <PixelCharacter state={avatarState} />
+        <PixelCharacter state={avatarState} attentionPulse={proactiveAttention} />
 
         <p className="status-line">{statusText}</p>
 
@@ -704,7 +846,10 @@ function App() {
         ) : null}
       </section>
 
-      <section className="chat-panel" aria-label="Chat">
+      <section
+        className={proactiveAttention ? "chat-panel proactive-attention" : "chat-panel"}
+        aria-label="Chat"
+      >
         <div className="chat-header">
           <div>
             <h1>Cyber Companion</h1>
@@ -772,9 +917,23 @@ function App() {
           ) : null}
           {messages.map((message) => {
             const metaLine = message.meta ? formatMessageMeta(message.meta) : null;
+            const messageClassName = [
+              "message",
+              message.speaker,
+              message.initiation === "proactive" ? "initiation-proactive" : "",
+              message.id === proactiveAttentionMessageId && proactiveAttention
+                ? "attention-cue"
+                : "",
+            ]
+              .filter(Boolean)
+              .join(" ");
 
             return (
-              <article key={message.id} className={`message ${message.speaker}`}>
+              <article
+                key={message.id}
+                data-message-id={message.id}
+                className={messageClassName}
+              >
                 <span className="speaker">{message.speaker === "boxi" ? "Boxi" : "You"}</span>
                 <p>{message.text}</p>
                 {metaLine ? <p className="message-meta">{metaLine}</p> : null}

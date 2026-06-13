@@ -107,6 +107,12 @@ Guards so the box does not nag:
 - The client polls idle every ~90s and proactive every ~300s, only after the
   user has been quiet, pausing while a turn is sending or while TTS is speaking,
   and skipping entirely when the tab is hidden.
+- **PI-3 in-app delivery (frontend):** when `proactive_check` returns
+  `decision=proactive`, the chat app appends `local_response` once (deduped by
+  `saved_message_id`), holds `avatar_state` longer than idle mutters, and shows
+  restrained attention cues (stage pulse, chat highlight, 「主动找你」 label).
+  TTS reuses selective policy when unmuted. Dev: `window.__uiVerify.triggerProactiveCheck(true)`
+  then `handleBehaviorDecision(await …)` in console, or curl `force_proactive` + reload.
 
 Idle/proactive lines are saved to history (`source="behavior_tick"`) but are not
 replayed into the provider context (see `docs/MEMORY_DESIGN.md`).

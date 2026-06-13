@@ -3786,3 +3786,41 @@
 不要改动的边界：
 
 - 未改 PI-2 opener / PI-4 闸核心；未做 PI-3 前端。
+
+## 2026-06-14 — PI-3 Proactive delivery (in-app frontend)
+
+本次完成：
+
+- **自动气泡**：`handleBehaviorDecision` 拆分 proactive 路径；用 `saved_message_id` 去重后直接追加
+  `local_response`（不重载 `/memory/messages`，避免双显）；历史恢复时 `decision=proactive` 标记 `initiation`。
+- **头像跟随**：proactive 使用 `proactiveAvatarHoldDuration`（+1400ms bonus）+ `scheduleReturnForMs`，
+  避免被 idle rest 立刻盖掉；`PixelCharacter` 支持 `attentionPulse`。
+- **克制注意提示**：状态条小圆点、stage 柔和 pulse、聊天气泡高亮/滑入、「· 主动找你」标签；2.8s 自动消退。
+  无提示音（尊重静音默认）。
+- **TTS**：复用现有 `speakReply` + selective policy（`proactive` in speak_decisions）；保留 avatar/TTS 竞态修复。
+- Dev：`evaluateBehavior(..., { forceProactive })`；`window.__uiVerify.triggerProactiveCheck` +
+  `handleBehaviorDecision` 供控制台一键验证。
+
+下次接着做：
+
+- λ 从 0.06 按设备口味回调；PI 系列 live smoke on real DeepSeek opener quality。
+
+已知问题：
+
+- 单独 `curl force_proactive` 不会推送到已开页面（需控制台 hook 或刷新看历史）；正常 tick 路径自动出现。
+- `ui_verify.mjs` 未加 proactive 场景（需 dev server + Playwright）。
+
+相关文件：
+
+- `frontend/src/App.tsx`, `avatar/proactiveDelivery.ts`, `avatar/useAvatarState.ts`
+- `frontend/src/components/PixelCharacter.tsx`, `PixelCharacter.css`
+- `frontend/src/chat/types.ts`, `frontend/src/api/behavior.ts`, `frontend/src/styles.css`
+- `docs/PERSONA_AND_BEHAVIOR.md`, `docs/TODO.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check` — 379 passed + tsc green
+
+不要改动的边界：
+
+- 纯前端；未改后端 / behavior 契约 / provider；无 away-delivery / OS 通知。

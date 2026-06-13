@@ -4,11 +4,15 @@ import "./PixelCharacter.css";
 
 type PixelCharacterProps = {
   state: AvatarState;
+  attentionPulse?: boolean;
 };
 
-export function PixelCharacter({ state }: PixelCharacterProps) {
+export function PixelCharacter({ state, attentionPulse = false }: PixelCharacterProps) {
   return (
-    <div className="stage" data-state={state}>
+    <div
+      className={attentionPulse ? "stage attention-pulse" : "stage"}
+      data-state={state}
+    >
       <div className="pixel-person" aria-label={`Boxi is ${state}`}>
         <div className="antenna" />
         <div className="head">

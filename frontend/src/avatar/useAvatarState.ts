@@ -80,6 +80,15 @@ export function useAvatarState(
     [clearTimers, resolveRestState, schedule],
   );
 
+  const scheduleReturnForMs = useCallback(
+    (state: AvatarState, holdMs: number) => {
+      clearTimers();
+      setAvatarState(state);
+      schedule(() => setAvatarState(resolveRestState()), holdMs);
+    },
+    [clearTimers, resolveRestState, schedule],
+  );
+
   const runEmptySubmitSequence = useCallback(() => {
     clearTimers();
     setAvatarState("annoyed");
@@ -127,6 +136,7 @@ export function useAvatarState(
     runChatFetchSequence,
     runEmptySubmitSequence,
     scheduleReturnToIdle,
+    scheduleReturnForMs,
     cancelScheduledReturn,
     returnToRestState,
     applyRestStateIfResting,

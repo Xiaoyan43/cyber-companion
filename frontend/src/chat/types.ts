@@ -25,6 +25,8 @@ export type ChatMessage = {
   speaker: "boxi" | "user";
   text: string;
   meta?: MessageMeta;
+  /** Marks a proactive initiation bubble (PI-3 delivery). */
+  initiation?: "proactive";
 };
 
 export type TurnSummary = {
@@ -78,6 +80,10 @@ export function storedMessageToChatMessage(message: StoredMessage): ChatMessage 
     speaker: message.role === "assistant" ? "boxi" : "user",
     text: message.content,
     meta: message.role === "assistant" ? readMessageMeta(message.metadata) : undefined,
+    initiation:
+      message.role === "assistant" && message.metadata?.decision === "proactive"
+        ? "proactive"
+        : undefined,
   };
 }
 

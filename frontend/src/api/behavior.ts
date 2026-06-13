@@ -15,6 +15,7 @@ export type BehaviorEventType = "user_message" | "proactive_check" | "idle_tick"
 export async function evaluateBehavior(
   eventType: BehaviorEventType,
   userInput = "",
+  options?: { forceProactive?: boolean },
 ): Promise<BehaviorDecision> {
   const response = await fetch(`${apiBaseUrl}/behavior/evaluate`, {
     method: "POST",
@@ -24,6 +25,7 @@ export async function evaluateBehavior(
     body: JSON.stringify({
       event_type: eventType,
       user_input: userInput,
+      force_proactive: options?.forceProactive === true,
     }),
   });
 

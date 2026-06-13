@@ -262,6 +262,66 @@ button {
   line-height: 1.4;
 }
 
+.message.boxi.initiation-proactive {
+  border-color: #7a6848;
+  background: linear-gradient(135deg, #2f2a24 0%, #2a2726 58%);
+  animation: proactive-bubble-in 520ms ease-out 1;
+}
+
+.message.boxi.initiation-proactive.attention-cue {
+  box-shadow: 0 0 0 1px rgba(240, 194, 113, 0.42), 0 10px 28px rgba(240, 194, 113, 0.12);
+}
+
+.message.boxi.initiation-proactive .speaker::after {
+  margin-left: 8px;
+  color: #c9a85e;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  content: "· 主动找你";
+}
+
+.chat-panel.proactive-attention .message-list {
+  box-shadow: inset 0 0 0 1px rgba(240, 194, 113, 0.16);
+  border-radius: 8px;
+  transition: box-shadow 480ms ease;
+}
+
+.proactive-attention-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #f0c271;
+  box-shadow: 0 0 10px rgba(240, 194, 113, 0.72);
+  animation: proactive-dot-pulse 1.6s ease-in-out 2;
+}
+
+@keyframes proactive-bubble-in {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes proactive-dot-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .turn-meta {
   display: flex;
   flex-wrap: wrap;
