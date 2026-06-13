@@ -50,6 +50,24 @@ New `backend/app/behavior/longing.py`. Replaces the hard 0.55 threshold as the *
   + Bayesian user-availability. The Bayesian *learned* availability is a later refinement; PI-1
   uses fixed quiet-hours.
 
+### PI-1 follow-ups (from review of `ab14a7e`)
+
+- **Calibration — the default rate is too quiet to observe.** At `longing_lambda_base_per_hour =
+  0.004`, even at *max* longing λ ≈ 0.014/hr → ~0.2 fires per active day (≈ once every 5 days). For
+  validation, raise it ~10–20× (try `0.05–0.08`) so it fires a couple times/day at high longing,
+  feel it on-device, then settle a real default. **Pure config, no code change.** The math is
+  correct; the constant is just tiny.
+- **App-reopen — DECISION: cap Δt.** On reopen after a long absence, the accumulated Δt makes
+  `p = 1 − exp(−λΔt) ≈ 1` → she fires the instant you open the app, before you speak (and the
+  post-convo cooldown won't block it, since your last message is old). **Cap the Δt used in the
+  fire probability** — new `proactive_max_delta_seconds` (default ≈ one normal check interval, e.g.
+  600 s) clamped in `longing._resolve_delta_seconds` — so a long gap can't force an immediate fire;
+  high longing then drives an *organic* initiation a little into the session. The "you're back"
+  greeting stays the job of the existing WelcomeMessage, **not** the proactive path.
+- **Verify voice turns count toward the post-convo cooldown.** `get_last_user_chat_created_at`
+  filters `source='chat'`; confirm RTC voice user-turns share that source, or she may initiate
+  right after a voice conversation. Text-only is acceptable until cascaded voice is primary.
+
 ## PI-2 — Reason + soul-authored opener `[Claude spec → Cursor → update PERSONA_AND_BEHAVIOR]`
 
 When PI-1 fires, choose a **reason** and author the opener through the **soul**, not a canned string.

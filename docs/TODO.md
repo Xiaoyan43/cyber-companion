@@ -27,10 +27,16 @@ Deepening, not from-scratch — the tick loop already exists (`useBehaviorTicks`
 - [x] **PI-1 — Longing model (timing) `[Claude spec ✓ → Cursor → update PERSONA_AND_BEHAVIOR + COST]`.**
   `behavior/longing.py`: longing from `last_meaningful_interaction_at × closeness` (fix the inverted
   `mood.py:74` sign), stochastic Poisson fire, availability gate (quiet hours / post-convo cooldown /
-  daily cap). Replaces stale-job-only fire gate. Seedable RNG. Reuse `pearthink123/revive-companion` (MIT, Level 1).
-- [ ] **PI-2 — Reason + soul-authored opener `[Claude spec ✓ → Cursor → update PERSONA_AND_BEHAVIOR]`.**
-  Reason picker (reminder / follow-up / memory callback / check-in) → short in-voice opener via the
-  soul (not canned); `proactive_llm` gate + canned fallback; rate-limited.
+  daily cap). Replaces stale-job-only fire gate. Seedable RNG. Reuse `pearthink123/revive-companion` (MIT, Level 1). **Claude review PASS @ `ab14a7e`** — 350 tests green; see PI-1 follow-ups below.
+- [x] **PI-2 — Reason + soul-authored opener `[done @ c6fe473; Claude review PASS]`.**
+  Reason picker (reminder / follow-up / memory callback / check-in) → in-voice opener authored at the
+  **route layer** (`proactive_opener.resolve_proactive_opener`, engine stays provider-free);
+  `proactive_llm` gate + daily LLM cap (PI-4 cost hook) + triple canned fallback; 363 tests green.
+  **Not yet smoke-tested on a real provider** (opener quality = mock-only so far).
+- [ ] **PI-1 follow-ups (from review) `[Cursor]`.** (a) Live calibration — default
+  `longing_lambda_base_per_hour=0.004` fires ≈once/5d even at max longing; crank ~10–20× to validate,
+  then settle. (b) **Cap Δt** (`proactive_max_delta_seconds≈600`) in `_resolve_delta_seconds` so
+  app-reopen doesn't force an instant fire. (c) Verify RTC voice turns count toward post-convo cooldown.
 - [ ] **PI-3 — Delivery feels like initiation (in-app) `[Cursor]`.** Avatar + attention cue; surfaces
   after idle without a user action. (Away-delivery = desktop/box platform follow-on.)
 - [ ] **PI-4 — Respect + cost brake `[Claude spec ✓ → Cursor → update PERSONA_AND_BEHAVIOR + COST]`.**
