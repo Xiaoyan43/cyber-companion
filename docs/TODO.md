@@ -19,6 +19,24 @@ Final form = **"a being with a world"** (see `docs/VISUAL_SPIKE_SPEC.md` header 
   (the echo world; reads existing kernel + `memories`, no new tables).
 - [ ] (deep-voice) Un-shelf cascaded soul-authored voice as primary (Phases 1–3); pure E2E → fast toggle.
 
+## Proactive initiation (PI) — 2026-06-13: the missing companion pillar
+
+Deepening, not from-scratch — the tick loop already exists (`useBehaviorTicks` →
+`POST /behavior/evaluate` → persist line). **Spec: `docs/PROACTIVE_INITIATION_SPEC.md`.**
+
+- [ ] **PI-1 — Longing model (timing) `[Claude spec ✓ → Cursor → update PERSONA_AND_BEHAVIOR + COST]`.**
+  `behavior/longing.py`: longing from `last_meaningful_interaction_at × closeness` (fix the inverted
+  `mood.py:74` sign), stochastic Poisson fire, availability gate (quiet hours / post-convo cooldown /
+  daily cap). Replaces the hard 0.55 threshold. Seedable RNG. Reuse `pearthink123/revive-companion` (verify MIT).
+- [ ] **PI-2 — Reason + soul-authored opener `[Claude spec ✓ → Cursor → update PERSONA_AND_BEHAVIOR]`.**
+  Reason picker (reminder / follow-up / memory callback / check-in) → short in-voice opener via the
+  soul (not canned); `proactive_llm` gate + canned fallback; rate-limited.
+- [ ] **PI-3 — Delivery feels like initiation (in-app) `[Cursor]`.** Avatar + attention cue; surfaces
+  after idle without a user action. (Away-delivery = desktop/box platform follow-on.)
+- [ ] **PI-4 — Respect + cost brake `[Claude spec ✓ → Cursor → update PERSONA_AND_BEHAVIOR + COST]`.**
+  Caps (hours cooldown, daily max, quiet hours), ignore-backoff (escalating silence not nagging),
+  proactive LLM budget brake (partially closes the cloud-voice/proactive cost-guard gap).
+
 ## Soul Deepening (Claude spec 2026-06-09 → Cursor implements → Claude reviews)
 
 Spec: `docs/SOUL_DEEPENING_SPEC.md`. Incremental on the working app, **no rebuild**.
