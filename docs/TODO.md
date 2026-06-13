@@ -39,12 +39,13 @@ Deepening, not from-scratch — the tick loop already exists (`useBehaviorTicks`
   (skips only timing gates; **enable/backoff/daily-cap/cost stay enforced**). (b)
   `proactive_max_delta_seconds=600` Δt cap. (c) RTC voice turns confirmed `source='chat'`
   (`persist_chat_turn` line 32) — counted, no query change. 379 tests green.
-- [x] **PI-3 — Delivery feels like initiation (in-app) `[done @ this commit]`.** Avatar + attention cue; surfaces
+- [x] **PI-3 — Delivery feels like initiation (in-app) `[done @ 16cccaf; Claude review PASS]`.** Avatar + attention cue; surfaces
   after idle without a user action. (Away-delivery = desktop/box platform follow-on.)
 - [x] **PI-4 — Respect + cost brake `[done @ 52f4390; Claude review PASS]`.** ignore-backoff
   (`proactive_pending_since` blocks `awaiting_user_reply` until a user msg clears it), hours fire-gap
   (`proactive_min_fire_gap_hours`), and the USD cost brake (`evaluate_llm_budget_gate` pre-call +
-  real completion threaded so cost is recorded). 372 tests green. Remaining: PI-3 + live calibration.
+  real completion threaded so cost is recorded). 372 tests green. **PI series complete (PI-1/2/3/4 + follow-ups);
+remaining: settle validation λ on-device + optional UI regression test.**
 
 ## Soul Deepening (Claude spec 2026-06-09 → Cursor implements → Claude reviews)
 
