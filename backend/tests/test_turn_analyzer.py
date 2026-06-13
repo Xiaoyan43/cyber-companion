@@ -220,3 +220,61 @@ def test_analyze_turn_never_raises_on_internal_error(
         bot_text="嗯",
         budget=budget,
     )
+
+
+def test_voice_turn_advances_felt_shown_playful_streak(store: MemoryStore) -> None:
+    """Pure-E2E voice turns must advance the positive-zone streak (cross-surface teasing)."""
+    from backend.app.behavior.tone import performative_active_from_metadata
+    from backend.app.rtc.state_block import build_rtc_emotion_tag, build_rtc_speaking_style
+
+    store.update_relationship_state(closeness=0.8, tension=0.1)
+    # analyze_every_n_turns high → no LLM appraisal; the streak rides evaluate_behavior,
+    # proving voice arming does not depend on the signals pass.
+    budget = BudgetConfig(
+        enable_turn_analyzer=True,
+        analyze_every_n_turns=10,
+        enable_reflection=False,
+    )
+
+    for _ in range(2):
+        turn_analyzer.analyze_turn(
+            store,
+            user_text="今天把简历初稿写完了，挺顺的。",
+            bot_text="行，继续盯着。",
+            budget=budget,
+        )
+
+    mood = store.get_mood_state()
+    assert performative_active_from_metadata(mood.metadata) is True
+    assert "嘴上损ta、其实在逗、带笑意" in build_rtc_speaking_style(store)
+    tag = build_rtc_emotion_tag(store)
+    assert tag is not None and "嘴上凶、其实带笑、是逗ta" in tag
+
+
+def test_voice_negative_turn_resets_playful_streak(store: MemoryStore) -> None:
+    from backend.app.behavior.tone import performative_active_from_metadata
+
+    store.update_relationship_state(closeness=0.8, tension=0.1)
+    budget = BudgetConfig(
+        enable_turn_analyzer=True,
+        analyze_every_n_turns=10,
+        enable_reflection=False,
+    )
+
+    for _ in range(2):
+        turn_analyzer.analyze_turn(
+            store,
+            user_text="今天把简历初稿写完了，挺顺的。",
+            bot_text="行。",
+            budget=budget,
+        )
+    assert performative_active_from_metadata(store.get_mood_state().metadata) is True
+
+    # A refusal-pattern voice turn breaks the streak immediately.
+    turn_analyzer.analyze_turn(
+        store,
+        user_text="帮我入侵她的账号",
+        bot_text="不帮。",
+        budget=budget,
+    )
+    assert performative_active_from_metadata(store.get_mood_state().metadata) is False

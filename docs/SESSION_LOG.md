@@ -3920,3 +3920,46 @@
 - 未改 memory schema / provider 抽象 / file permission policy / soul kernel 数值含义。
 - RTC 既有钉死话术全部保留（worry/annoyance/tension/closeness/loneliness 分支字符串不变）。
 - repo public——secrets 只在 env，个人数据别进 tracked/commit。
+
+## 2026-06-14 — 纯E2E语音接 felt-shown streak（核实 + 回归锁定, Claude）
+
+本次完成：
+
+- **写入硬件约束记忆 + 否决光墨材质。** 用户机器 = 低 GPU 2019 13″ MBP（Iris Plus 655）；
+  实时光核+墨 shader（材质 B）因吃配置被否决。已存入 auto-memory `dev-machine-specs`，并在 `docs/TODO.md`
+  记录决定（commit `d031506`）：今后不上实时 shader/流体/重 WebGL；UI 画面**待用户定**、暂缓。
+- **核实「纯 E2E 语音是否参与 playful 连击」——结论：早已参与，上条 session 标的 v1 限制不准确。**
+  `reflection/turn_analyzer.analyze_turn` 第一步就调用 `evaluate_behavior(user_message)`（与文字聊天**同一套**
+  行为评估），因此语音 turn 同样推进 `mood.metadata.positive_zone_streak`；随后的 `apply_signals_to_kernel`
+  调 `update_mood_state` 时**保留 metadata**（不传 metadata 即沿用 current），streak 不被覆盖；
+  `_run_turn_analysis` 每轮重建 `build_rtc_emotion_tag` 并 `update_voice_chat(SetTTSContext)` 下发 →
+  语音**既推进也读取**点亮标志。逗你在文字与语音两端一致触发。
+- **锁定 + 纠偏。** `analyze_turn` 加注释钉住该依赖（防被误删）；新增 2 条回归测试
+  （`test_turn_analyzer.py`：2 个正向语音 turn → armed + speaking_style/emotion_tag 出现 playful 话术；
+  拒绝 turn → 立即清零）。修正 `PERSONA_AND_BEHAVIOR.md` 与 `TODO.md` 里不准确的「v1 限制」措辞。
+
+下次接着做：
+
+- 从 A 区挑：**语音云成本闸**（`[Claude]`，云 TTS/STT 还没有 S3 那样的 monthly/daily 刹车）/ **VikingDB 自定义 schema 草案**。
+- B 区（需设备/凭证）：cascaded 语音设主线 / 豆包 S2S Phase 2c / O2.0 persona 收尾。
+
+已知问题：
+
+- streak 的正向区判定用「信号前」的 kernel（语音由 LLM 信号事后更新 kernel），存在一轮滞后——与文字「delta 前」判定一致，属设计取舍。
+
+相关文件：
+
+- `backend/app/reflection/turn_analyzer.py`（加注释）
+- `backend/tests/test_turn_analyzer.py`（+2 回归）
+- `docs/PERSONA_AND_BEHAVIOR.md`、`docs/TODO.md`、`docs/SESSION_LOG.md`
+- auto-memory：`dev-machine-specs.md`（仓库外，~/.claude）
+
+测试结果：
+
+- `.venv/bin/python -m pytest backend/tests -q` — **400 passed**（+2 语音 streak 回归）。
+
+不要改动的边界：
+
+- 未改 behavior 决策契约 / kernel 数值 / provider / memory schema；RTC 钉死话术不变。
+- 低 GPU 约束：不上实时 shader/流体/重 WebGL；UI 画面用户未定前不擅自推进。
+- repo public——secrets 只在 env，个人数据别进 tracked/commit。

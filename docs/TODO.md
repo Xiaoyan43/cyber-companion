@@ -19,9 +19,11 @@ Final form = **"a being with a world"** (see `docs/VISUAL_SPIKE_SPEC.md` header 
   + energy ok) with its OWN playful verbal register (`嘴上损ta、其实在逗、带笑意`), distinct from real
   anger; real negatives win; desync-1 suppression preserved (worry beats annoyance). Live trigger =
   positive-zone streak (`mood.metadata.positive_zone_streak ≥ 2`; any negative event resets) so it
-  reads as a mood. Thresholds consolidated (was dup'd mood.py/state_block.py). **398 backend + tsc green**
+  reads as a mood. Thresholds consolidated (was dup'd mood.py/state_block.py). **400 backend + tsc green**
   (+ `test_tone.py`, RTC playful + engine streak tests). Spec: `docs/VISUAL_SPIKE_SPEC.md` (paired slice).
-  *v1 limit: streak armed on text path; pure-E2E voice reads but doesn't yet advance it.*
+  **Cross-surface confirmed:** pure-E2E voice advances the streak too via
+  `turn_analyzer.analyze_turn → evaluate_behavior` (regression test in `test_turn_analyzer.py`);
+  emotion tag re-pushed per turn. Teasing arms on text *and* voice.
 - [ ] (post-spike, staged — **BLOCKED: UI direction on hold**) Wire material ← live kernel → ambient
   world drift → memory traces (the echo world; reads existing kernel + `memories`, no new tables).
   The kernel side is ready: `behavior/tone.py` already exposes `(felt, expressed_edge, is_performative)`

@@ -95,12 +95,15 @@ Precedence — **real states always win**:
   (`嘴上损ta、其实在逗、带笑意`), distinct from real anger (`更冲、更不耐烦但别凶`).
 - **Positive zone** = absence-of-negatives + `closeness ≥ 0.67` + `energy ≥ 0.3`
   (no "happy" field exists, so it is defined by what is *not* there + closeness).
-- **Live trigger (v1):** teasing arms only after a streak of clean positive-zone
-  reply turns (`mood.metadata.positive_zone_streak ≥ 2`), so it reads as a mood, not
-  a per-turn coin-flip. Any negative message event (empty / low-value / rambling /
-  overwhelmed / refusal) resets the streak immediately. The streak is advanced on the
-  **text-chat** path; pure-E2E voice turns currently *read* the armed flag (via
-  `state_block`) but do not yet advance it — a known v1 limitation.
+- **Live trigger:** teasing arms only after a streak of clean positive-zone reply
+  turns (`mood.metadata.positive_zone_streak ≥ 2`), so it reads as a mood, not a
+  per-turn coin-flip. Any negative message event (empty / low-value / rambling /
+  overwhelmed / refusal) resets the streak immediately. The streak is advanced by the
+  **shared behavior evaluation** on every user turn — text chat directly, and
+  **pure-E2E voice** via `reflection/turn_analyzer.analyze_turn` (which calls
+  `evaluate_behavior`). `apply_signals_to_kernel` preserves `mood.metadata`, and
+  `_run_turn_analysis` re-pushes the emotion tag per turn, so voice both **advances and
+  reads** the armed flag — teasing arms on voice too.
 - Thresholds are consolidated here (was duplicated 0.5/0.4/0.67 across `mood.py`
   and `rtc/state_block.py`); each surface only maps `register → its own words`
   (`local_responses.behavior_tone_instruction`, `state_block` speaking_style /

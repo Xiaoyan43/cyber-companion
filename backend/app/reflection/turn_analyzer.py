@@ -114,6 +114,11 @@ def analyze_turn(
         if not user_text.strip() and not bot_text.strip():
             return
 
+        # Local appraisal for the voice turn: runs the SAME behavior evaluation as
+        # text chat, so pure-E2E voice turns advance the felt-vs-shown positive-zone
+        # streak (mood.metadata.positive_zone_streak) identically — playful teasing
+        # arms on voice too. The later apply_signals_to_kernel preserves metadata,
+        # and _run_turn_analysis re-pushes the emotion tag per turn. Keep this call.
         evaluate_behavior(
             store,
             BehaviorEvent(event_type="user_message", user_input=user_text),
