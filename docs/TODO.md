@@ -32,16 +32,18 @@ Deepening, not from-scratch — the tick loop already exists (`useBehaviorTicks`
   Reason picker (reminder / follow-up / memory callback / check-in) → in-voice opener authored at the
   **route layer** (`proactive_opener.resolve_proactive_opener`, engine stays provider-free);
   `proactive_llm` gate + daily LLM cap (PI-4 cost hook) + triple canned fallback; 363 tests green.
-  **Not yet smoke-tested on a real provider** (opener quality = mock-only so far).
+  **Real-provider smoke PASS** (DeepSeek, 2026-06-14): 4 reasons → short in-voice openers
+  (11–20字), no guilt/nag; check-in invoked the 盒子 persona ("别让我以为盒子里就我一个活物").
 - [ ] **PI-1 follow-ups (from review) `[Cursor]`.** (a) Live calibration — default
   `longing_lambda_base_per_hour=0.004` fires ≈once/5d even at max longing; crank ~10–20× to validate,
   then settle. (b) **Cap Δt** (`proactive_max_delta_seconds≈600`) in `_resolve_delta_seconds` so
   app-reopen doesn't force an instant fire. (c) Verify RTC voice turns count toward post-convo cooldown.
 - [ ] **PI-3 — Delivery feels like initiation (in-app) `[Cursor]`.** Avatar + attention cue; surfaces
   after idle without a user action. (Away-delivery = desktop/box platform follow-on.)
-- [ ] **PI-4 — Respect + cost brake `[done @ this commit; Claude review pending]`.**
-  Caps (hours cooldown, daily max, quiet hours), ignore-backoff (escalating silence not nagging),
-  proactive LLM budget brake (partially closes the cloud-voice/proactive cost-guard gap).
+- [x] **PI-4 — Respect + cost brake `[done @ 52f4390; Claude review PASS]`.** ignore-backoff
+  (`proactive_pending_since` blocks `awaiting_user_reply` until a user msg clears it), hours fire-gap
+  (`proactive_min_fire_gap_hours`), and the USD cost brake (`evaluate_llm_budget_gate` pre-call +
+  real completion threaded so cost is recorded). 372 tests green. Remaining: PI-3 + live calibration.
 
 ## Soul Deepening (Claude spec 2026-06-09 → Cursor implements → Claude reviews)
 
