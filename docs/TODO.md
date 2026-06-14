@@ -254,6 +254,23 @@ hardware-ready (brain/surface split). One phase = one checkpoint.
   rules + fields + weights in the Viking 记忆库 console (per the in-depth investigation); spec to follow.
 - [ ] V2 Phase 4–9 — turn-taking polish, PixiJS room, room reactivity, actions, personal files, the box.
 
+## 语音情绪 + 记忆（2026-06-14 火山/豆包文档全量通读 → 方案）
+
+Source: **`docs/VOICE_EMOTION_MEMORY_PLAN.md`**（依据 `reference/01–15.md` + `reference/SYNTHESIS.md`，仅本地）。
+关键结论：逐句情绪/压"夸张"只有 **cascaded（自管 TTS）** 能做；纯 E2E(OutputMode 0) 忽略 `TTSConfig` →
+我们 PS-6 的 `SetTTSContext` 大概率 no-op；记忆侧有 `streaming_write`/`get_context` + 自定义 schema(算子/权重/衰减) 未用。
+
+- [ ] **VE-1 cascaded 逐句情绪 `[Claude spec → Cursor]`**（最高）。`project_tone`→`emotion`+`emotion_scale`(压夸张) 或
+  `context_texts`；`app/tts/doubao.py` + Pipecat TTS 的 `audio_params/additions` 下发；后端 markdown/emoji 清洗（搬
+  `frontend/voice/speechText.ts` 逻辑）；首句留纯文本。先用 云舟/小天 音色。
+- [ ] **VE-2 纯 E2E 情绪通道核实 + 收尾 `[Claude]`**。设备 A/B 确认 `SetTTSContext`/`TagParse` 在 OutputMode 0 是否生效；
+  无效 → 从 `voice_chat.py` pure 体移除 `TTSConfig.Context` + `routes.py` 停发 SetTTSContext，speaking_style 收口。**依赖用户设备。**
+- [ ] **VM-6 VikingDB 自定义 schema spec `[Claude spec → 用户 console 应用]`**（细化既有「VikingDB custom schemas」条）。
+  Boxi 对齐事件/画像规则 + `AggregateExpression`(MAX/AVG/…) + 自定义权重 + 时间衰减；依据 `reference/06.md`。
+- [ ] **VE-3 IgnoreBracketText → 前端情绪 cue `[Claude spec → Cursor]`**（later）。Boxi 括号动作不读、随字幕下发驱动 avatar；
+  与 UI 方向解耦，先做信号层。需补文档 `6348/2386107 传递自定义指令`。
+- [ ] **（可选）VM-7 `get_context` 迁移评估 `[Claude]`**；**（可选）延迟旋钮**并入 V2_VOICE_LATENCY 后续。
+
 ## Current Priority
 
 - [x] Create a checkpoint commit for the current Phase 2-10 MVP batch after user approval.
