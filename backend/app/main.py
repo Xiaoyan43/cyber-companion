@@ -521,6 +521,30 @@ def tts_stream(
     force: bool = Query(default=False),
 ) -> StreamingResponse | Response:
     router = get_tts_router()
+    context_texts: list[str] | None = None
+    speech_rate = 0
+
+    try:
+        provider_name = router.resolve_provider_name(None)
+    except Exception:
+        provider_name = None
+
+    if provider_name == "doubao":
+        doubao = router.providers.get("doubao")
+        if doubao is not None and doubao.is_configured():
+            store = get_memory_store()
+            mood = store.get_mood_state()
+            relationship = store.get_relationship_state()
+            projection = project_tone(
+                mood,
+                relationship,
+                performative_active=performative_active_from_metadata(mood.metadata),
+            )
+            intensity = register_intensity(mood, relationship, projection)
+            context_texts, speech_rate = tts_emotion_directive(
+                projection,
+                intensity=intensity,
+            )
 
     try:
         policy, chunks = router.stream_synthesize(
@@ -529,6 +553,8 @@ def tts_stream(
                 decision=decision,
                 avatar_state=avatar_state,
                 force=force,
+                context_texts=context_texts,
+                speech_rate=speech_rate,
             ),
         )
     except TTSError as error:

@@ -697,3 +697,40 @@ def test_tts_synthesize_neutral_kernel_omits_emotion_on_doubao(
     assert response.status_code == 200
     assert captured["context_texts"] is None
     assert captured["speech_rate"] == 0
+
+
+def test_tts_stream_neutral_kernel_omits_emotion_on_doubao(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(repo_root / "config"))
+    monkeypatch.setenv("CYBER_COMPANION_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("CYBER_COMPANION_TTS_MODE", "doubao")
+    _set_doubao_env(monkeypatch)
+    reset_tts_router()
+
+    captured: dict[str, object] = {}
+    original_build = DoubaoTTSProvider._build_request_payload
+
+    def _capture_build(self, text, creds, *, context_texts=None, speech_rate=0):
+        captured["context_texts"] = context_texts
+        captured["speech_rate"] = speech_rate
+        return original_build(self, text, creds, context_texts=context_texts, speech_rate=speech_rate)
+
+    monkeypatch.setattr(DoubaoTTSProvider, "_build_request_payload", _capture_build)
+    monkeypatch.setattr(
+        DoubaoTTSProvider,
+        "_iter_stream_synthesis",
+        lambda self, payload, headers: iter([b"audio"]),
+    )
+
+    client = TestClient(app)
+    response = client.get(
+        "/tts/stream",
+        params={"text": "短句测试。", "decision": "reply", "force": True},
+    )
+
+    assert response.status_code == 200
+    assert captured["context_texts"] is None
+    assert captured["speech_rate"] == 0
