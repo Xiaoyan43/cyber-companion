@@ -1,159 +1,76 @@
-# Handoff For Claude Code And Cursor
+# HANDOFF — 上下文交接（2026-06-15）
 
-## ⚠️ DIRECTION CHANGED — Session 26 (read this first)
+> 本文件每次「瘦身交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
 
-The project pivoted to a **V2 rebuild** with a clear vision. New source-of-truth:
-**`docs/ARCHITECTURE_V2.md`** + **`docs/REBUILD_ROADMAP.md`**. See `docs/SESSION_LOG.md`
-Session 26 for the full reasoning. TL;DR:
+## 当前项目目标
+赛博伴侣 / Boxi：一个「被困盒子里的存在」——有人格、记忆、情绪、会主动找你的 AI 陪伴。
+最终形态 = Direction C「一个有世界的存在」（深度 > 延迟；soul 写每个字）。仓库 **public**（MIT）。
 
-- **Two cores:** ① full-duplex real-time voice (on memory + personality) ② "person
-  in a box" = a 2.5D PixiJS pixel room. Hardware end-goal: old **iPhone SE2 + 3D
-  shell** as the box (iPhone = surface; brain runs on the Mac; cloud only for
-  DeepSeek/Doubao).
-- **Base decision:** Pipecat (voice) + KEEP our Python soul + PixiJS pixel room.
-  AIRI / Open-LLM-VTuber / OpenAvatarChat = references only, not forks. Steal:
-  Capacitor-iOS, `@ricky0123/vad-web`, Open-LLM-VTuber's echo-cancellation,
-  emotion→expression mapping.
-- **PRIORITY = SOUL FIRST** (user's 80/20: memory + proactive + emotion = ~80% of
-  emotional value; real-time voice = ~20%). The whole VTuber field skips the soul;
-  we already have its scaffolding. So deepen memory/proactive/emotion on the
-  current working app FIRST; voice/box rebuild comes after.
-- **Budget walls are OFF** (`config/budget.json`: monthly=0, daily=0,
-  reasoning=true). Extra LLM calls for the soul are welcome, but place them
-  latency-smart: sync = piggyback structured signals on the one reply call; heavy
-  reflection = background; trivial = local.
+## 当前阶段目标
+文本 MVP + 主动发起（PI）已完成并实机 PASS。当前阶段 = **让语音有真实的情绪层次 + 让长期记忆更贴人设**
+（语音情绪/记忆改造，见 `docs/VOICE_EMOTION_MEMORY_PLAN.md`）。UI/视觉**暂缓**（用户未定画面；低 GPU 已否决实时 shader）。
 
-**SOUL DEEPENING — DONE (Session 27).** `docs/SOUL_DEEPENING_SPEC.md` + per-phase
-briefs `docs/SD{1,1b,1c,2,3,3b,4,5}_SPEC.md`. Shipped + reviewed + checkpointed:
-SD-1 (piggyback signal contract), SD-2 (subjectivity kernel: emotion vs relationship
-split), SD-3 (LLM memory extraction M2→M3), SD-4 (background reflection layer),
-SD-1b + SD-1c (made the model actually emit the `<<<BOXI_SIGNALS>>>` trailer).
-**Verified on real DeepSeek:** trailer fires, `trust`/`closeness` move for real
-(0.5→0.63 / 0.2→0.36), reflection writes a real impression, zero leak. 192 tests + tsc.
+## 本轮已完成（commits 961da74 → 6c52ab4，除 6c52ab4 外均已 push）
+1. **felt-vs-shown 情绪投射 + 逗你**（961da74）：`tone.py` 成统一情绪投射真源；新增 `playful`（desync-2 逗你）+ 正向连击点亮；RTC/文字/语音一致。
+2. **UI 决定记录**（d031506）：光+墨实时 shader 因低 GPU 否决；UI 待用户定画面。
+3. **纯 E2E 语音接 felt-shown 连击**（6976f77）：核实语音 turn 经 `analyze_turn→evaluate_behavior` 已推进连击 + 回归测试。
+4. **reference/ gitignore**（3ef8aeb）：厂商文档投放区（不公开）。
+5. **语音情绪/记忆方案**（2812c4a）：`docs/VOICE_EMOTION_MEMORY_PLAN.md` + TODO 切片（VE-1/VE-2/VM-6/VE-3）。
+6. **VE-1 spec + 动态范围**（ec4a7bb, 89dee22）：`docs/VE1_SPEC.md`；情绪强度走 base/intense 动态档。
+7. **VE-1 实现**（7f61e6b）：cascaded TTS 情绪（`context_texts`+`speech_rate`，kernel 驱动）+ 后端文本清洗。
+8. **省略号修复**（4c611cf）：TTS 清洗保留 `……`。
+9. **VM-6 spec**（e6e8175）：`docs/VM6_SPEC.md`（Boxi 自定义 Viking schema）。
+10. **VM-6 代码半**（6c52ab4，**未 push**）：`viking_memory.py` 支持内置+自定义类型（默认仍内置，env 激活）。
 
-**NEXT TASK (new window starts here):**
-1. **SD-3b** (`docs/SD3b_SPEC.md`) — small follow-up the smoke found: when the LLM
-   emits `memory[]` items that all fail validation, `record_turn_memories` writes
-   nothing and skips the regex M2 fallback → factual memories get dropped. Fix the
-   fallback + enumerate valid memory types in the protocol. Then re-smoke.
-2. Then **SD-5** (optional, `docs/SD5_SPEC.md`) — memory links + 1-hop retrieval.
-3. Or pivot to **V2 rebuild** (`docs/REBUILD_ROADMAP.md`: Pipecat voice + PixiJS room
-   + Capacitor iPhone shell) — the soul is now deep enough.
+## 已修改文件 + 改动摘要（本轮累计）
+**后端代码：**
+- `backend/app/behavior/tone.py` — 新统一投射 `project_tone`（felt/expressed_edge/is_performative/register）+ 连击 + VE-1 `tts_emotion_directive`/`register_intensity` + base/intense 情绪映射（**单一真源**）。
+- `backend/app/behavior/types.py` — `ToneMode` 加 `playful`；`BehaviorDecision.tone` 字段。
+- `backend/app/behavior/mood.py` — `choose_tone_mode` 改为 `project_tone` 薄壳。
+- `backend/app/behavior/engine.py` — 用 `project_tone` + 连击点亮，决策带 `tone`。
+- `backend/app/behavior/local_responses.py` — `playful` 口吻指令。
+- `backend/app/reflection/turn_analyzer.py` — 注释钉住「语音 turn 推进连击」依赖。
+- `backend/app/rtc/state_block.py` — 情绪文案改读 `tone.py` base 档（RTC 钉死串不变）。
+- `backend/app/rtc/viking_memory.py` — 类型 kind 映射（内置 `profile_v1/event_v1` + 自定义 `boxi_profile/boxi_event`）+ 扁平画像解析；**默认仍内置**。
+- `backend/app/tts/types.py` — `SynthesisRequest` 加 `context_texts`/`speech_rate`。
+- `backend/app/tts/doubao.py` — payload 注入 `context_texts`/`speech_rate` + 合成前 `clean_text_for_tts`；空参向后兼容。
+- `backend/app/tts/text_cleanup.py`（新）— 去 markdown/emoji/括号舞台提示，**保留省略号**。
+- `backend/app/main.py` — `/tts/synthesize` 读内核 → `tts_emotion_directive`，仅 doubao 且配置就绪时注入。
 
-> Provider: DeepSeek works; key lives only in env var `DEEPSEEK_API_KEY` (never
-> committed). `providers.json` absent → falls back to `providers.example.json`
-> (deepseek default). Real smokes: stage key in a temp file, delete after.
-> Working tree is clean; everything checkpointed.
+**测试：** `test_tone.py`、`test_behavior.py`、`test_rtc_state_block.py`、`test_turn_analyzer.py`、`test_tts.py`、`test_rtc_viking_memory.py`（均扩展，未删旧断言）。
 
----
+**文档：** `docs/VOICE_EMOTION_MEMORY_PLAN.md`、`VE1_SPEC.md`、`VM6_SPEC.md`（新）；`docs/TODO.md`、`SESSION_LOG.md`、`PERSONA_AND_BEHAVIOR.md`、`.gitignore`（更新）。
 
-## Current State (pre-pivot reference)
+**gate：** `PYTHON_BIN=.venv/bin/python npm run check` → 411 backend passed + tsc 绿（本轮最后状态）。
 
-Baseline checkpoint: commit `5005731` (Phase 2–10 MVP batch including behavior ticks, CORS, Vite 6, tick persistence). **Policy: one slice → one checkpoint commit; do not accumulate uncommitted work.**
+## 当前未完成
+- **VM-6（进行中）**：代码半完成；**待用户**在火山 console 建 `boxi_event`/`boxi_profile` schema + 权重/衰减 + 设 env，再验证召回。步骤见 `docs/TODO.md` VM-6 条 + `docs/VM6_SPEC.md`。
+- **VE-2**：纯 E2E `SetTTSContext` 是否生效，待**用户设备 A/B**（大概率 no-op，见风险）。
+- **VE-1 收尾**：真机听感确认；`/tts/stream` 未接情绪；路由级「非中性→带情绪」集成测试未补。
+- **VE-3**：IgnoreBracketText→avatar，需补文档 `6348/2386107`。
+- 其它：O2.0 persona 收尾、`get_context` 迁移评估、延迟旋钮（均可选）。
 
-Implemented through Session 23:
+## 已知 bug / 风险
+- **R1（最重要）**：纯端到端(OutputMode 0) 平台**忽略 TTSConfig** → 我们 `voice_chat.py`/`routes.py` 给 pure 体的 `TTSConfig.Context` + `SetTTSContext`（PS-6）**很可能 no-op**。未确认 → VE-2 解决。**别在此基础上加东西。**
+- **R2**：`6c52ab4`（VM-6 代码）**未 push**。
+- **R3**：VM-6 自定义 `boxi_profile` 的检索响应 JSON 结构**未实测**；当前解析是容错/通用拼接，待首条真实响应再细化字段格式化。
+- **R4**：`experiments/` 未跟踪（一次性视觉 spike，低 GPU 已否决实时 shader）——**不要继续开发它**。
+- **R5**：VE-1 情绪只接 `/tts/synthesize`，`/tts/stream` 未接（不一致，已知）。
 
-- Phase 2 pixel character UI and avatar state animations.
-- Phase 3 provider abstraction with mock, DeepSeek, OpenAI placeholder, and local placeholder.
-- Phase 4 SQLite memory schema and CRUD.
-- Phase 5 compact memory retrieval and summary policy.
-- Phase 6 behavior engine with local reply/silent/refuse/interrupt/proactive decisions.
-- Phase 7 file permission gateway for explicit allowed folders only.
-- Phase 8 text MVP integration: backend chat route, persisted messages, compact context, avatar state, usage/cost metadata.
-- Phase 9 push-to-talk STT mock flow and cloud placeholder gated by config/budget.
-- Phase 10 selective TTS mock flow and cloud placeholder gated by config/budget.
+## 下一步只需读取（按任务，**只读这些**）
+- 永远先读：本文件 `docs/HANDOFF.md` + `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`。
+- 做 **VM-6 收尾**：`docs/VM6_SPEC.md`、`backend/app/rtc/viking_memory.py`、`backend/app/rtc/config.py`、`backend/app/rtc/voice_chat.py`。
+- 做 **VE-2**：`docs/VOICE_EMOTION_MEMORY_PLAN.md`、`backend/app/rtc/voice_chat.py`、`backend/app/rtc/routes.py`、`backend/app/rtc/state_block.py`。
+- 做 **VE-1 收尾**：`docs/VE1_SPEC.md`、`backend/app/tts/doubao.py`、`backend/app/main.py`、`backend/app/behavior/tone.py`。
+- 需要厂商 API 细节时：`reference/SYNTHESIS.md`（已是全量精读结论），再按需点开 `reference/NN.md`。
 
-Latest verified checks:
+## 下一步**不要**读取（省上下文）
+- ❌ `docs/SESSION_LOG.md`（3900+ 行历史，本文件已概括）。
+- ❌ `reference/01.md…15.md` 全文（用 `reference/SYNTHESIS.md` 代替；只在确需某接口字段时点开单篇）。
+- ❌ `experiments/`（废弃 spike）。
+- ❌ 全仓库扫描 / 与当前任务无关的模块（如 `files/`、`stt/`、`providers/` 除非任务相关）。
+- ❌ 旧的 V2_*/SD*/PS* spec（除非明确回到那条线）。
 
-```bash
-PYTHON_BIN=.venv/bin/python npm run check
-npm run build:frontend
-```
-
-Both passed after Session 23. Backend tests: 70 passing; frontend `tsc --noEmit` and Vite 6.4.x production build pass. `npm audit` reports 0 vulnerabilities (dev and prod).
-
-`node scripts/ui_verify.mjs`: **37/37 passed** after Session 25 (Playwright 1.60 + Chromium installed). API section passes without browsers; full browser smoke needs `npx playwright install chromium`.
-
-## Ownership Model
-
-Cursor should own about 80-90% of routine implementation:
-
-- UI polish.
-- CSS and animation timing.
-- Small frontend components.
-- Narrow integration wiring.
-- Focused bug fixes with tests.
-
-Claude Code should act mainly as reviewer and critic:
-
-- Architecture review.
-- Security review.
-- Memory quality review.
-- Behavior/personality review.
-- Complex bug investigation.
-
-Claude Code should not rewrite broad modules unless the user explicitly asks. Convert accepted Claude review findings into concrete `docs/TODO.md` items before Cursor implements them.
-
-## First Thing To Do
-
-1. Inspect `git status` — working tree should be clean after each slice commit.
-2. Read project docs (`AGENTS.md`, `docs/HANDOFF.md`, `docs/TODO.md`, `docs/SESSION_LOG.md`).
-3. Run `PYTHON_BIN=.venv/bin/python npm run check` and `npm run build:frontend`.
-4. Pick one slice from **Next Small Slices**, implement, verify, **commit immediately**, update `docs/SESSION_LOG.md`.
-
-## Recommended Claude Code Prompt
-
-```text
-请先阅读 AGENTS.md、CLAUDE.md、docs/HANDOFF.md、docs/TODO.md、docs/SESSION_LOG.md、docs/OPEN_SOURCE_REUSE.md。
-
-本次只做 review，不要改代码。
-重点审查当前未提交的 Phase 2-10 MVP batch：
-1. provider abstraction 是否保持后端-only、密钥不进前端；
-2. memory/context 是否没有发送 full history；
-3. behavior engine 是否没有把 Boxi 写成 generic polite assistant；
-4. file gateway 是否没有 broad filesystem access 或 symlink escape；
-5. STT/TTS 是否 mock-first、cloud-gated、没有连续云监听；
-6. 前端 chat/avatar/voice 状态是否有明显卡死或竞态；
-7. docs/TODO/session log/open-source reuse 是否和实现一致。
-
-输出格式：
-Findings:
-Open questions:
-Suggested next actions:
-
-不要大改，不要提交。
-```
-
-## Recommended Cursor Prompt
-
-```text
-请先阅读 AGENTS.md、.cursor/rules/cyber-companion.mdc、docs/CURSOR_PHASE_PLAYBOOK.md、docs/HANDOFF.md、docs/TODO.md、docs/SESSION_LOG.md、docs/OPEN_SOURCE_REUSE.md。
-
-先检查 git status，尊重当前未提交改动。
-本次只做一个小切片，不开硬件阶段，不接云 STT/TTS，不改 provider abstraction、memory schema、behavior contract、file permission policy。
-
-如果还没有 checkpoint commit，先不要继续堆功能。只运行检查并汇报：
-PYTHON_BIN=.venv/bin/python npm run check
-npm run build:frontend
-
-如果已经 checkpoint，可从 docs/HANDOFF.md 的 Next Small Slices 选一个任务。
-完成后更新 docs/SESSION_LOG.md；只有 TODO 状态真的变化才改 docs/TODO.md。
-```
-
-## Next Small Slices
-
-- Fix or extend `scripts/ui_verify.mjs` (Playwright browsers installed; re-run after UI changes).
-- Have Claude Code do read-only MVP batch review (see prompt below).
-- Wire real cloud STT/TTS only if `allow_cloud_stt` / `allow_cloud_tts` are true and keys are configured.
-
-## Boundaries
-
-- Do not start hardware work unless the user explicitly asks.
-- Do not let frontend call LLM providers directly.
-- Do not put API keys in source or docs.
-- Do not grant broad filesystem access.
-- Do not send full conversation history to providers.
-- Do not let LLM output execute file operations or shell commands.
-- Do not make Boxi a generic polite assistant.
-- Do not have Claude Code and Cursor edit the same module at the same time.
-
+## 推荐下一个最小任务
+**VM-6 收尾**（代码已就绪，剩用户侧 + 验证）：用户在火山 console 按 `docs/VM6_SPEC.md`/TODO 步骤建好 schema + 设 env → 新 session 只需核对 `/rtc/status` 的 `viking_memory_enabled` 与一次跨会话召回。
+若用户暂不便弄 console：退而做 **VE-2 设备 A/B**（确认 R1，决定是否拆 pure 体 TTSConfig，纯核实+小清理）。
