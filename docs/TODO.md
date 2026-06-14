@@ -260,9 +260,10 @@ Source: **`docs/VOICE_EMOTION_MEMORY_PLAN.md`**（依据 `reference/01–15.md` 
 关键结论：逐句情绪/压"夸张"只有 **cascaded（自管 TTS）** 能做；纯 E2E(OutputMode 0) 忽略 `TTSConfig` →
 我们 PS-6 的 `SetTTSContext` 大概率 no-op；记忆侧有 `streaming_write`/`get_context` + 自定义 schema(算子/权重/衰减) 未用。
 
-- [ ] **VE-1 cascaded 逐句情绪 `[Claude spec → Cursor]`**（最高）。`project_tone`→`emotion`+`emotion_scale`(压夸张) 或
-  `context_texts`；`app/tts/doubao.py` + Pipecat TTS 的 `audio_params/additions` 下发；后端 markdown/emoji 清洗（搬
-  `frontend/voice/speechText.ts` 逻辑）；首句留纯文本。先用 云舟/小天 音色。
+- [ ] **VE-1 cascaded 逐句情绪 `[Claude spec ✓ → Cursor builds]`**（最高）。**Spec: `docs/VE1_SPEC.md`。**
+  **决策（用户 2026-06-14）：保持现 2.0 音色 + `context_texts` 自然语言情绪（不换音色、不用 emotion_scale）；压夸张靠克制措辞 + `speech_rate`。**
+  要点：tone.py 收口 `tts_emotion_directive`(register→context_texts 真源，RTC 复用) + 后端 `text_cleanup` 清 markdown/emoji +
+  `doubao.py` payload 下发 + `/tts/synthesize` 接内核。per-reply（非 per-sentence）；纯 E2E 不动。
 - [ ] **VE-2 纯 E2E 情绪通道核实 + 收尾 `[Claude]`**。设备 A/B 确认 `SetTTSContext`/`TagParse` 在 OutputMode 0 是否生效；
   无效 → 从 `voice_chat.py` pure 体移除 `TTSConfig.Context` + `routes.py` 停发 SetTTSContext，speaking_style 收口。**依赖用户设备。**
 - [ ] **VM-6 VikingDB 自定义 schema spec `[Claude spec → 用户 console 应用]`**（细化既有「VikingDB custom schemas」条）。
