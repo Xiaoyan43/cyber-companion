@@ -267,8 +267,11 @@ Source: **`docs/VOICE_EMOTION_MEMORY_PLAN.md`**（依据 `reference/01–15.md` 
   `doubao.py` payload 下发 + `/tts/synthesize` 接内核。per-reply（非 per-sentence）；纯 E2E 不动。
 - [ ] **VE-2 纯 E2E 情绪通道核实 + 收尾 `[Claude]`**。设备 A/B 确认 `SetTTSContext`/`TagParse` 在 OutputMode 0 是否生效；
   无效 → 从 `voice_chat.py` pure 体移除 `TTSConfig.Context` + `routes.py` 停发 SetTTSContext，speaking_style 收口。**依赖用户设备。**
-- [ ] **VM-6 VikingDB 自定义 schema spec `[Claude spec → 用户 console 应用]`**（细化既有「VikingDB custom schemas」条）。
-  Boxi 对齐事件/画像规则 + `AggregateExpression`(MAX/AVG/…) + 自定义权重 + 时间衰减；依据 `reference/06.md`。
+- [ ] **VM-6 VikingDB 自定义 schema `[Claude spec ✓ → 用户 console/API 应用 + Cursor 接代码]`**（细化既有「VikingDB custom schemas」条）。
+  **Spec: `docs/VM6_SPEC.md`。** `boxi_event`(summary/event_time/topic/user_commitment/importance) + `boxi_profile`
+  (basic_info/job_search/personality_prefs/relationship_tone) + 事件权重表达式 `importance` + 融合权重(向量.6/时间.25/事件.15) +
+  14 天无衰减期。代码：`config.viking_memory_types`→自定义名 + `viking_memory.py` 扁平画像解析 + 类型常量。
+  应用/鉴权/console 归用户（建议新建 collection 可回退）；SQLite 仍 source of truth。
 - [ ] **VE-3 IgnoreBracketText → 前端情绪 cue `[Claude spec → Cursor]`**（later）。Boxi 括号动作不读、随字幕下发驱动 avatar；
   与 UI 方向解耦，先做信号层。需补文档 `6348/2386107 传递自定义指令`。
 - [ ] **（可选）VM-7 `get_context` 迁移评估 `[Claude]`**；**（可选）延迟旋钮**并入 V2_VOICE_LATENCY 后续。
