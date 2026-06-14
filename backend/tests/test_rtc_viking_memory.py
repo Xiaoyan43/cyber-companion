@@ -96,6 +96,26 @@ def test_format_memories_skips_contradictory_events() -> None:
     assert "还未告知" not in block
 
 
+def test_format_memories_supports_custom_boxi_schema() -> None:
+    # VM-6: boxi_profile (flat fields) + boxi_event must inject like the builtin types.
+    block = format_memories_for_system_role(
+        [
+            {"memory_type": "boxi_event", "memory_info": {"summary": "用户投了 Acme 的前端岗"}},
+            {
+                "memory_type": "boxi_profile",
+                "memory_info": {
+                    "basic_info": "昵称 Alex，在海岛市",
+                    "job_search": "在找前端，签证 2027 到期",
+                },
+            },
+        ]
+    )
+    assert "【用户档案】" in block
+    assert "Alex" in block
+    assert "签证 2027" in block
+    assert "用户投了 Acme 的前端岗" in block
+
+
 def test_build_voice_chat_appends_memory_context(viking_rtc_config: RtcConfig) -> None:
     body = build_voice_chat_body(
         viking_rtc_config,

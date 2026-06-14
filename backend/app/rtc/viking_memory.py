@@ -16,6 +16,11 @@ ADD_SESSION_PATH = "/api/memory/session/add"
 SEARCH_MEMORY_PATH = "/api/memory/search"
 DEFAULT_SEARCH_MEMORY_TYPES = ("profile_v1", "event_v1")
 DEFAULT_RUNTIME_MEMORY_TYPES = ("profile_v1",)
+# Builtin (profile_v1/event_v1) and custom (boxi_profile/boxi_event, VM-6) map to the
+# same two "kinds" so injection works whichever schema the collection is configured with.
+# Defaults stay on the builtin types — custom is activated by env once the schema exists.
+PROFILE_MEMORY_TYPES = ("profile_v1", "boxi_profile")
+EVENT_MEMORY_TYPES = ("event_v1", "boxi_event")
 DEFAULT_MEMORY_TRANSITION = "关于这位用户，你已知道："
 MEMORY_INJECT_INSTRUCTION = (
     "下列为用户长期记忆。用户问名字、所在地、职业等时，必须以【用户档案】为准直接回答，"
@@ -132,15 +137,35 @@ def _coerce_profile_dict(raw: Any) -> dict[str, Any]:
     return {}
 
 
+def _memory_kind(memory_type: Any) -> str:
+    """Map builtin + custom memory types to 'profile' / 'event' / 'other'."""
+    if memory_type in PROFILE_MEMORY_TYPES:
+        return "profile"
+    if memory_type in EVENT_MEMORY_TYPES:
+        return "event"
+    return "other"
+
+
+def _profile_fields(memory_info: dict[str, Any]) -> dict[str, Any]:
+    """Profile fields from either the builtin nested user_profile or a custom flat hit."""
+    profile = _coerce_profile_dict(memory_info.get("user_profile"))
+    if profile:
+        return profile
+    # Custom (boxi_profile) schema carries flat Properties directly on memory_info.
+    return {k: v for k, v in memory_info.items() if k not in {"user_profile", "summary"}}
+
+
 def _profile_line_from_hit(hit: dict[str, Any]) -> str:
     memory_info = hit.get("memory_info")
     if not isinstance(memory_info, dict):
         return ""
-    profile = _coerce_profile_dict(memory_info.get("user_profile"))
+    profile = _profile_fields(memory_info)
     basic = profile.get("基础信息")
     if not isinstance(basic, dict):
-        return ""
-    parts: list[str] = []
+        # Custom flat schema (boxi_profile): join short non-empty string fields.
+        parts = [str(v).strip() for v in profile.values() if isinstance(v, str) and v.strip()]
+        return "；".join(parts[:4])
+    parts = []
     if nick := basic.get("昵称"):
         parts.append(f"昵称 {nick}")
     if city := basic.get("常驻城市"):
@@ -152,27 +177,25 @@ def _profile_line_from_hit(hit: dict[str, Any]) -> str:
 
 def _extract_profile_nickname(hits: list[dict[str, Any]]) -> str:
     for hit in hits:
-        if hit.get("memory_type") != "profile_v1":
+        if _memory_kind(hit.get("memory_type")) != "profile":
             continue
         memory_info = hit.get("memory_info")
         if not isinstance(memory_info, dict):
             continue
-        profile = _coerce_profile_dict(memory_info.get("user_profile"))
+        profile = _profile_fields(memory_info)
         basic = profile.get("基础信息")
         if isinstance(basic, dict) and (nick := basic.get("昵称")):
+            return str(nick).strip()
+        if nick := profile.get("nickname"):
             return str(nick).strip()
     return ""
 
 
 def _sort_hits_for_inject(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    profiles = [hit for hit in hits if hit.get("memory_type") == "profile_v1"]
-    events = [hit for hit in hits if hit.get("memory_type") == "event_v1"]
+    profiles = [hit for hit in hits if _memory_kind(hit.get("memory_type")) == "profile"]
+    events = [hit for hit in hits if _memory_kind(hit.get("memory_type")) == "event"]
     events.sort(key=lambda hit: int(hit.get("time") or 0), reverse=True)
-    other = [
-        hit
-        for hit in hits
-        if hit.get("memory_type") not in {"profile_v1", "event_v1"}
-    ]
+    other = [hit for hit in hits if _memory_kind(hit.get("memory_type")) == "other"]
     return profiles + events + other
 
 
@@ -187,8 +210,8 @@ def format_memories_for_system_role(hits: list[dict[str, Any]]) -> str:
     nickname = _extract_profile_nickname(sorted_hits)
     lines: list[str] = []
     for hit in sorted_hits:
-        memory_type = hit.get("memory_type")
-        if memory_type == "profile_v1":
+        kind = _memory_kind(hit.get("memory_type"))
+        if kind == "profile":
             line = _profile_line_from_hit(hit)
             if line:
                 lines.append(f"【用户档案】{line}")
@@ -196,7 +219,7 @@ def format_memories_for_system_role(hits: list[dict[str, Any]]) -> str:
         summary = _memory_info_to_line(hit.get("memory_info"))
         if not summary:
             continue
-        if memory_type == "event_v1" and _should_skip_event_summary(summary, nickname):
+        if kind == "event" and _should_skip_event_summary(summary, nickname):
             continue
         lines.append(f"- {summary}")
     if not lines:

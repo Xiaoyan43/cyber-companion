@@ -272,6 +272,10 @@ Source: **`docs/VOICE_EMOTION_MEMORY_PLAN.md`**（依据 `reference/01–15.md` 
   (basic_info/job_search/personality_prefs/relationship_tone) + 事件权重表达式 `importance` + 融合权重(向量.6/时间.25/事件.15) +
   14 天无衰减期。代码：`config.viking_memory_types`→自定义名 + `viking_memory.py` 扁平画像解析 + 类型常量。
   应用/鉴权/console 归用户（建议新建 collection 可回退）；SQLite 仍 source of truth。
+  **代码半已落（Claude，2026-06-14）：** `viking_memory.py` 类型用 kind 映射（`profile_v1|boxi_profile`→profile、
+  `event_v1|boxi_event`→event）+ 扁平画像解析（自定义 `boxi_profile` 字段直接拼）；**默认仍 builtin、自定义经
+  env `VIKING_MEMORY_TYPES=boxi_profile,boxi_event` 激活**（用户 console 建好 schema 后再切，零破坏、可回退）。411 测试绿。
+  **待用户：** 在火山 console/API 建 `boxi_event`/`boxi_profile` + 权重/衰减 + IAM 授权（见下方步骤）。
 - [ ] **VE-3 IgnoreBracketText → 前端情绪 cue `[Claude spec → Cursor]`**（later）。Boxi 括号动作不读、随字幕下发驱动 avatar；
   与 UI 方向解耦，先做信号层。需补文档 `6348/2386107 传递自定义指令`。
 - [ ] **（可选）VM-7 `get_context` 迁移评估 `[Claude]`**；**（可选）延迟旋钮**并入 V2_VOICE_LATENCY 后续。
