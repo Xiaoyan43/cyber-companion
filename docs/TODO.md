@@ -261,7 +261,8 @@ Source: **`docs/VOICE_EMOTION_MEMORY_PLAN.md`**（依据 `reference/01–15.md` 
 我们 PS-6 的 `SetTTSContext` 大概率 no-op；记忆侧有 `streaming_write`/`get_context` + 自定义 schema(算子/权重/衰减) 未用。
 
 - [ ] **VE-1 cascaded 逐句情绪 `[Claude spec ✓ → Cursor builds]`**（最高）。**Spec: `docs/VE1_SPEC.md`。**
-  **决策（用户 2026-06-14）：保持现 2.0 音色 + `context_texts` 自然语言情绪（不换音色、不用 emotion_scale）；压夸张靠克制措辞 + `speech_rate`。**
+  **决策（用户 2026-06-14）：保持现 2.0 音色 + `context_texts` 自然语言情绪（不换音色、不用 emotion_scale）；
+  情绪强度走「动态范围」(选 A)——base/intense 两档随内核量级切换、speech_rate ±6…±20，intense 仍守人设红线（不辱骂/咆哮）。**
   要点：tone.py 收口 `tts_emotion_directive`(register→context_texts 真源，RTC 复用) + 后端 `text_cleanup` 清 markdown/emoji +
   `doubao.py` payload 下发 + `/tts/synthesize` 接内核。per-reply（非 per-sentence）；纯 E2E 不动。
 - [ ] **VE-2 纯 E2E 情绪通道核实 + 收尾 `[Claude]`**。设备 A/B 确认 `SetTTSContext`/`TagParse` 在 OutputMode 0 是否生效；
