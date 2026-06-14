@@ -14,6 +14,12 @@ from backend.app.behavior.engine import evaluate_behavior
 from backend.app.behavior.proactive_opener import resolve_proactive_opener
 from backend.app.behavior.kernel import apply_signals_to_kernel
 from backend.app.behavior.parser import SignalStreamFilter, parse_structured_assistant_response
+from backend.app.behavior.tone import (
+    performative_active_from_metadata,
+    project_tone,
+    register_intensity,
+    tts_emotion_directive,
+)
 from backend.app.behavior.types import BehaviorEvent
 from backend.app.cors import load_cors_origins
 from backend.app.files.config import load_permissions_config
@@ -438,6 +444,30 @@ def tts_evaluate(request: TTSEvaluateRequest) -> TTSEvaluateResponse:
 )
 def tts_synthesize(request: TTSSynthesizeRequest) -> TTSSynthesizeResponse:
     router = get_tts_router()
+    context_texts: list[str] | None = None
+    speech_rate = 0
+
+    try:
+        provider_name = router.resolve_provider_name(request.provider)
+    except Exception:
+        provider_name = None
+
+    if provider_name == "doubao":
+        doubao = router.providers.get("doubao")
+        if doubao is not None and doubao.is_configured():
+            store = get_memory_store()
+            mood = store.get_mood_state()
+            relationship = store.get_relationship_state()
+            projection = project_tone(
+                mood,
+                relationship,
+                performative_active=performative_active_from_metadata(mood.metadata),
+            )
+            intensity = register_intensity(mood, relationship, projection)
+            context_texts, speech_rate = tts_emotion_directive(
+                projection,
+                intensity=intensity,
+            )
 
     try:
         policy, result = router.synthesize(
@@ -446,6 +476,8 @@ def tts_synthesize(request: TTSSynthesizeRequest) -> TTSSynthesizeResponse:
                 decision=request.decision,
                 avatar_state=request.avatar_state,
                 force=request.force,
+                context_texts=context_texts,
+                speech_rate=speech_rate,
             ),
             provider_name=request.provider,
         )

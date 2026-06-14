@@ -7,6 +7,7 @@ import logging
 
 from backend.app.behavior.tone import (
     ToneRegister,
+    base_emotion_context_text,
     performative_active_from_metadata,
     project_tone,
 )
@@ -138,16 +139,6 @@ _SPEAKING_MODIFIER_BY_REGISTER: dict[ToneRegister, str] = {
     "neutral": "",
 }
 
-_EMOTION_TEXT_BY_REGISTER: dict[ToneRegister, str | None] = {
-    "comfort": "语气放软、关切、稍慢",
-    "real_sharp": "更冲、更不耐烦但别凶",
-    "playful": "嘴上凶、其实带笑、是逗ta",
-    "warm": None,
-    "lonely": "更热络一点",
-    "neutral": None,
-}
-
-
 def _kernel_register(
     mood: MoodStateRecord,
     relationship: RelationshipStateRecord,
@@ -170,7 +161,7 @@ def _kernel_emotion_context_text(
     mood: MoodStateRecord,
     relationship: RelationshipStateRecord,
 ) -> str | None:
-    return _EMOTION_TEXT_BY_REGISTER[_kernel_register(mood, relationship)]
+    return base_emotion_context_text(_kernel_register(mood, relationship))
 
 
 def build_rtc_speaking_style_modifier(store: MemoryStore | None = None) -> str:

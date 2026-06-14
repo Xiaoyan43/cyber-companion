@@ -3,10 +3,14 @@
 from backend.app.behavior.tone import (
     PERFORMATIVE_STREAK_THRESHOLD,
     POSITIVE_STREAK_KEY,
+    STRONG_THRESHOLD,
+    _EMOTION_INTENSE_BY_REGISTER,
     in_positive_zone,
     next_positive_streak,
     performative_active_from_metadata,
     project_tone,
+    register_intensity,
+    tts_emotion_directive,
 )
 from backend.app.memory.database import MoodStateRecord, RelationshipStateRecord
 
@@ -161,3 +165,59 @@ def test_performative_active_from_metadata() -> None:
     assert performative_active_from_metadata({POSITIVE_STREAK_KEY: PERFORMATIVE_STREAK_THRESHOLD}) is True
     assert performative_active_from_metadata({POSITIVE_STREAK_KEY: 1}) is False
     assert performative_active_from_metadata({}) is False
+
+
+# ---- cascaded TTS emotion directive (VE-1) --------------------------------
+
+def test_tts_emotion_directive_base_tier_comfort() -> None:
+    mood = _mood(worry=0.6)
+    rel = _rel()
+    projection = project_tone(mood, rel)
+    intensity = register_intensity(mood, rel, projection)
+    texts, rate = tts_emotion_directive(projection, intensity=intensity)
+
+    assert texts == ["语气放软、关切、稍慢"]
+    assert rate < 0
+    assert abs(rate) >= 6
+
+
+def test_tts_emotion_directive_intense_tier_when_strong() -> None:
+    mood = _mood(worry=0.9)
+    rel = _rel()
+    projection = project_tone(mood, rel)
+    intensity = register_intensity(mood, rel, projection)
+    assert intensity >= STRONG_THRESHOLD
+
+    texts, rate = tts_emotion_directive(projection, intensity=intensity)
+    assert texts == ["很担心、明显心疼、放慢、稳住ta"]
+    assert rate < 0
+
+
+def test_tts_emotion_directive_neutral_returns_none_and_zero_rate() -> None:
+    mood = _mood()
+    rel = _rel()
+    projection = project_tone(mood, rel)
+    intensity = register_intensity(mood, rel, projection)
+
+    assert tts_emotion_directive(projection, intensity=intensity) == (None, 0)
+
+
+def test_tts_emotion_directive_speech_rate_scales_with_intensity() -> None:
+    mood = _mood(annoyance=0.9)
+    rel = _rel()
+    projection = project_tone(mood, rel)
+
+    _, low_rate = tts_emotion_directive(projection, intensity=0.2)
+    _, high_rate = tts_emotion_directive(projection, intensity=0.95)
+
+    assert low_rate > 0
+    assert high_rate > low_rate
+    assert abs(low_rate) >= 6
+    assert abs(high_rate) <= 20
+
+
+def test_intense_phrases_avoid_forbidden_exaggeration_wording() -> None:
+    forbidden = ("用最", "咆哮")
+    for phrase in _EMOTION_INTENSE_BY_REGISTER.values():
+        for marker in forbidden:
+            assert marker not in phrase

@@ -9,6 +9,8 @@ class SynthesisRequest:
     decision: str | None = None
     avatar_state: str | None = None
     force: bool = False
+    context_texts: list[str] | None = None
+    speech_rate: int = 0
 
 
 @dataclass(frozen=True)

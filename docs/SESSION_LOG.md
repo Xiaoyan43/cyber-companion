@@ -3868,8 +3868,7 @@
 
 不要改动的边界：
 
-- repo public——secrets 只在 env，个人数据别进 tracked/commit。不重写已发布历史（除非用户要求）。
-  O2.0 默认、SC2.0 toggle 勿删；不改 soul kernel/schema。
+- repo public——secrets 只在 env，个人数据别进 tracked/commit。
 
 ## 2026-06-14 — Felt-vs-shown tone projection + 逗你 (Direction C 行为切片, Claude)
 
@@ -3963,3 +3962,51 @@
 - 未改 behavior 决策契约 / kernel 数值 / provider / memory schema；RTC 钉死话术不变。
 - 低 GPU 约束：不上实时 shader/流体/重 WebGL；UI 画面用户未定前不擅自推进。
 - repo public——secrets 只在 env，个人数据别进 tracked/commit。
+
+## 2026-06-14 — VE-1 cascaded 情绪（context_texts + 动态强度, Cursor）
+
+本次完成：
+
+- **`tone.py` 单一真源：** `_EMOTION_BY_REGISTER`（base/moderate）、`_EMOTION_INTENSE_BY_REGISTER`（intense）、
+  `STRONG_THRESHOLD`(0.75)、`register_intensity()`、`tts_emotion_directive()`、`base_emotion_context_text()`；
+  speech_rate 随量级 ±6…±20；intense 档守红线（无「用最X/咆哮/辱骂」类措辞）。
+- **`state_block.py`：** `build_rtc_emotion_tag` 改读 `tone.py` base 档；`test_rtc_state_block` 钉死字符串全过。
+- **`tts/text_cleanup.py`（新）：** `clean_text_for_tts()` 去 markdown/emoji/括号舞台提示（与 `speechText.ts` 对齐）。
+- **`doubao.py`：** `_build_request_payload` 支持 `context_texts`/`speech_rate`；合成前清洗；空参向后兼容。
+- **`main.py` `/tts/synthesize`：** store 内核 → `project_tone` → `register_intensity` → `tts_emotion_directive`；
+  仅 doubao 且配置就绪时注入；mock/mac_say 忽略。
+- **测试：** `test_tone.py`（两档 directive + speech_rate 量级 + 红线措辞）、`test_tts.py`（payload/清洗/中性无附加/兼容）。
+
+下次接着做：
+
+- **VE-2** 纯 E2E `SetTTSContext` 设备 A/B 核实（依赖用户设备）。
+- 或 **VM-6** VikingDB 自定义 schema spec。
+
+已知问题：
+
+- per-reply 情绪（整段一次合成），非 per-sentence；纯 E2E RTC 路径未动。
+- `/tts/stream` 尚未接内核情绪（本切片仅 `/tts/synthesize`）。
+
+相关文件：
+
+- `backend/app/behavior/tone.py`
+- `backend/app/rtc/state_block.py`
+- `backend/app/tts/text_cleanup.py`
+- `backend/app/tts/doubao.py`
+- `backend/app/tts/types.py`
+- `backend/app/main.py`
+- `backend/tests/test_tone.py`
+- `backend/tests/test_tts.py`
+- `docs/VE1_SPEC.md`
+- `docs/TODO.md`
+- `docs/SESSION_LOG.md`
+
+测试结果：
+
+- `PYTHON_BIN=.venv/bin/python npm run check` — **409 passed** + tsc 绿。
+
+不要改动的边界：
+
+- 未改 memory schema / behavior 决策契约 / provider 抽象 / file permission policy。
+- 纯 E2E RTC 路径未动；2.0 音色未设 `disable_markdown_filter`；未换音色。
+- repo public——secrets 只在 env；`reference/` gitignored 未动。

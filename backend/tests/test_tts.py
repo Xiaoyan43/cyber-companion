@@ -27,6 +27,7 @@ from backend.app.tts.openai_tts import OpenAITTSProvider
 from backend.app.tts.policy import evaluate_speech_policy
 from backend.app.tts.registry import build_tts_provider
 from backend.app.tts.router import TTSRouter, reset_tts_router
+from backend.app.tts.text_cleanup import clean_text_for_tts
 from backend.app.tts.types import SynthesisRequest
 from backend.app.tts.wav_utils import generate_silent_wav, parse_wav_duration_ms
 
@@ -605,3 +606,88 @@ def test_doubao_cloud_provider_blocked_without_budget_flag(monkeypatch: pytest.M
         )
 
     assert "Cloud TTS is disabled" in str(error.value)
+
+
+def test_clean_text_for_tts_strips_markdown_emoji_and_stage_directions() -> None:
+    raw = "（叹气）**你好** 😀（翻白眼）"
+    cleaned = clean_text_for_tts(raw)
+    assert "你好" in cleaned
+    assert "**" not in cleaned
+    assert "😀" not in cleaned
+    assert "叹气" not in cleaned
+    assert "翻白眼" not in cleaned
+
+
+def test_doubao_payload_includes_emotion_directive(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_doubao_env(monkeypatch)
+    captured: dict[str, object] = {}
+    lines = [
+        json.dumps({"code": 0, "message": "", "data": base64.b64encode(b"audio").decode("ascii")}),
+        json.dumps({"code": 20_000_000, "message": "OK", "data": None}),
+    ]
+    provider = DoubaoTTSProvider(http_client=_fake_stream_client(lines, captured))  # type: ignore[arg-type]
+    provider.synthesize(
+        SynthesisRequest(
+            text="（小声）短句。",
+            context_texts=["更冲、更不耐烦但别凶"],
+            speech_rate=12,
+        )
+    )
+
+    req = captured["json"]["req_params"]
+    assert req["text"] == "短句。"
+    assert req["additions"]["context_texts"] == ["更冲、更不耐烦但别凶"]
+    assert req["audio_params"]["speech_rate"] == 12
+
+
+def test_doubao_payload_backward_compatible_without_emotion(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_doubao_env(monkeypatch)
+    captured: dict[str, object] = {}
+    lines = [
+        json.dumps({"code": 0, "message": "", "data": base64.b64encode(b"audio").decode("ascii")}),
+        json.dumps({"code": 20_000_000, "message": "OK", "data": None}),
+    ]
+    provider = DoubaoTTSProvider(http_client=_fake_stream_client(lines, captured))  # type: ignore[arg-type]
+    provider.synthesize(SynthesisRequest(text="你好，Boxi。"))
+
+    req = captured["json"]["req_params"]
+    assert req["text"] == "你好，Boxi。"
+    assert "additions" not in req
+    assert "speech_rate" not in req["audio_params"]
+
+
+def test_tts_synthesize_neutral_kernel_omits_emotion_on_doubao(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(repo_root / "config"))
+    monkeypatch.setenv("CYBER_COMPANION_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("CYBER_COMPANION_TTS_MODE", "doubao")
+    _set_doubao_env(monkeypatch)
+    reset_tts_router()
+
+    captured: dict[str, object] = {}
+    original_build = DoubaoTTSProvider._build_request_payload
+
+    def _capture_build(self, text, creds, *, context_texts=None, speech_rate=0):
+        captured["context_texts"] = context_texts
+        captured["speech_rate"] = speech_rate
+        return original_build(self, text, creds, context_texts=context_texts, speech_rate=speech_rate)
+
+    monkeypatch.setattr(DoubaoTTSProvider, "_build_request_payload", _capture_build)
+    monkeypatch.setattr(
+        DoubaoTTSProvider,
+        "_stream_synthesis",
+        lambda self, payload, headers: b"audio",
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/tts/synthesize",
+        json={"text": "短句测试。", "decision": "reply", "force": True},
+    )
+
+    assert response.status_code == 200
+    assert captured["context_texts"] is None
+    assert captured["speech_rate"] == 0

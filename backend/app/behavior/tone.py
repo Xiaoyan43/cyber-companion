@@ -45,6 +45,26 @@ _EDGE_SHARP = 0.9
 PERFORMATIVE_STREAK_THRESHOLD = 2
 POSITIVE_STREAK_KEY = "positive_zone_streak"
 
+# register → cascaded/RTC emotion context_texts (base = moderate; RTC reads this only).
+_EMOTION_BY_REGISTER: dict[ToneRegister, str | None] = {
+    "comfort": "语气放软、关切、稍慢",
+    "real_sharp": "更冲、更不耐烦但别凶",
+    "playful": "嘴上凶、其实带笑、是逗ta",
+    "warm": None,
+    "lonely": "更热络一点",
+    "neutral": None,
+}
+
+# Intense tier — cascaded only; replaces base when register intensity ≥ STRONG_THRESHOLD.
+_EMOTION_INTENSE_BY_REGISTER: dict[ToneRegister, str] = {
+    "comfort": "很担心、明显心疼、放慢、稳住ta",
+    "real_sharp": "明显在火头上、很冲很不耐烦，但绝不人身攻击、不辱骂",
+    "playful": "笑意更明显、损得更欢、明显在逗ta",
+    "lonely": "明显想找人说话、更热络、黏一点",
+}
+
+STRONG_THRESHOLD = 0.75
+
 
 @dataclass(frozen=True)
 class ToneProjection:
@@ -182,3 +202,51 @@ def performative_active_from_metadata(metadata: dict) -> bool:
     """Read the armed flag from persisted kernel metadata (surfaces that only read)."""
     current = metadata.get(POSITIVE_STREAK_KEY)
     return isinstance(current, int) and current >= PERFORMATIVE_STREAK_THRESHOLD
+
+
+def base_emotion_context_text(register: ToneRegister) -> str | None:
+    """Moderate-tier emotion phrase for a register (RTC + cascaded base)."""
+    return _EMOTION_BY_REGISTER.get(register)
+
+
+def register_intensity(
+    mood: MoodStateRecord,
+    relationship: RelationshipStateRecord,
+    projection: ToneProjection,
+    *,
+    overwhelmed: bool = False,
+) -> float:
+    """Drive magnitude 0..1 for the active register."""
+    register = projection.register
+    if register == "comfort":
+        return (
+            1.0
+            if overwhelmed
+            else max(mood.worry, 0.8 if mood.mood in {"sad", "worried"} else 0.0)
+        )
+    if register == "real_sharp":
+        return max(mood.annoyance, relationship.tension)
+    if register == "playful":
+        return relationship.closeness
+    if register == "lonely":
+        return mood.loneliness
+    return 0.0
+
+
+def tts_emotion_directive(
+    projection: ToneProjection,
+    *,
+    intensity: float,
+) -> tuple[list[str] | None, int]:
+    """Cascaded Doubao context_texts + speech_rate from kernel projection."""
+    base = _EMOTION_BY_REGISTER[projection.register]
+    if base is None:
+        return None, 0
+    intense = _EMOTION_INTENSE_BY_REGISTER.get(projection.register)
+    phrase = intense if (intense and intensity >= STRONG_THRESHOLD) else base
+    sign = {"comfort": -1, "real_sharp": 1, "playful": 1, "lonely": 1}.get(
+        projection.register, 0
+    )
+    clamped = max(0.0, min(1.0, intensity))
+    rate = int(sign * round(6 + 14 * clamped))
+    return [phrase], rate

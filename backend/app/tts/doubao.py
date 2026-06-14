@@ -11,6 +11,7 @@ import httpx
 
 from backend.app.tts.base import TextToSpeechProvider
 from backend.app.tts.exceptions import TTSConfigError, TTSError
+from backend.app.tts.text_cleanup import clean_text_for_tts
 from backend.app.tts.types import SynthesisRequest, SynthesisResult, TTSProviderStatus
 
 # Volcano Engine / Doubao speech HTTP TTS V3 (unidirectional chunked).
@@ -154,7 +155,12 @@ class DoubaoTTSProvider(TextToSpeechProvider):
 
         _validate_speaker_for_v3(creds["voice_type"])
 
-        payload = self._build_request_payload(text, creds)
+        payload = self._build_request_payload(
+            text,
+            creds,
+            context_texts=request.context_texts,
+            speech_rate=request.speech_rate,
+        )
         headers = self._build_request_headers(creds)
 
         try:
@@ -197,7 +203,12 @@ class DoubaoTTSProvider(TextToSpeechProvider):
 
         _validate_speaker_for_v3(creds["voice_type"])
 
-        payload = self._build_request_payload(text, creds)
+        payload = self._build_request_payload(
+            text,
+            creds,
+            context_texts=request.context_texts,
+            speech_rate=request.speech_rate,
+        )
         headers = self._build_request_headers(creds)
 
         try:
@@ -216,19 +227,34 @@ class DoubaoTTSProvider(TextToSpeechProvider):
             "Content-Type": "application/json",
         }
 
-    def _build_request_payload(self, text: str, creds: dict[str, str]) -> dict[str, Any]:
+    def _build_request_payload(
+        self,
+        text: str,
+        creds: dict[str, str],
+        *,
+        context_texts: list[str] | None = None,
+        speech_rate: int = 0,
+    ) -> dict[str, Any]:
+        audio_params: dict[str, Any] = {
+            "format": self._audio_format,
+            "sample_rate": 24_000,
+        }
+        if speech_rate != 0:
+            audio_params["speech_rate"] = speech_rate
+
+        req_params: dict[str, Any] = {
+            "text": clean_text_for_tts(text),
+            "speaker": creds["voice_type"],
+            "audio_params": audio_params,
+        }
+        if context_texts:
+            req_params["additions"] = {"context_texts": context_texts}
+
         return {
             "user": {
                 "uid": self._uid,
             },
-            "req_params": {
-                "text": text,
-                "speaker": creds["voice_type"],
-                "audio_params": {
-                    "format": self._audio_format,
-                    "sample_rate": 24_000,
-                },
-            },
+            "req_params": req_params,
         }
 
     def _stream_synthesis(self, payload: dict[str, Any], headers: dict[str, str]) -> bytes:
