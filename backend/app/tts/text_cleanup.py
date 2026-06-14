@@ -63,7 +63,8 @@ def _strip_markdown(text: str) -> str:
 def _normalize_speech_text(text: str) -> str:
     text = re.sub(r"\s+", " ", text)
     text = re.sub(r"\s+([，。！？…；、])", r"\1", text)
-    text = re.sub(r"([，。！？…；、]){2,}", r"\1", text)
+    # Dedup accidental repeats, but KEEP the ellipsis（……）— Boxi 的拖尾省略号是有意的韵味。
+    text = re.sub(r"([，。！？；、]){2,}", r"\1", text)
     return text.strip()
 
 

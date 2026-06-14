@@ -618,6 +618,12 @@ def test_clean_text_for_tts_strips_markdown_emoji_and_stage_directions() -> None
     assert "翻白眼" not in cleaned
 
 
+def test_clean_text_for_tts_preserves_ellipsis() -> None:
+    # Boxi 的拖尾省略号是有意的韵味，不该被标点去重压成单个。
+    assert clean_text_for_tts("行吧……随你") == "行吧……随你"
+    assert clean_text_for_tts("好。。。") == "好。"  # 真·重复句号仍归一
+
+
 def test_doubao_payload_includes_emotion_directive(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_doubao_env(monkeypatch)
     captured: dict[str, object] = {}
