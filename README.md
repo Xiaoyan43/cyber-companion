@@ -10,6 +10,9 @@ proactive behaviour — so it feels less like a tool you query and more like *so
 Her name is **Boxi**. Default personality: `毒舌被困小人` — sharp-tongued and a little trapped,
 but under the edge she actually cares.
 
+<!-- ![Boxi screenshot](docs/assets/screenshot.png) -->
+<!-- TODO: add a screenshot or short demo GIF of the chat UI / voice call here -->
+
 ## What makes it different — the "soul"
 
 - **A subjectivity kernel.** Boxi has a private mood (annoyance, worry, loneliness, energy) and a
@@ -26,6 +29,25 @@ but under the edge she actually cares.
   decided locally before any model call.
 - **Voice.** A cascaded speech pipeline (streaming STT → the soul → streaming TTS) plus realtime
   explorations, with the soul authoring her words.
+
+## Tech highlights
+
+- **Stateful memory pipeline.** LLM-based memory extraction with a deterministic regex fallback,
+  typed records (profile/project/reminder/event…) in SQLite, background reflection that
+  consolidates raw memories into impressions, and cross-memory linking — plus an optional
+  VikingDB-backed long-term store for cross-session recall in realtime voice.
+- **Emotion/relationship kernel driving tone in real time.** A mood vector (annoyance, worry,
+  loneliness, energy) and a relationship vector (trust, closeness, familiarity, tension) are
+  projected into speaking style and TTS prosody (`context_texts` + `speech_rate`) on every turn —
+  including the realtime voice path (RTC join-time `speaking_style`).
+- **Proactive initiation model.** A "longing" score (closeness × silence) drives Poisson-timed
+  outreach, gated by quiet hours, daily caps, and ignore-backoff, so she reaches out without
+  nagging.
+- **Local-first behaviour engine.** Reply/silence/refuse/mutter/interrupt decisions are made
+  deterministically *before* any LLM call, keeping behaviour auditable and cheap.
+- **Provider abstraction with mock mode.** DeepSeek (chat) and Doubao/Volcengine (voice) sit
+  behind a swappable provider layer with budget gating, so the whole stack runs fully offline
+  against mock providers for dev/testing.
 
 ## Architecture
 
