@@ -46,13 +46,15 @@ def apply_user_message_mood_delta(
     else:
         loneliness = max(0.0, loneliness - 0.04)
         boredom = max(0.0, boredom - 0.05)
+        annoyance = max(0.0, annoyance - 0.05)
+        energy = min(1.0, energy + 0.02)
         if next_mood == "idle":
             next_mood = "idle"
 
     return MoodStateRecord(
         updated_at=mood.updated_at,
         mood=next_mood,
-        energy=energy,
+        energy=round(energy, 3),
         annoyance=round(annoyance, 3),
         boredom=round(boredom, 3),
         worry=round(worry, 3),

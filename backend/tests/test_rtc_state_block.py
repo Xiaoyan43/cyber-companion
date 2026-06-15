@@ -187,7 +187,7 @@ def test_build_rtc_speaking_style_neutral_uses_base(store: MemoryStore) -> None:
         (lambda s: s.update_mood_state(worry=0.6), "收一收毒舌、稳一点"),
         (lambda s: s.update_mood_state(annoyance=0.6), "现在更冲、更短"),
         (
-            lambda s: s.update_relationship_state(tension=0.5),
+            lambda s: s.update_relationship_state(tension=0.6),
             "现在更冲、更短",
         ),
         (
@@ -250,7 +250,7 @@ def test_build_rtc_emotion_tag_neutral_returns_none(store: MemoryStore) -> None:
         (lambda s: s.update_mood_state(worry=0.6), "语气放软、关切、稍慢"),
         (lambda s: s.update_mood_state(annoyance=0.6), "更冲、更不耐烦但别凶"),
         (
-            lambda s: s.update_relationship_state(tension=0.5),
+            lambda s: s.update_relationship_state(tension=0.6),
             "更冲、更不耐烦但别凶",
         ),
         (lambda s: s.update_mood_state(loneliness=0.6), "更热络一点"),

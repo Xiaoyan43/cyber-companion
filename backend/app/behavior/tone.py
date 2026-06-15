@@ -28,7 +28,7 @@ ToneRegister = Literal["comfort", "real_sharp", "playful", "warm", "lonely", "ne
 
 # Shared kernel thresholds — previously duplicated across mood.py + state_block.py.
 _MOOD_THRESHOLD = 0.5
-_TENSION_SHARP = 0.4
+_TENSION_SHARP = 0.55
 _TENSION_CLOSE = 0.3
 _CLOSENESS_HIGH = 0.67
 _ENERGY_OK = 0.3

@@ -47,7 +47,8 @@ experiments/    # 废弃视觉 spike（未跟踪，勿动）
 - **RTC `state_block`** 把内核投射成 join-time 的 `system_role` 状态块 + `speaking_style`（PS-5）+ 情绪 tag（PS-6，⚠️见下）。
 
 ## ⚠️ 不确定 / 需之后确认
-- **U1（重要）**：纯端到端 OutputMode 0 是否真的忽略 `TTSConfig` / `SetTTSContext`（文档 `reference/12.md` 指向「忽略」）→ 直接决定 PS-6 是否 no-op。**VE-2 设备 A/B 定论。**
+- ~~**U1**：纯端到端 OutputMode 0 是否真的忽略 `TTSConfig` / `SetTTSContext`~~ **已测试（VE-2 设备 A/B）**：
+  A/B 听感差异极小，结论 inconclusive，决定保留现状不清理代码。
 - **U2**：线上走的是 `StartVoiceChat` **2024-12-01** 版（代码 `rt_model="1.2.1.1"` = O2.0；参数表见 `reference/11.md`）——假设如此，未逐字核对全部字段。
 - **U3**：VM-6 自定义 `boxi_profile` 检索响应 JSON 结构未实测（解析做了容错），首条真实响应后细化。
 - **U4**：默认语音路径 = 纯 E2E（O2.0）；cascaded 是否设为主线（Direction C 倾向 cascaded）仍是产品决定，未切换。

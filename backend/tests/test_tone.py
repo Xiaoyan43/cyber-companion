@@ -106,8 +106,13 @@ def test_real_sharp_cold_edge_when_low_trust() -> None:
 
 
 def test_tension_alone_triggers_real_sharp() -> None:
-    p = project_tone(_mood(), _rel(tension=0.5))
+    p = project_tone(_mood(), _rel(tension=0.6))
     assert p.register == "real_sharp"
+
+
+def test_mild_tension_does_not_trigger_real_sharp() -> None:
+    p = project_tone(_mood(), _rel(tension=0.42))
+    assert p.register != "real_sharp"
 
 
 # ---- the new playful path (desync-2 teasing) ------------------------------
