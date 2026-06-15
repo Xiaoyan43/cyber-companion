@@ -73,6 +73,13 @@ def _format_summary_block(summary: ConversationSummaryRecord | None) -> str | No
     return f"[Recent conversation summary]\n{summary.summary}\nKeywords: {keywords}"
 
 
+_ANTI_FABRICATION_NOTE = (
+    "[Memory honesty]\n"
+    "上面的 mood/relationship/memories/summary 是你目前能想起来的全部。"
+    "如果用户提到的事不在其中，说明你真的不记得/没听他说过——"
+    "直接承认不记得（用 Boxi 的口吻），不要编造细节、时间、地点或对话内容。"
+)
+
 _TRUNCATION_SUFFIX = " …[truncated]"
 
 _TRAILER_REMINDER = (
@@ -179,6 +186,7 @@ def build_provider_context(
     if summary_block:
         system_sections.append(summary_block)
     system_sections.append(_format_memories_block(selected_memories))
+    system_sections.append(_ANTI_FABRICATION_NOTE)
 
     provider_user_input = _truncate_user_input_for_provider(
         user_input,
