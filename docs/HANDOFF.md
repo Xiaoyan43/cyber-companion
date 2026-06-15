@@ -1,6 +1,19 @@
-# HANDOFF — 上下文交接（2026-06-15）
+# HANDOFF — 上下文交接（2026-06-16）
 
 > 本文件每次「瘦身交接」/「工作流交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
+
+## 本轮已完成（VE-1①真机听感 + doubao additions 字段 bug 修复，本 session）
+- **VE-1①真机听感**：comfort / real_sharp 两条 register 真机听感 ✅ PASS（"贴合情绪"）。
+  playful 因 `relationship.closeness=0.66` 差 0.01 到阈值 0.67（且无写接口，不强行造数据）暂未测，
+  标记为「待自然达成 closeness≥0.67 后再测」。
+- **新发现并修复阻塞 bug**：[doubao.py:251](backend/app/tts/doubao.py:251) `req_params.additions`
+  之前传嵌套 dict `{"context_texts": [...]}`，但 Doubao API 要求 `additions` 是 **JSON 字符串**——
+  实际调用报 `cannot unmarshal object into Go struct field TTSReqParams.req_params.additions of type string`，
+  此前单测 mock 掉了真实 API 未测出。修复：`req_params["additions"] = json.dumps({...})`（1 行）。
+  同步改 [test_tts.py:645](backend/tests/test_tts.py:645) 断言为 `json.loads(req["additions"])[...]`。
+- **测试结果**：`pytest backend/tests/test_tts.py` 41 passed。
+- **现场操作**：测试期间通过 `PUT /memory/mood` 临时设置 worry/annoyance 触发 comfort/real_sharp，
+  测完已恢复为 `mood="neutral", worry=0.0, annoyance=0.0`（energy/boredom/trust/loneliness 全程未动）。
 
 ## 当前项目目标
 赛博伴侣 / Boxi：一个「被困盒子里的存在」——有人格、记忆、情绪、会主动找你的 AI 陪伴。
@@ -29,34 +42,30 @@
     `pytest backend/tests/ -k "mood or engine or behavior or tone or rtc"` 138 passed。
   - **真机验证**：✅ 用户确认"不冲了"。
 
-> 上一轮（R9 mood 面板修复；VE-2 设备 A/B inconclusive；VM-6 收尾）已折叠，详情见 `git log` / 本文件历史版本。
+> 上一轮（R10 tension 阈值修复；R9 mood 面板修复；VE-2 设备 A/B inconclusive；VM-6 收尾）已折叠，
+> 详情见 `git log` / 本文件历史版本。
 
 ## 已修改文件 + 改动摘要（本轮）
-- `backend/app/behavior/tone.py` — `_TENSION_SHARP` 0.4→0.55（1 行）。
-- `backend/tests/test_tone.py` — 改 1 处测试值 + 新增 1 条回归测试。
-- `backend/tests/test_rtc_state_block.py` — 改 2 处测试值（0.5→0.6）。
-- `docs/HANDOFF.md` / `docs/TASK_QUEUE.md` — R10 标记已完成，新增 R11。
+- `backend/app/tts/doubao.py` — `req_params["additions"]` 改为 `json.dumps(...)`（1 行，阻塞 bug 修复）。
+- `backend/tests/test_tts.py` — 同步改 1 处断言为 `json.loads(req["additions"])[...]`。
+- `docs/HANDOFF.md` / `docs/TASK_QUEUE.md` — VE-1① 标记已完成（除 playful），记录新 bug 修复。
 
-**测试结果**：见上。未运行 `npm run check`（仅后端纯函数+测试改动，前端 tsc 不受影响）。
+**测试结果**：`pytest backend/tests/test_tts.py` 41 passed。未运行 `npm run check`
+（仅 TTS 模块 + 测试改动，前端 tsc 不受影响）。
 
-## 真机验证结果（用户反馈，本 session 末）
-- ✅ R10 修复有效：语音连接不再"冲"。
-- ⚠️ **新发现（R11，未排查）**：用户反馈"纯 E2E 语音对话中，Boxi 对部分长期记忆记不起来"——
-  即 Viking 长期记忆库（VM 系列）部分内容检索/注入失效。**本 session 未排查**，记入 TASK_QUEUE R11。
-  待确认细节：忘的是"很久以前的事"还是"最近一次会话的事"？是没存进去还是存了读不出来？
+## 真机验证结果（用户反馈，本 session）
+- ✅ VE-1① comfort / real_sharp 两条 register 听感 PASS（"贴合情绪"）。
+- ⏸️ playful 未测（`relationship.closeness=0.66` 差 0.01 到阈值 0.67，无写接口，未强行造数据）。
 
 ## 当前未完成（产品侧）
-- **R10**：✅ **已完成并真机验证 PASS**（本轮）。语音连接不再"更冲"。
-- **R11（新，未排查，建议优先）**：纯 E2E 长期记忆部分失忆——疑似 Viking 记忆写入/检索/注入链路问题，
+- **R11（未排查，建议优先）**：纯 E2E 长期记忆部分失忆——疑似 Viking 记忆写入/检索/注入链路问题，
   可能与 `ARCHITECTURE_SNAPSHOT.md` 的 **U3**（VM-6 自定义 `boxi_profile` 检索响应结构未实测）相关。
   建议下一 session 先向用户追问细节，再 `/architect` 拆解。
-- **VE-1 收尾**：① 真机听感确认（待用户，未做）。R10 已修复，烦躁基线干扰已排除，可独立进行。
+- **VE-1 收尾**：① comfort/real_sharp ✅ PASS（本轮）；playful 待 `closeness≥0.67` 自然达成后补测。
 - **VE-3**：IgnoreBracketText→avatar，需补文档 `6348/2386107`（未变）。
 - 其它：O2.0 persona 收尾、`get_context` 迁移评估、延迟旋钮、API Key 轮换（R8，安全卫生，均可选，未变）。
 
 ## 已知 bug / 风险
-- **R10**：✅ **已修复并真机验证 PASS（本轮）**——`_TENSION_SHARP` 阈值过低（0.4）导致常见的轻微
-  tension（≈0.42）误判为 real_sharp。已调至 0.55。
 - **R11（新，未排查）**：纯 E2E 语音中 Boxi 对部分长期记忆记不起来，疑似 Viking 记忆检索/注入问题，
   与 U3（VM-6 自定义 schema 响应结构未实测）可能相关。
 - **R2**：`6c52ab4`（VM-6 代码）仍**未 push**（本地 ahead of origin，本轮无新代码 commit）。
@@ -69,7 +78,6 @@
 - 若做 **R11（纯 E2E 长期记忆部分失忆排查）**：先向用户追问细节（忘的是什么类型/写入侧还是检索侧），
   再读 `backend/app/rtc/viking_memory.py`（VM 系列）、`backend/app/rtc/routes.py`（`/rtc/memory/session`
   写入 `AddSession` 处）、`backend/app/rtc/voice_chat.py`（`MemoryConfig`/检索注入处）。
-- 若做 **VE-1①真机听感**：用户真机听感+看心情面板，无需读代码（除非发现新问题）。
 - 需要厂商 API 细节时：`reference/SYNTHESIS.md`（已是全量精读结论），再按需点开 `reference/NN.md`，
   尤其 VM-6 相关的 `boxi_profile` schema 部分。
 
@@ -83,4 +91,3 @@
 ## 推荐下一个最小任务
 **R11：排查"纯 E2E 长期记忆部分失忆"**——先向用户追问细节（忘的类型/写入侧 vs 检索侧），
 再 `/architect` 拆解，预计涉及 `backend/app/rtc/viking_memory.py` + VM-6 自定义 schema（U3）。
-其次：**VE-1①真机听感**（R10 已修复，可独立进行）。

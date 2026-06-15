@@ -642,7 +642,7 @@ def test_doubao_payload_includes_emotion_directive(monkeypatch: pytest.MonkeyPat
 
     req = captured["json"]["req_params"]
     assert req["text"] == "短句。"
-    assert req["additions"]["context_texts"] == ["更冲、更不耐烦但别凶"]
+    assert json.loads(req["additions"])["context_texts"] == ["更冲、更不耐烦但别凶"]
     assert req["audio_params"]["speech_rate"] == 12
 
 

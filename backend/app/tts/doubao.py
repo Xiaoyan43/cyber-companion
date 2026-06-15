@@ -248,7 +248,7 @@ class DoubaoTTSProvider(TextToSpeechProvider):
             "audio_params": audio_params,
         }
         if context_texts:
-            req_params["additions"] = {"context_texts": context_texts}
+            req_params["additions"] = json.dumps({"context_texts": context_texts})
 
         return {
             "user": {

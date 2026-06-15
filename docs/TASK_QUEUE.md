@@ -1,8 +1,8 @@
-# TASK_QUEUE — 按优先级（2026-06-15）
+# TASK_QUEUE — 按优先级（2026-06-16）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
-> P0（VM-6）/ P1（VE-2）/ R9（mood 修复）/ R10（tension 阈值修复）已完成并真机验证 PASS。当前优先候选
-> = **R11**（纯 E2E 长期记忆部分失忆，新发现，未排查），其次 P2（VE-1①真机听感）。
+> P0（VM-6）/ P1（VE-2）/ R9（mood 修复）/ R10（tension 阈值修复）/ P2（VE-1，comfort+real_sharp）
+> 已完成并真机验证 PASS。当前优先候选 = **R11**（纯 E2E 长期记忆部分失忆，新发现，未排查）。
 
 ---
 
@@ -38,10 +38,14 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - **关联**：`ARCHITECTURE_SNAPSHOT.md` 的 **U3**（VM-6 自定义 `boxi_profile` 检索响应 JSON 结构
   未实测，解析做了容错）可能相关——如果检索响应结构和容错解析不匹配，会导致"存了但读不出来"。
 
-## P2 · VE-1 收尾
-- **Scope**：① 真机听一条 comfort/real_sharp/playful，确认情绪有层次不夸张（`emotion_scale` 没用，靠措辞+`speech_rate`）。② ~~给 `/tts/stream` 也接同一情绪 directive（与 `/tts/synthesize` 对齐）~~ **已完成**，见 HANDOFF。③ ~~补一条路由级「非中性内核→payload 带情绪」集成测试~~ **已完成**，见 HANDOFF。
-- **验收**：听感 OK（待用户真机，blocked）；`/tts/stream` 与 `/tts/synthesize` 情绪一致（代码侧已对齐，已测试覆盖）。
-- **要读**：`docs/VE1_SPEC.md`、`backend/app/tts/doubao.py`、`backend/app/main.py`、`backend/app/behavior/tone.py`、`backend/tests/test_tts.py`。
+## ~~P2 · VE-1 收尾~~ 基本完成（playful 待补测）
+- ① 真机听 comfort/real_sharp ✅ **PASS**（"贴合情绪"），见 HANDOFF。playful 因
+  `relationship.closeness=0.66` 差 0.01 到阈值 0.67（无写接口，未造数据）暂未测，
+  待 closeness 自然达到 ≥0.67 后补测。
+- ② `/tts/stream` 与 `/tts/synthesize` 情绪对齐 ✅ 已完成。
+- ③ 路由级集成测试 ✅ 已完成。
+- **本轮副产物**：测试中发现并修复阻塞 bug——`doubao.py` 的 `req_params.additions` 需为 JSON
+  字符串而非嵌套 dict（之前单测 mock 掉真实 API 未测出）。详见 HANDOFF。
 
 ## P3 · VE-3 IgnoreBracketText → 前端情绪 cue（later）
 - **Scope**：Boxi 把动作/情绪写进括号 → TTS 不读、随字幕下发驱动前端 cue（与最终画面解耦，先做信号层）。
