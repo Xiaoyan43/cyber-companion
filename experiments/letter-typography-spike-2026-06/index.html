@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>情绪信笺</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #f8f4eb;
+        --paper-warm: #fffaf1;
+        --ink: 30, 29, 26;
+        --muted: rgba(30, 29, 26, 0.52);
+        --line: rgba(30, 29, 26, 0.12);
+        --line-strong: rgba(30, 29, 26, 0.22);
+        --accent: #8f6845;
+        --letter-size: clamp(26px, 3.7vw, 44px);
+        --letter-weight: 420;
+        --letter-opacity: 0.9;
+        --letter-leading: 1.42;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        min-height: 100%;
+        margin: 0;
+        background:
+          linear-gradient(rgba(30, 29, 26, 0.025) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(30, 29, 26, 0.02) 1px, transparent 1px),
+          var(--paper);
+        background-size: 42px 42px;
+        color: rgb(var(--ink));
+        font-family:
+          ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          "PingFang SC", "Microsoft YaHei", sans-serif;
+        letter-spacing: 0;
+      }
+
+      button {
+        border: 0;
+        color: inherit;
+        font: inherit;
+        background: transparent;
+        cursor: pointer;
+      }
+
+      .page {
+        display: grid;
+        min-height: 100vh;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+      }
+
+      .bar {
+        display: grid;
+        grid-template-columns: minmax(160px, 1fr) auto minmax(160px, 1fr);
+        align-items: center;
+        gap: 18px;
+        min-height: 72px;
+        padding: 18px clamp(18px, 4vw, 46px);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .brand {
+        display: grid;
+        gap: 2px;
+      }
+
+      .brand strong {
+        font-size: 13px;
+        font-weight: 720;
+      }
+
+      .brand span,
+      .status span,
+      .meta {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .modes {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        width: min(560px, 52vw);
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 250, 241, 0.55);
+      }
+
+      .modes button {
+        min-height: 38px;
+        padding: 0 14px;
+        border-right: 1px solid var(--line);
+        color: rgba(30, 29, 26, 0.62);
+        font-size: 13px;
+        font-weight: 680;
+        white-space: nowrap;
+      }
+
+      .modes button:last-child {
+        border-right: 0;
+      }
+
+      .modes button.active {
+        color: var(--paper-warm);
+        background: rgb(var(--ink));
+      }
+
+      .status {
+        display: flex;
+        justify-content: flex-end;
+        gap: 14px;
+        font-family: "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+        white-space: nowrap;
+      }
+
+      .letter-wrap {
+        display: grid;
+        place-items: stretch center;
+        padding: clamp(16px, 2.4vw, 26px) clamp(18px, 5vw, 72px);
+      }
+
+      .letter {
+        position: relative;
+        display: grid;
+        width: min(980px, 100%);
+        min-height: min(520px, calc(100vh - 220px));
+        grid-template-rows: auto 1fr auto;
+        padding: clamp(26px, 4.4vw, 56px);
+        border-left: 1px solid var(--line);
+        border-right: 1px solid var(--line);
+        background:
+          linear-gradient(to right, transparent 0 18%, rgba(143, 104, 69, 0.08) 18% calc(18% + 1px), transparent calc(18% + 1px)),
+          linear-gradient(var(--paper-warm), var(--paper-warm));
+      }
+
+      .emotion-sketch {
+        position: absolute;
+        top: clamp(34px, 5vw, 62px);
+        right: clamp(38px, 6.5vw, 92px);
+        width: clamp(96px, 15vw, 148px);
+        aspect-ratio: 1;
+        color: rgba(30, 29, 26, 0.38);
+        opacity: 0.24;
+        transform: translateY(3px);
+        transition:
+          opacity 650ms ease,
+          transform 650ms ease;
+        pointer-events: none;
+        will-change: transform, opacity;
+      }
+
+      .emotion-sketch svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+
+      .emotion-sketch path,
+      .emotion-sketch circle {
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        vector-effect: non-scaling-stroke;
+      }
+
+      .emotion-sketch .paper-mark {
+        stroke-width: 0.8;
+        opacity: 0.26;
+      }
+
+      .emotion-sketch .face-line {
+        stroke-width: 1.6;
+      }
+
+      .emotion-sketch .soft-line {
+        stroke-width: 1.1;
+        opacity: 0.54;
+      }
+
+      .emotion-sketch .mood {
+        opacity: 0;
+        transform: translateY(4px);
+        transform-origin: 50% 50%;
+        transition:
+          opacity 650ms ease,
+          transform 650ms ease;
+        will-change: transform, opacity;
+      }
+
+      .emotion-sketch.calm {
+        opacity: 0.24;
+        transform: translateY(2px);
+      }
+
+      .emotion-sketch.hesitant {
+        opacity: 0.22;
+        transform: translateY(6px);
+        transition-duration: 760ms;
+      }
+
+      .emotion-sketch.excited {
+        opacity: 0.4;
+        transform: translateY(0);
+        transition-duration: 420ms;
+      }
+
+      .emotion-sketch.fragile {
+        opacity: 0.16;
+        transform: translateY(9px);
+        transition-duration: 900ms;
+      }
+
+      .emotion-sketch.calm .mood-calm,
+      .emotion-sketch.hesitant .mood-hesitant,
+      .emotion-sketch.excited .mood-excited,
+      .emotion-sketch.fragile .mood-fragile {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .letter-head,
+      .letter-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .letter-head {
+        padding-bottom: clamp(26px, 4vw, 48px);
+      }
+
+      .letter-foot {
+        padding-top: clamp(26px, 4vw, 48px);
+      }
+
+      .recipient,
+      .signature {
+        color: rgba(30, 29, 26, 0.72);
+        font-family: ui-serif, Georgia, "Times New Roman", "Songti SC", "STSong", serif;
+        font-size: 16px;
+      }
+
+      .writing {
+        align-self: center;
+        min-height: 4lh;
+        color: rgba(var(--ink), var(--letter-opacity));
+        font-family: ui-serif, Georgia, "Times New Roman", "Songti SC", "STSong", serif;
+        font-size: var(--letter-size);
+        font-style: normal;
+        font-weight: var(--letter-weight);
+        font-variation-settings: "wght" var(--letter-weight);
+        line-height: var(--letter-leading);
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+        transition:
+          color 650ms ease,
+          font-size 180ms ease,
+          font-weight 120ms ease,
+          letter-spacing 180ms ease;
+      }
+
+      .writing.hesitant {
+        font-style: italic;
+        letter-spacing: 0.01em;
+      }
+
+      .writing.excited {
+        letter-spacing: 0;
+      }
+
+      .writing.fragile {
+        letter-spacing: 0.006em;
+      }
+
+      .caret {
+        display: inline-block;
+        width: 0.08em;
+        height: 0.92em;
+        margin-left: 0.08em;
+        transform: translateY(0.11em);
+        background: rgba(var(--ink), 0.58);
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 0 clamp(18px, 4vw, 46px) 24px;
+      }
+
+      .icon-button {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 50%;
+        background: rgba(255, 250, 241, 0.58);
+      }
+
+      .icon-button:hover,
+      .icon-button:focus-visible {
+        border-color: var(--line-strong);
+        background: var(--paper-warm);
+        outline: 0;
+      }
+
+      .icon-button svg {
+        width: 19px;
+        height: 19px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.9;
+      }
+
+      .note {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      @media (max-width: 840px) {
+        .bar {
+          grid-template-columns: 1fr;
+          justify-items: stretch;
+          gap: 14px;
+        }
+
+        .modes {
+          width: 100%;
+        }
+
+        .status {
+          justify-content: space-between;
+        }
+
+        .letter {
+          min-height: 620px;
+          padding: 30px 22px;
+        }
+
+        .emotion-sketch {
+          top: 34px;
+          right: 22px;
+          width: 100px;
+        }
+
+        .letter-head,
+        .letter-foot {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 8px;
+        }
+      }
+
+      @media (max-width: 520px) {
+        .modes button {
+          padding: 0 8px;
+          font-size: 12px;
+        }
+
+        .letter-wrap {
+          padding: 16px 12px 22px;
+        }
+
+        .letter {
+          min-height: 560px;
+          border-right: 0;
+          border-left: 0;
+        }
+
+        .emotion-sketch {
+          width: 82px;
+          opacity: 0.18;
+        }
+
+        .writing {
+          min-height: 10lh;
+          font-size: clamp(26px, 10vw, 40px);
+        }
+
+        .status {
+          gap: 8px;
+          font-size: 11px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="bar">
+        <div class="brand">
+          <strong>情绪信笺</strong>
+          <span>private letter interface</span>
+        </div>
+
+        <nav class="modes" aria-label="情绪">
+          <button class="active" type="button" data-mood="calm">平静</button>
+          <button type="button" data-mood="hesitant">犹豫</button>
+          <button type="button" data-mood="excited">激动</button>
+          <button type="button" data-mood="fragile">虚弱</button>
+        </nav>
+
+        <div class="status" aria-label="文字状态">
+          <span id="paceRead">48ms</span>
+          <span id="weightRead">420</span>
+          <span id="alphaRead">90%</span>
+        </div>
+      </header>
+
+      <section class="letter-wrap" aria-label="信笺">
+        <article class="letter">
+          <div class="letter-head">
+            <span class="recipient">Dear you,</span>
+            <span class="meta" id="dateRead"></span>
+          </div>
+
+          <div class="emotion-sketch calm" id="emotionSketch" aria-hidden="true">
+            <svg viewBox="0 0 120 120">
+              <path class="paper-mark" d="M26 66c14-32 46-42 68-24" />
+              <path class="paper-mark" d="M32 83c18 12 45 10 59-8" />
+
+              <g class="mood mood-calm">
+                <path class="soft-line" d="M37 54c7-5 15-5 21 0" />
+                <path class="soft-line" d="M70 54c7-5 15-5 21 0" />
+                <path class="face-line" d="M42 75c12 10 28 11 43 0" />
+              </g>
+
+              <g class="mood mood-hesitant">
+                <path class="soft-line" d="M38 58c7-2 14-1 20 3" />
+                <path class="soft-line" d="M72 58c7-3 14-2 20 2" />
+                <path class="face-line" d="M49 78c10 4 21 4 31-1" />
+                <path class="soft-line" d="M60 68c3 3 6 3 9 0" />
+              </g>
+
+              <g class="mood mood-excited">
+                <path class="face-line" d="M36 52c8-8 17-8 25 0" />
+                <path class="face-line" d="M70 52c8-8 17-8 25 0" />
+                <path class="face-line" d="M40 76c13 14 33 15 48-1" />
+                <path class="soft-line" d="M25 42c3-6 8-10 14-12" />
+                <path class="soft-line" d="M95 31c6 3 10 7 13 13" />
+              </g>
+
+              <g class="mood mood-fragile">
+                <path class="soft-line" d="M39 60c7 4 14 4 21 0" />
+                <path class="soft-line" d="M70 60c7 4 14 4 21 0" />
+                <path class="face-line" d="M48 81c11-5 22-5 33 0" />
+                <path class="soft-line" d="M36 70c5 3 10 5 16 5" />
+              </g>
+            </svg>
+          </div>
+
+          <div class="writing" id="writing" aria-live="polite">
+            <span id="letterText"></span><span class="caret" id="caret" aria-hidden="true"></span>
+          </div>
+
+          <div class="letter-foot">
+            <span class="signature">Always here,</span>
+            <span class="meta" id="stateRead">calm</span>
+          </div>
+        </article>
+      </section>
+
+      <footer class="toolbar">
+        <button class="icon-button" id="replay" type="button" title="重写">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 11a8 8 0 0 0-15.5-2M4 5v4h4" />
+            <path d="M4 13a8 8 0 0 0 15.5 2M20 19v-4h-4" />
+          </svg>
+        </button>
+        <button class="icon-button" id="pause" type="button" title="暂停">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 5v14M16 5v14" />
+          </svg>
+        </button>
+        <span class="note" id="noteRead">listening</span>
+      </footer>
+    </main>
+
+    <script>
+      const writing = document.querySelector("#writing");
+      const letterText = document.querySelector("#letterText");
+      const caret = document.querySelector("#caret");
+      const emotionSketch = document.querySelector("#emotionSketch");
+      const modeButtons = Array.from(document.querySelectorAll("[data-mood]"));
+      const replay = document.querySelector("#replay");
+      const pause = document.querySelector("#pause");
+      const reads = {
+        pace: document.querySelector("#paceRead"),
+        weight: document.querySelector("#weightRead"),
+        alpha: document.querySelector("#alphaRead"),
+        state: document.querySelector("#stateRead"),
+        note: document.querySelector("#noteRead"),
+        date: document.querySelector("#dateRead"),
+      };
+
+      const moodConfig = {
+        calm: { pace: 48, weight: 420, alpha: 0.9, size: "clamp(26px, 3.7vw, 44px)", note: "listening" },
+        hesitant: { pace: 128, weight: 360, alpha: 0.82, size: "clamp(25px, 3.5vw, 42px)", note: "rephrasing" },
+        excited: { pace: 8, weight: 760, alpha: 0.96, size: "clamp(31px, 4.5vw, 56px)", note: "overflow" },
+        fragile: { pace: 116, weight: 310, alpha: 0.62, size: "clamp(25px, 3.4vw, 40px)", note: "fading" },
+      };
+
+      const scripts = {
+        calm: [
+          { type: "type", text: "我在这里。\n\n不是为了立刻回答你，", delay: 48 },
+          { type: "pause", ms: 360 },
+          { type: "type", text: "而是先把你的沉默放在桌面上，\n像一封还没有折好的信。", delay: 56 },
+        ],
+        hesitant: [
+          { type: "tone", weight: 340, alpha: 0.78 },
+          { type: "type", text: "我想说，", delay: 142 },
+          { type: "pause", ms: 520 },
+          { type: "type", text: "我可能有点想你。", delay: 155 },
+          { type: "pause", ms: 430 },
+          { type: "erase", count: 8, delay: 64 },
+          { type: "pause", ms: 360 },
+          { type: "type", text: "其实是很想你。\n\n但我怕说得太重，", delay: 136 },
+          { type: "erase", count: 7, delay: 58 },
+          { type: "type", text: "怕你觉得我太靠近。", delay: 148 },
+        ],
+        excited: [
+          { type: "tone", weight: 780, alpha: 0.98, size: "clamp(34px, 4.8vw, 60px)" },
+          { type: "type", text: "听我说。", delay: 18, pulse: true },
+          { type: "pause", ms: 120 },
+          {
+            type: "type",
+            text: "\n\n我不想再把重要的话藏到明天。\n我在乎。现在就很在乎。\n你的每一次停顿，我都听见了。",
+            delay: 5,
+            pulse: true,
+          },
+          { type: "tone", weight: 680, alpha: 0.92, size: "clamp(30px, 4.3vw, 54px)" },
+        ],
+        fragile: [
+          { type: "tone", weight: 320, alpha: 0.72 },
+          { type: "type", text: "今天的声音有点轻。\n\n", delay: 118 },
+          { type: "tone", alpha: 0.62 },
+          { type: "type", text: "像电量快耗尽时，", delay: 132 },
+          { type: "tone", alpha: 0.52 },
+          { type: "type", text: "屏幕还亮着，", delay: 142 },
+          { type: "tone", alpha: 0.42 },
+          { type: "type", text: "只是没有力气再假装明亮。\n\n", delay: 154 },
+          { type: "tone", alpha: 0.34 },
+          { type: "type", text: "你靠近一点就好。", delay: 172 },
+        ],
+      };
+
+      const state = {
+        mood: "calm",
+        text: "",
+        token: 0,
+        timer: null,
+        paused: false,
+        currentResolve: null,
+      };
+
+      function formatDate() {
+        const formatter = new Intl.DateTimeFormat("zh-CN", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+        reads.date.textContent = formatter.format(new Date());
+      }
+
+      function setTone(partial = {}) {
+        const config = { ...moodConfig[state.mood], ...partial };
+        writing.style.setProperty("--letter-weight", config.weight);
+        writing.style.setProperty("--letter-opacity", config.alpha);
+        writing.style.setProperty("--letter-size", config.size);
+        writing.style.color = `rgba(30, 29, 26, ${config.alpha})`;
+        reads.pace.textContent = `${config.pace}ms`;
+        reads.weight.textContent = String(config.weight);
+        reads.alpha.textContent = `${Math.round(config.alpha * 100)}%`;
+        reads.note.textContent = config.note;
+      }
+
+      function setMood(mood) {
+        state.mood = mood;
+        writing.className = `writing ${mood === "calm" ? "" : mood}`.trim();
+        emotionSketch.className = `emotion-sketch ${mood}`;
+        modeButtons.forEach((button) => {
+          button.classList.toggle("active", button.dataset.mood === mood);
+        });
+        reads.state.textContent = mood;
+        setTone();
+      }
+
+      function render() {
+        letterText.textContent = state.text;
+      }
+
+      function wait(ms) {
+        return new Promise((resolve) => {
+          state.currentResolve = resolve;
+          state.timer = window.setTimeout(() => {
+            state.timer = null;
+            state.currentResolve = null;
+            resolve();
+          }, ms);
+        });
+      }
+
+      async function typeText(text, delay, pulse, token) {
+        const chars = Array.from(text);
+        for (let i = 0; i < chars.length; i += 1) {
+          if (token !== state.token) return;
+          state.text += chars[i];
+          if (pulse && i % 7 === 0) {
+            const heavy = i % 14 === 0 ? 820 : 680;
+            writing.style.setProperty("--letter-weight", heavy);
+            reads.weight.textContent = String(heavy);
+          }
+          render();
+          await wait(delay + Math.random() * Math.min(34, delay * 0.45));
+        }
+      }
+
+      async function eraseText(count, delay, token) {
+        for (let i = 0; i < count; i += 1) {
+          if (token !== state.token) return;
+          state.text = Array.from(state.text).slice(0, -1).join("");
+          render();
+          await wait(delay);
+        }
+      }
+
+      async function run(mood = state.mood) {
+        window.clearTimeout(state.timer);
+        state.token += 1;
+        const token = state.token;
+        state.paused = false;
+        setPauseIcon(false);
+        setMood(mood);
+        state.text = "";
+        render();
+        caret.style.visibility = "visible";
+
+        for (const step of scripts[mood]) {
+          if (token !== state.token) return;
+          if (step.type === "pause") await wait(step.ms);
+          if (step.type === "tone") setTone(step);
+          if (step.type === "type") await typeText(step.text, step.delay, step.pulse, token);
+          if (step.type === "erase") await eraseText(step.count, step.delay, token);
+        }
+
+        if (token === state.token) {
+          caret.style.visibility = "hidden";
+          reads.note.textContent = "still";
+        }
+      }
+
+      function setPauseIcon(paused) {
+        pause.title = paused ? "继续" : "暂停";
+        pause.innerHTML = paused
+          ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" /></svg>'
+          : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14" /></svg>';
+      }
+
+      function pauseOrResume() {
+        if (!state.paused) {
+          state.paused = true;
+          window.clearTimeout(state.timer);
+          state.timer = null;
+          state.token += 1;
+          caret.style.visibility = "hidden";
+          reads.note.textContent = "held";
+          setPauseIcon(true);
+          return;
+        }
+        run(state.mood);
+      }
+
+      modeButtons.forEach((button) => {
+        button.addEventListener("click", () => run(button.dataset.mood));
+      });
+
+      replay.addEventListener("click", () => run(state.mood));
+      pause.addEventListener("click", pauseOrResume);
+
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden && state.timer) {
+          window.clearTimeout(state.timer);
+          state.timer = null;
+          state.token += 1;
+          caret.style.visibility = "hidden";
+          reads.note.textContent = "hidden";
+          setPauseIcon(true);
+          state.paused = true;
+        }
+      });
+
+      formatDate();
+      run("calm");
+    </script>
+  </body>
+</html>

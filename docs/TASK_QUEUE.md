@@ -2,7 +2,11 @@
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
 > P0（VM-6）/ P1（VE-2）/ R9（mood 修复）/ R10（tension 阈值修复）/ P2（VE-1，comfort+real_sharp）
-> 已完成并真机验证 PASS。当前优先候选 = **R11**（纯 E2E 长期记忆部分失忆，新发现，未排查）。
+> 已完成并真机验证 PASS。当前优先候选 = **R11**（纯 E2E 长期记忆部分失忆，新发现，未排查，等待用户可访问 VikingDB）。
+
+---
+
+## ~~R12 · 文本聊天反编造修复~~ ✅ 已完成并真机验证 PASS，已 commit (`6127000`)
 
 ---
 
@@ -29,14 +33,17 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 `pytest backend/tests/test_tone.py backend/tests/test_rtc_state_block.py` 52 passed；
 `-k "mood or engine or behavior or tone or rtc"` 138 passed。用户真机验证：不再感觉"冲"。
 
-## R11 ·（新，建议优先）纯 E2E 长期记忆部分失忆
-- **Scope**：用户反馈纯 E2E 语音对话中，Boxi 对**部分长期记忆**（之前提过的事）"记不起来"。
-  涉及 Viking 长期记忆库的写入/检索/注入链路（`backend/app/rtc/viking_memory.py`、VM-6
-  自定义 schema、`AddSession`/检索响应解析）。**先评估，不直接重写**。
-- **建议**：下一 session 用 `/architect` 拆解。需先向用户确认：忘的是"很久以前的事"还是"最近一次
-  会话里的事"？是完全没存进去，还是存了但检索不到？这决定排查方向是写入侧还是检索侧。
-- **关联**：`ARCHITECTURE_SNAPSHOT.md` 的 **U3**（VM-6 自定义 `boxi_profile` 检索响应 JSON 结构
-  未实测，解析做了容错）可能相关——如果检索响应结构和容错解析不匹配，会导致"存了但读不出来"。
+## R11 ·（搁置，等待用户可访问 VikingDB）纯 E2E 长期记忆部分失忆
+- **Scope**：用户确认具体案例——Boxi 不记得用户在新西兰（很久以前提过）。用户判断"应该是直接忘掉了"
+  （疑似写入侧从未存入，非检索/U3 问题）。涉及 `backend/app/rtc/viking_memory.py`、
+  `backend/app/rtc/routes.py` `/rtc/memory/session`。**先评估，不直接重写**。
+- **已 `/architect` 拆出方案**：
+  - **R11-A（先做）**：前端触发链路确认——语音结束后是否一定调用 `/rtc/memory/session`
+    （读 `frontend/src/voice/` + `routes.py:306-345`），定位那次会话是否成功 AddSession。
+  - **R11-B（视 A 结论）**：核对 `VIKING_MEMORY_TYPES` 配置与 Viking 实际抽取结果是否对得上
+    "用户在新西兰"这类事实（与 U3 相关）。
+- **阻塞**：用户当前手机不在身边，无法登录 VikingDB 控制台核实记忆库内容，本轮主动搁置。
+  下一 session 若用户已能访问，从 R11-A 开始。
 
 ## ~~P2 · VE-1 收尾~~ 基本完成（playful 待补测）
 - ① 真机听 comfort/real_sharp ✅ **PASS**（"贴合情绪"），见 HANDOFF。playful 因
