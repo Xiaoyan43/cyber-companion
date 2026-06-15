@@ -1,8 +1,25 @@
 # TASK_QUEUE — 按优先级（2026-06-16）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
-> P0（VM-6）/ P1（VE-2）/ R9（mood 修复）/ R10（tension 阈值修复）/ P2（VE-1，comfort+real_sharp）
-> 已完成并真机验证 PASS。当前优先候选 = **R11**（纯 E2E 长期记忆部分失忆，新发现，未排查，等待用户可访问 VikingDB）。
+> P0（VM-6）/ P1（VE-2）/ R9（mood 修复）/ R10（tension 阈值修复）/ P2（VE-1，comfort+real_sharp）/
+> R12（反编造）已完成并真机验证 PASS。当前优先候选 = **信笺 UI · P1**（接入 App.tsx 作为可切换 Chat 视图，
+> 见下方"信笺 UI 方向"），其次 **R11**（纯 E2E 长期记忆部分失忆，等待用户可访问 VikingDB）。
+
+---
+
+## 信笺 UI 方向（新增可切换模式，不删旧 UI）
+
+- **方向已定**：用信笺/typography 视觉语言，替换/共存于现有 Chat UI；旧 UI 保留为默认，加 toggle 切换。
+- **~~P0 · React 化骨架~~** ✅ 已完成并 commit (`4858125`)。新增 `frontend/src/letter/`
+  （`LetterView.tsx` + `useTypewriter.ts` + `scripts.ts` + `LetterView.css`，`.letter-spike` 前缀隔离样式）。
+  `tsc --noEmit` 通过；vite dev 截图验证 4 个 mood 切换/打字机/sketch 表情均正常，无 console 错误。
+  未接入 `App.tsx`（按 scope 要求）。
+- **P1 · 接入 App.tsx，作为可切换 Chat 视图**（下一步，待 `/architect` 细化或直接执行）：
+  - 加 `uiMode: 'classic' | 'letter'` state（默认 `classic`）。
+  - `letter` 模式下用 `LetterView` 渲染 Chat 区域，Mood/Relationship/Memory 面板暂保留/折叠。
+  - mood prop 先用真实 `mood_state.mood` 做最简映射（如 sad/worried→fragile，其余→calm），标 TODO。
+  - 验收：`tsc --noEmit` 通过；切换模式两边功能互不影响。
+- **P2 ·（待用户回答 `docs/LETTER_UI_MOOD_MAPPING_DRAFT.md` 的 3 个开放问题后）**：精细化 mood 映射 + Voice 模式信笺呈现。
 
 ---
 
