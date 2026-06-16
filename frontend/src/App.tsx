@@ -32,6 +32,8 @@ import { appendChatStreamDelta } from "./chat/streamRender";
 import { PixelCharacter } from "./components/PixelCharacter";
 import { RtcVoicePanel } from "./components/RtcVoicePanel";
 import { LetterView } from "./letter/LetterView";
+import { type LetterMood } from "./letter/scripts";
+import { fetchMoodState } from "./api/mood";
 import { MemoryLinksPanel } from "./components/MemoryLinksPanel";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { MoodPanel } from "./components/MoodPanel";
@@ -89,6 +91,7 @@ function parseAvatarState(value: string): AvatarState {
 
 function App() {
   const [uiMode, setUiMode] = useState<"classic" | "letter">("classic");
+  const [letterMood, setLetterMood] = useState<LetterMood | undefined>(undefined);
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [historyStatus, setHistoryStatus] = useState<"loading" | "ready" | "offline">("loading");
@@ -222,6 +225,41 @@ function App() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (uiMode !== "letter") {
+      setLetterMood(undefined);
+      return;
+    }
+
+    let active = true;
+
+    async function loadLetterMood() {
+      try {
+        const state = await fetchMoodState();
+        if (!active) return;
+        // TODO: refine mapping once mood vocabulary stabilizes
+        let mapped: LetterMood;
+        if (state.mood === "sad" || state.mood === "worried" || state.mood === "angry") {
+          mapped = "fragile";
+        } else if (state.mood === "happy") {
+          mapped = "excited";
+        } else if (state.mood === "annoyed") {
+          mapped = "hesitant";
+        } else {
+          mapped = "calm";
+        }
+        setLetterMood(mapped);
+      } catch {
+        // backend offline — LetterView falls back to internal picker
+      }
+    }
+
+    void loadLetterMood();
+    return () => {
+      active = false;
+    };
+  }, [uiMode]);
 
   useEffect(() => {
     const messageList = messageListRef.current;
@@ -915,7 +953,7 @@ function App() {
         ) : null}
 
         {uiMode === "letter" ? (
-          <LetterView />
+          <LetterView mood={letterMood} />
         ) : (
           <>
             <div className="message-list" ref={messageListRef}>

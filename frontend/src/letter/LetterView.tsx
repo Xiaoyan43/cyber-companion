@@ -21,11 +21,16 @@ function formatDate(): string {
   }).format(new Date());
 }
 
-export function LetterView() {
+type Props = {
+  mood?: LetterMood;
+};
+
+export function LetterView({ mood: externalMood }: Props) {
   const { mood, text, tone, note, caretVisible, paused, run, pauseOrResume } = useTypewriter("calm");
+  const activeMood = externalMood ?? mood;
   const today = useMemo(() => formatDate(), []);
 
-  const writingClassName = `writing ${mood === "calm" ? "" : mood}`.trim();
+  const writingClassName = `writing ${activeMood === "calm" ? "" : activeMood}`.trim();
   const writingStyle = {
     "--letter-weight": tone.weight,
     "--letter-opacity": tone.alpha,
@@ -41,18 +46,20 @@ export function LetterView() {
           <span>private letter interface</span>
         </div>
 
-        <nav className="modes" aria-label="情绪">
-          {MOODS.map((m) => (
-            <button
-              key={m}
-              type="button"
-              className={m === mood ? "active" : ""}
-              onClick={() => run(m)}
-            >
-              {MOOD_LABELS[m]}
-            </button>
-          ))}
-        </nav>
+        {externalMood === undefined && (
+          <nav className="modes" aria-label="情绪">
+            {MOODS.map((m) => (
+              <button
+                key={m}
+                type="button"
+                className={m === mood ? "active" : ""}
+                onClick={() => run(m)}
+              >
+                {MOOD_LABELS[m]}
+              </button>
+            ))}
+          </nav>
+        )}
 
         <div className="status" aria-label="文字状态">
           <span>{tone.pace}ms</span>
@@ -68,7 +75,7 @@ export function LetterView() {
             <span className="meta">{today}</span>
           </div>
 
-          <div className={`emotion-sketch ${mood}`} aria-hidden="true">
+          <div className={`emotion-sketch ${activeMood}`} aria-hidden="true">
             <svg viewBox="0 0 120 120">
               <path className="paper-mark" d="M26 66c14-32 46-42 68-24" />
               <path className="paper-mark" d="M32 83c18 12 45 10 59-8" />
@@ -110,7 +117,7 @@ export function LetterView() {
 
           <div className="letter-foot">
             <span className="signature">Always here,</span>
-            <span className="meta">{mood}</span>
+            <span className="meta">{activeMood}</span>
           </div>
         </article>
       </section>

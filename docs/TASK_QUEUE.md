@@ -1,9 +1,9 @@
 # TASK_QUEUE — 按优先级（2026-06-17）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
-> P0（VM-6）/ P1（VE-2）/ R9（mood 修复）/ R10（tension 阈值修复）/ P2（VE-1，comfort+real_sharp）/
-> R12（反编造）/ 信笺 UI P0 + P1 已完成并验证 PASS。当前优先候选 = **信笺 UI · P1-B**（backend mood 接入 LetterView），
-> 其次 **P1-C**（真实 Boxi 消息驱动打字机），再次 **R11**（长期记忆部分失忆，等待 VikingDB 访问）。
+> P0（VM-6）/ P1（VE-2）/ R9 / R10 / P2（VE-1）/ R12（反编造）/ 信笺 UI P0 + P1 + P1-B 均已完成。
+> 当前优先候选 = **信笺 UI · P1-C**（真实 Boxi 消息驱动打字机），其次 **P5-A**（Venice AI，随时可开始），
+> 再次 **P5-B**（Fish Audio，等用户提供文档），最后 **R11**（等 VikingDB 访问）。
 
 ---
 
@@ -20,13 +20,11 @@
   - classic 模式：原消息列表 + 表单完整保留，messages state 不丢失。
   - LetterView mood 由内部按钮自管理（未接 backend mood，P1-B 任务）。
   - `tsc --noEmit` 通过；vite dev 切换截图 PASS；console 零错误。
-- **P1-B · backend mood → LetterView（下一步）**：
-  - 给 `LetterView.tsx` 加可选 `mood?: LetterMood` prop（有 prop 时隐藏内部 picker，无 prop 时保留）。
-  - App.tsx 轻量 fetch backend mood（需先读 `MoodPanel.tsx` 确认 endpoint），做最简映射后传入。
-  - 映射草案：`sad|worried|anxious→fragile`，`excited|energetic→excited`，`hesitant→hesitant`，其余→`calm`。标 TODO。
-  - 要读：`frontend/src/components/MoodPanel.tsx` + `LetterView.tsx` + `App.tsx`。
-  - 验收：`tsc --noEmit` 通过；letter 模式 mood 跟随后端状态；内部 picker 隐藏。
-  - 预计 diff：small（~30 行）。
+- **~~P1-B · backend mood → LetterView~~** ✅ 已完成（本轮，待 commit）：
+  - `LetterView.tsx` 新增 `mood?: LetterMood` prop；`activeMood = externalMood ?? mood`；有外部 prop 时隐藏 picker。
+  - `App.tsx` 新增 `letterMood` state + useEffect（`uiMode==='letter'` 时 one-shot fetch `/memory/mood`，映射传入）。
+  - 映射：`sad|worried|angry→fragile`，`happy→excited`，`annoyed→hesitant`，其余→`calm`（TODO 注释标记）。
+  - `tsc --noEmit` 通过；preview 验证：picker 隐藏，mood 正确映射，console 零错误。
 - **P1-C · 真实 Boxi 消息驱动打字机（P1-B 之后）**：
   - 把最新一条 Boxi 回复文本传给 `LetterView`，驱动打字机替代 demo scripts。
   - 需给 `useTypewriter.ts` 加受控文本 prop；`LetterView` 加 `text?: string` prop。
@@ -90,6 +88,20 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - **阻塞**：需用户先补文档 `6348/2386107（传递自定义指令）`。
 - **验收**：括号指令不进语音、能在前端拿到并触发一个 cue。
 - **要读**：`docs/VOICE_EMOTION_MEMORY_PLAN.md`、`reference/14.md`（IgnoreBracketText 段）、待补的 2386107。
+
+## P5 · Provider 替换（已计划，待排期）
+
+### P5-A · LLM → Venice AI
+- **Scope**：`backend/app/providers/` 新增 `venice.py`（OpenAI-compatible），`config/providers.json` 加 venice entry，env 加 `VENICE_API_KEY`。
+- **可行性**：Venice AI 使用 OpenAI-compatible API（`/v1/chat/completions`），项目已有 provider 抽象层，DeepSeek 也走同一套接口——预计改动极小（~1 文件 + 配置）。
+- **注意**：Venice AI 是隐私/无审查平台，需评估模型选型对 Boxi 人设一致性的影响（Llama/Mistral 系列 vs DeepSeek-chat）。
+- **阻塞**：无；可随时开始。
+
+### P5-B · TTS → Fish Audio
+- **Scope**：`backend/app/tts/` 新增 `fish_audio.py`，provider registry 注册，env 加 `FISH_AUDIO_API_KEY`。
+- **可行性**：TTS 抽象层已存在（`backend/app/tts/base.py` + registry），新增一个 provider 文件即可。
+  **核心未知**：Fish Audio 是否支持情绪/语速参数（等价于 Doubao bigtts 的 `context_texts`/`speech_rate`）——需看文档才能判断情绪通道（VE-1）能否保留。
+- **阻塞**：需用户提供 Fish Audio API 文档（无法自行搜索）。
 
 ## P4 ·（可选）记忆/延迟/persona
 - **VM-7**：评估用 `get_context` 替代手动 `SearchMemory`（`reference/06.md`）。Scope=评估+spec，不直接重写。
