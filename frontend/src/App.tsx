@@ -94,6 +94,10 @@ function App() {
   const [letterMood, setLetterMood] = useState<LetterMood | undefined>(undefined);
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const lastBoxiText = useMemo(
+    () => [...messages].reverse().find((m) => m.speaker === "boxi")?.text,
+    [messages],
+  );
   const [historyStatus, setHistoryStatus] = useState<"loading" | "ready" | "offline">("loading");
   const [isSending, setIsSending] = useState(false);
   const [lastTurn, setLastTurn] = useState<TurnSummary | null>(null);
@@ -953,7 +957,7 @@ function App() {
         ) : null}
 
         {uiMode === "letter" ? (
-          <LetterView mood={letterMood} />
+          <LetterView mood={letterMood} text={lastBoxiText} />
         ) : (
           <>
             <div className="message-list" ref={messageListRef}>

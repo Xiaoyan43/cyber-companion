@@ -23,7 +23,7 @@ function wait(ms: number, onTimer: (id: number | null) => void): Promise<void> {
   });
 }
 
-export function useTypewriter(initialMood: LetterMood = "calm"): TypewriterState {
+export function useTypewriter(initialMood: LetterMood = "calm", externalText?: string): TypewriterState {
   const [mood, setMood] = useState<LetterMood>(initialMood);
   const [text, setText] = useState("");
   const [tone, setToneState] = useState<ToneConfig>(MOOD_CONFIG[initialMood]);
@@ -34,6 +34,7 @@ export function useTypewriter(initialMood: LetterMood = "calm"): TypewriterState
   const tokenRef = useRef(0);
   const timerRef = useRef<number | null>(null);
   const moodRef = useRef<LetterMood>(initialMood);
+  const hasExternalTextRef = useRef(externalText !== undefined);
 
   const setTimer = useCallback((id: number | null) => {
     timerRef.current = id;
@@ -130,7 +131,28 @@ export function useTypewriter(initialMood: LetterMood = "calm"): TypewriterState
   }, [paused, run]);
 
   useEffect(() => {
-    void run(initialMood);
+    if (externalText === undefined) return;
+    tokenRef.current += 1;
+    const token = tokenRef.current;
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setPaused(false);
+    setText("");
+    setCaretVisible(true);
+    const pace = MOOD_CONFIG[moodRef.current].pace;
+    void typeText(externalText, pace, false, token).then(() => {
+      if (token === tokenRef.current) setCaretVisible(false);
+    });
+  // externalText is the only reactive dep; tone pace is read from ref at fire time.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalText]);
+
+  useEffect(() => {
+    if (!hasExternalTextRef.current) {
+      void run(initialMood);
+    }
 
     const onVisibility = () => {
       if (document.hidden && timerRef.current !== null) {

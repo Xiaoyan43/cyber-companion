@@ -23,10 +23,11 @@ function formatDate(): string {
 
 type Props = {
   mood?: LetterMood;
+  text?: string;
 };
 
-export function LetterView({ mood: externalMood }: Props) {
-  const { mood, text, tone, note, caretVisible, paused, run, pauseOrResume } = useTypewriter("calm");
+export function LetterView({ mood: externalMood, text: externalText }: Props) {
+  const { mood, text, tone, note, caretVisible, paused, run, pauseOrResume } = useTypewriter("calm", externalText);
   const activeMood = externalMood ?? mood;
   const today = useMemo(() => formatDate(), []);
 
