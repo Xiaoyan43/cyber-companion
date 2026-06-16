@@ -1,9 +1,9 @@
-# TASK_QUEUE — 按优先级（2026-06-16）
+# TASK_QUEUE — 按优先级（2026-06-17）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
 > P0（VM-6）/ P1（VE-2）/ R9（mood 修复）/ R10（tension 阈值修复）/ P2（VE-1，comfort+real_sharp）/
-> R12（反编造）已完成并真机验证 PASS。当前优先候选 = **信笺 UI · P1**（接入 App.tsx 作为可切换 Chat 视图，
-> 见下方"信笺 UI 方向"），其次 **R11**（纯 E2E 长期记忆部分失忆，等待用户可访问 VikingDB）。
+> R12（反编造）/ 信笺 UI P0 + P1 已完成并验证 PASS。当前优先候选 = **信笺 UI · P1-B**（backend mood 接入 LetterView），
+> 其次 **P1-C**（真实 Boxi 消息驱动打字机），再次 **R11**（长期记忆部分失忆，等待 VikingDB 访问）。
 
 ---
 
@@ -13,12 +13,26 @@
 - **~~P0 · React 化骨架~~** ✅ 已完成并 commit (`4858125`)。新增 `frontend/src/letter/`
   （`LetterView.tsx` + `useTypewriter.ts` + `scripts.ts` + `LetterView.css`，`.letter-spike` 前缀隔离样式）。
   `tsc --noEmit` 通过；vite dev 截图验证 4 个 mood 切换/打字机/sketch 表情均正常，无 console 错误。
-  未接入 `App.tsx`（按 scope 要求）。
-- **P1 · 接入 App.tsx，作为可切换 Chat 视图**（下一步，待 `/architect` 细化或直接执行）：
-  - 加 `uiMode: 'classic' | 'letter'` state（默认 `classic`）。
-  - `letter` 模式下用 `LetterView` 渲染 Chat 区域，Mood/Relationship/Memory 面板暂保留/折叠。
-  - mood prop 先用真实 `mood_state.mood` 做最简映射（如 sad/worried→fragile，其余→calm），标 TODO。
-  - 验收：`tsc --noEmit` 通过；切换模式两边功能互不影响。
+- **~~P1 · 接入 App.tsx，作为可切换 Chat 视图~~** ✅ 已完成（本轮，待 commit）：
+  - `uiMode: 'classic' | 'letter'` state 加入 App.tsx（默认 `classic`）。
+  - chat-header 新增 `.letter-toggle-button`（文案"对话"/"信笺"），点击切换。
+  - letter 模式：渲染 `<LetterView />`，隐藏输入框（用户决策：letter 模式不发消息）。
+  - classic 模式：原消息列表 + 表单完整保留，messages state 不丢失。
+  - LetterView mood 由内部按钮自管理（未接 backend mood，P1-B 任务）。
+  - `tsc --noEmit` 通过；vite dev 切换截图 PASS；console 零错误。
+- **P1-B · backend mood → LetterView（下一步）**：
+  - 给 `LetterView.tsx` 加可选 `mood?: LetterMood` prop（有 prop 时隐藏内部 picker，无 prop 时保留）。
+  - App.tsx 轻量 fetch backend mood（需先读 `MoodPanel.tsx` 确认 endpoint），做最简映射后传入。
+  - 映射草案：`sad|worried|anxious→fragile`，`excited|energetic→excited`，`hesitant→hesitant`，其余→`calm`。标 TODO。
+  - 要读：`frontend/src/components/MoodPanel.tsx` + `LetterView.tsx` + `App.tsx`。
+  - 验收：`tsc --noEmit` 通过；letter 模式 mood 跟随后端状态；内部 picker 隐藏。
+  - 预计 diff：small（~30 行）。
+- **P1-C · 真实 Boxi 消息驱动打字机（P1-B 之后）**：
+  - 把最新一条 Boxi 回复文本传给 `LetterView`，驱动打字机替代 demo scripts。
+  - 需给 `useTypewriter.ts` 加受控文本 prop；`LetterView` 加 `text?: string` prop。
+  - 要读：`useTypewriter.ts` + `LetterView.tsx` + `App.tsx`（messages state）。
+  - 验收：letter 模式下能看到 Boxi 最新回复以打字机节奏呈现。
+  - 预计 diff：small-medium。
 - **P2 ·（待用户回答 `docs/LETTER_UI_MOOD_MAPPING_DRAFT.md` 的 3 个开放问题后）**：精细化 mood 映射 + Voice 模式信笺呈现。
 
 ---

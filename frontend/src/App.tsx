@@ -31,6 +31,7 @@ import {
 import { appendChatStreamDelta } from "./chat/streamRender";
 import { PixelCharacter } from "./components/PixelCharacter";
 import { RtcVoicePanel } from "./components/RtcVoicePanel";
+import { LetterView } from "./letter/LetterView";
 import { MemoryLinksPanel } from "./components/MemoryLinksPanel";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { MoodPanel } from "./components/MoodPanel";
@@ -87,6 +88,7 @@ function parseAvatarState(value: string): AvatarState {
 }
 
 function App() {
+  const [uiMode, setUiMode] = useState<"classic" | "letter">("classic");
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [historyStatus, setHistoryStatus] = useState<"loading" | "ready" | "offline">("loading");
@@ -863,6 +865,14 @@ function App() {
           <div className="chat-header-actions">
             <button
               type="button"
+              className={uiMode === "letter" ? "letter-toggle-button active" : "letter-toggle-button"}
+              onClick={() => setUiMode(uiMode === "classic" ? "letter" : "classic")}
+              title="切换信笺模式"
+            >
+              {uiMode === "letter" ? "信笺" : "对话"}
+            </button>
+            <button
+              type="button"
               className="clear-chat-button"
               onClick={clearChatView}
               disabled={isSending || messages.length === 0}
@@ -904,83 +914,89 @@ function App() {
           </div>
         ) : null}
 
-        <div className="message-list" ref={messageListRef}>
-          {historyStatus === "loading" ? (
-            <p className="chat-empty">Loading chat history...</p>
-          ) : null}
-          {historyStatus !== "loading" && messages.length === 0 ? (
-            <p className="chat-empty">
-              {chatViewCleared
-                ? "对话框已清空。记忆仍保留在本地；新开标签页可重新看到历史。"
-                : "还没有聊天记录。可以先扔一句话进来。"}
-            </p>
-          ) : null}
-          {messages.map((message) => {
-            const metaLine = message.meta ? formatMessageMeta(message.meta) : null;
-            const messageClassName = [
-              "message",
-              message.speaker,
-              message.initiation === "proactive" ? "initiation-proactive" : "",
-              message.id === proactiveAttentionMessageId && proactiveAttention
-                ? "attention-cue"
-                : "",
-            ]
-              .filter(Boolean)
-              .join(" ");
+        {uiMode === "letter" ? (
+          <LetterView />
+        ) : (
+          <>
+            <div className="message-list" ref={messageListRef}>
+              {historyStatus === "loading" ? (
+                <p className="chat-empty">Loading chat history...</p>
+              ) : null}
+              {historyStatus !== "loading" && messages.length === 0 ? (
+                <p className="chat-empty">
+                  {chatViewCleared
+                    ? "对话框已清空。记忆仍保留在本地；新开标签页可重新看到历史。"
+                    : "还没有聊天记录。可以先扔一句话进来。"}
+                </p>
+              ) : null}
+              {messages.map((message) => {
+                const metaLine = message.meta ? formatMessageMeta(message.meta) : null;
+                const messageClassName = [
+                  "message",
+                  message.speaker,
+                  message.initiation === "proactive" ? "initiation-proactive" : "",
+                  message.id === proactiveAttentionMessageId && proactiveAttention
+                    ? "attention-cue"
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ");
 
-            return (
-              <article
-                key={message.id}
-                data-message-id={message.id}
-                className={messageClassName}
-              >
-                <span className="speaker">{message.speaker === "boxi" ? "Boxi" : "You"}</span>
-                <p>{message.text}</p>
-                {metaLine ? <p className="message-meta">{metaLine}</p> : null}
-              </article>
-            );
-          })}
-        </div>
+                return (
+                  <article
+                    key={message.id}
+                    data-message-id={message.id}
+                    className={messageClassName}
+                  >
+                    <span className="speaker">{message.speaker === "boxi" ? "Boxi" : "You"}</span>
+                    <p>{message.text}</p>
+                    {metaLine ? <p className="message-meta">{metaLine}</p> : null}
+                  </article>
+                );
+              })}
+            </div>
 
-        <form className={`chat-form${pushToTalkEnabled ? " with-ptt" : ""}`} onSubmit={handleSubmit}>
-          <label className="sr-only" htmlFor="chat-input">
-            Message
-          </label>
-          <input
-            id="chat-input"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="Type something..."
-            disabled={isSending || pushToTalkState === "transcribing"}
-          />
-          {pushToTalkEnabled && !rtcVoice.isLive ? (
-            <button
-              type="button"
-              className={
-                pushToTalkState === "recording" ? "ptt-button recording" : "ptt-button"
-              }
-              aria-pressed={pushToTalkState === "recording"}
-              aria-label="Hold to talk"
-              disabled={isSending || pushToTalkState === "transcribing" || rtcVoice.isLive}
-              onPointerDown={handlePttPointerDown}
-              onPointerUp={handlePttPointerUp}
-              onPointerLeave={handlePttPointerLeave}
-              onPointerCancel={handlePttPointerCancel}
-              onMouseDown={handlePttMouseDown}
-              onMouseUp={handlePttMouseUp}
-              onMouseLeave={handlePttMouseLeave}
-            >
-              {pushToTalkState === "recording"
-                ? "Rec"
-                : pushToTalkState === "transcribing"
-                  ? "..."
-                  : "Hold"}
-            </button>
-          ) : null}
-          <button type="submit" disabled={isSending || pushToTalkState === "transcribing"}>
-            {isSending ? "..." : "Send"}
-          </button>
-        </form>
+            <form className={`chat-form${pushToTalkEnabled ? " with-ptt" : ""}`} onSubmit={handleSubmit}>
+              <label className="sr-only" htmlFor="chat-input">
+                Message
+              </label>
+              <input
+                id="chat-input"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder="Type something..."
+                disabled={isSending || pushToTalkState === "transcribing"}
+              />
+              {pushToTalkEnabled && !rtcVoice.isLive ? (
+                <button
+                  type="button"
+                  className={
+                    pushToTalkState === "recording" ? "ptt-button recording" : "ptt-button"
+                  }
+                  aria-pressed={pushToTalkState === "recording"}
+                  aria-label="Hold to talk"
+                  disabled={isSending || pushToTalkState === "transcribing" || rtcVoice.isLive}
+                  onPointerDown={handlePttPointerDown}
+                  onPointerUp={handlePttPointerUp}
+                  onPointerLeave={handlePttPointerLeave}
+                  onPointerCancel={handlePttPointerCancel}
+                  onMouseDown={handlePttMouseDown}
+                  onMouseUp={handlePttMouseUp}
+                  onMouseLeave={handlePttMouseLeave}
+                >
+                  {pushToTalkState === "recording"
+                    ? "Rec"
+                    : pushToTalkState === "transcribing"
+                      ? "..."
+                      : "Hold"}
+                </button>
+              ) : null}
+              <button type="submit" disabled={isSending || pushToTalkState === "transcribing"}>
+                {isSending ? "..." : "Send"}
+              </button>
+            </form>
+          </>
+        )}
 
         {voiceStatusText || ttsLastError ? (
           <p
