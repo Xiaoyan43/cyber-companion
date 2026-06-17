@@ -130,14 +130,12 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - P6-D-3：pipeline 切换 + 修复 additions JSON 序列化 + 流式 yield + 帧连发优化，实机验收 PASS
 - STT 默认同步升级为 doubao_stream（补完 P6-A 收尾）；动作描述 `[...]` 不再被 TTS 朗读
 
-### P6-E · TTS 语音指令（逐段情绪控制）
-- **前置**：P6-D 完成后（双向流式支持语音指令）
-- **动机**：TTS 2.0 expressive 支持 `[#用嗤笑带点无奈的语气说]` 这类自然语言指令嵌入文本，LLM 可在每段回复前自动生成语气指令，实现真正的逐轮情绪控制。
-- **Scope**：
-  1. 确认 `seed-tts-2.0-expressive` 与当前音色（`zh_female_vv_uranus_bigtts`）兼容
-  2. 在 CompanionBrain system prompt 加指令：回复前加 `[#语气指令]`
-  3. TTS 服务透传（不 strip）
-- **要读**：`reference/02.md`（语音指令示例）、`reference/08.md`（expressive vs standard 能力对比）
+### ~~P6-E · TTS 语音指令（逐段情绪控制）~~ ✅ 已完成并实机验证 PASS（2026-06-17，commit `4609b3b` + `9de50fe`）
+- `VOICE_MODE_INSTRUCTION` 要求 LLM 在回复前加 `[#语气描述]`（10 字以内）
+- `extract_voice_instruction()` 提取指令传入 `context_texts`，正文送 TTS
+- `_strip_stage_directions` 兜底 strip，保证就算未提取也不会被朗读
+- 关键结论：`seed-tts-2.0-expressive` 不是有效 Resource-Id（只是复刻音色的 model 参数），标准音色用 `seed-tts-2.0` 即可支持 `context_texts`
+- 实机日志验证：`[带点调侃的语气]`、`[带着笑意的语气]`、`[叹气但不算太凶的语气]` 等均正确提取
 
 ### ~~P6-F · ASR 语义顺滑~~ ✅ 已完成（2026-06-17，未单独 commit）
 - `doubao_streaming_stt_service.py` `_request_params` 加 `"enable_ddc": True`
