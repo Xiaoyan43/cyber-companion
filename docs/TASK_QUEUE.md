@@ -1,9 +1,9 @@
 # TASK_QUEUE — 按优先级（2026-06-17）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
-> P0（VM-6）/ P1（VE-2）/ R9 / R10 / P2（VE-1）/ R12（反编造）/ 信笺 UI P0 + P1 + P1-B + P1-C / **P5-A-1** 均已完成。
+> P0（VM-6）/ P1（VE-2）/ R9 / R10 / P2（VE-1）/ R12（反编造）/ 信笺 UI P0 + P1 + P1-B + P1-C / **P5-A-1** / **P6（全部子任务）** / **P7（Pipecat 前端入口）** 均已完成。
 > P5-A（Venice）已取消（溢价太高）。
-> 当前优先候选 = **P6**（Pipecat 语音链路，已部分完成），其次 **P5-B**（Fish Audio TTS），再次 **P2**（精细化 mood 映射）。
+> 当前优先候选 = **信笺 UI P2**（需用户回答问题）或 **R11**（需 VikingDB 控制台），其次 **P5-B**（Fish Audio，需文档）。
 
 ---
 
@@ -105,6 +105,15 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - **可行性**：TTS 抽象层已存在（`backend/app/tts/base.py` + registry），新增一个 provider 文件即可。
   **核心未知**：Fish Audio 是否支持情绪/语速参数（等价于 Doubao bigtts 的 `context_texts`/`speech_rate`）——需看文档才能判断情绪通道（VE-1）能否保留。
 - **阻塞**：需用户提供 Fish Audio API 文档（无法自行搜索）。
+
+## ~~P7 · Pipecat 前端入口~~ ✅ 已完成并实机验证 PASS（2026-06-17，commits `9a7a278`→`dc4ce4e`）
+- `backend/realtime/pipeline_router.py` 新建：`POST /realtime/start` / `POST /realtime/stop` / `GET /realtime/status`
+- `backend/app/main.py` 注册 router
+- 前端 header 加「Pipecat」按钮，含 loading/error 状态 + stale closure 修复
+- 实机验证：STT→LLM→TTS 全链路正常，`half_duplex=on`，first_audio ~0.4s
+- 采用 `LocalAudioTransport`（本地麦克风/扬声器），不需公网 URL，绕开 Soul 混合的 tunnel 限制
+
+---
 
 ## P6 · Pipecat 语音链路复活（延迟优化 + 完整灵魂自定义）
 
