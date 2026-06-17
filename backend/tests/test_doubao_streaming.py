@@ -123,4 +123,4 @@ def test_streaming_service_imports_when_pipecat_present() -> None:
     module = importlib.import_module("backend.realtime.doubao_streaming_stt_service")
     assert module.DoubaoStreamingSTTService is not None
     assert module.INPUT_SAMPLE_RATE == 16_000
-    assert module.DEFAULT_RESOURCE_ID == "volc.bigasr.sauc.duration"
+    assert module.DEFAULT_RESOURCE_ID == "volc.seedasr.sauc.duration"

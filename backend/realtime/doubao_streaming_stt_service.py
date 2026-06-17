@@ -42,8 +42,8 @@ from backend.realtime.doubao_streaming_protocol import (
 )
 from backend.realtime.voice_config import load_asr_end_window_ms
 
-WS_URL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel"
-DEFAULT_RESOURCE_ID = "volc.bigasr.sauc.duration"
+WS_URL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
+DEFAULT_RESOURCE_ID = "volc.seedasr.sauc.duration"
 INPUT_SAMPLE_RATE = 16_000
 
 ENV_API_KEY = "DOUBAO_API_KEY"

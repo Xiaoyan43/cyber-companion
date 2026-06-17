@@ -14,6 +14,7 @@ from pipecat.utils.tracing.service_decorators import traced_tts
 
 from backend.app.tts.doubao import DoubaoTTSProvider
 from backend.app.tts.exceptions import TTSConfigError, TTSError
+from backend.app.tts.text_cleanup import clean_text_for_tts
 from backend.app.tts.types import SynthesisRequest
 
 SAMPLE_RATE = 24_000
@@ -50,14 +51,22 @@ class DoubaoTTSService(TTSService):
             raise RuntimeError(
                 "Doubao TTS is not configured. Set DOUBAO_TTS_API_KEY and DOUBAO_TTS_VOICE_TYPE."
             )
+        self._current_context_id: str | None = None
+        self._context_sentences: list[str] = []
 
     @traced_tts
     async def run_tts(self, text: str, context_id: str) -> AsyncGenerator[Frame, None]:
         logger.debug(f"{self}: Generating Doubao TTS [{text}]")
 
+        if context_id != self._current_context_id:
+            self._current_context_id = context_id
+            self._context_sentences = []
+
         try:
             await self.start_tts_usage_metrics(text)
-            stream = self._provider.synthesize_stream(SynthesisRequest(text=text))
+            stream = self._provider.synthesize_stream(
+                SynthesisRequest(text=text, context_texts=self._context_sentences or None)
+            )
             async for frame in self._stream_audio_frames_from_iterator(
                 _async_pcm_chunks(stream),
                 in_sample_rate=SAMPLE_RATE,
@@ -65,6 +74,7 @@ class DoubaoTTSService(TTSService):
             ):
                 await self.stop_ttfb_metrics()
                 yield frame
+            self._context_sentences.append(clean_text_for_tts(text))
         except (TTSConfigError, TTSError) as error:
             logger.error(f"{self} Doubao TTS error: {error}")
             yield ErrorFrame(error=f"Doubao TTS failed: {error}")
