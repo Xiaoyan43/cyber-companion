@@ -98,7 +98,7 @@ function App() {
     setPipecatStatus("loading");
     try {
       const endpoint = pipecatStatus === "running" ? "/realtime/stop" : "/realtime/start";
-      await fetch(endpoint, { method: "POST" });
+      await fetch(`${apiBaseUrl}${endpoint}`, { method: "POST" });
       setPipecatStatus(pipecatStatus === "running" ? "stopped" : "running");
     } catch {
       setPipecatStatus("stopped");
