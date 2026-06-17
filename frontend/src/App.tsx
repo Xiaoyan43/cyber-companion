@@ -92,16 +92,21 @@ function parseAvatarState(value: string): AvatarState {
 function App() {
   const [uiMode, setUiMode] = useState<"classic" | "letter">("classic");
   const [letterMood, setLetterMood] = useState<LetterMood | undefined>(undefined);
-  const [pipecatStatus, setPipecatStatus] = useState<"stopped" | "running" | "loading">("stopped");
+  const [pipecatStatus, setPipecatStatus] = useState<"stopped" | "running" | "loading" | "error">("stopped");
+  const pipecatStatusRef = useRef(pipecatStatus);
+  pipecatStatusRef.current = pipecatStatus;
 
   const togglePipecat = async () => {
+    const current = pipecatStatusRef.current;
+    if (current === "loading") return;
     setPipecatStatus("loading");
+    const isRunning = current === "running";
     try {
-      const endpoint = pipecatStatus === "running" ? "/realtime/stop" : "/realtime/start";
+      const endpoint = isRunning ? "/realtime/stop" : "/realtime/start";
       await fetch(`${apiBaseUrl}${endpoint}`, { method: "POST" });
-      setPipecatStatus(pipecatStatus === "running" ? "stopped" : "running");
+      setPipecatStatus(isRunning ? "stopped" : "running");
     } catch {
-      setPipecatStatus("stopped");
+      setPipecatStatus("error");
     }
   };
   const [draft, setDraft] = useState("");
@@ -924,7 +929,7 @@ function App() {
               disabled={pipecatStatus === "loading" || apiHealth.status !== "ok"}
               title="Pipecat 本地语音（麦克风 + 扬声器）"
             >
-              {pipecatStatus === "loading" ? "…" : pipecatStatus === "running" ? "Pipecat 开" : "Pipecat"}
+              {pipecatStatus === "loading" ? "…" : pipecatStatus === "running" ? "Pipecat 开" : pipecatStatus === "error" ? "Pipecat ✗" : "Pipecat"}
             </button>
             <button
               type="button"
