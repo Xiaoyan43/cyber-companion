@@ -79,11 +79,11 @@ def _build_tts(tts_backend: str) -> tuple[object, int]:
 
         return MacSayTTSService(), SAMPLE_RATE
 
-    from backend.realtime.doubao_tts_service import DoubaoTTSService, SAMPLE_RATE
+    from backend.realtime.doubao_streaming_tts_service import DoubaoStreamingTTSService, SAMPLE_RATE
 
     _require_env("DOUBAO_TTS_API_KEY")
     _require_env("DOUBAO_TTS_VOICE_TYPE")
-    return DoubaoTTSService(), SAMPLE_RATE
+    return DoubaoStreamingTTSService(), SAMPLE_RATE
 
 
 async def _main_realtime() -> None:
@@ -144,12 +144,10 @@ async def _main_realtime() -> None:
 async def _main_pipeline() -> None:
     _require_env("DEEPSEEK_API_KEY")
 
-    # Default stays flash `doubao` until streaming is validated against a live mic
-    # (Phase 2b done-criteria #2); switch via CYBER_COMPANION_VOICE_STT=doubao_stream.
     stt_backend = _voice_backend(
         "CYBER_COMPANION_VOICE_STT",
         allowed={"whisper", "doubao", "doubao_stream"},
-        default="doubao",
+        default="doubao_stream",
     )
     tts_backend = _voice_backend(
         "CYBER_COMPANION_VOICE_TTS",

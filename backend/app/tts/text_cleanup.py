@@ -40,6 +40,7 @@ def _strip_stage_directions(text: str) -> str:
     stripped = re.sub(r"（[^）]*）", "", protected)
     stripped = re.sub(r"【[^】]*】", "", stripped)
     stripped = re.sub(r"\([^)]*\)", "", stripped)
+    stripped = re.sub(r"\[(?!#)[^\]]*\]", "", stripped)  # [动作] stripped; [#语音指令] preserved for P6-E
     return re.sub(
         r"\x00Q(\d+)\x00",
         lambda match: placeholders[int(match.group(1))],

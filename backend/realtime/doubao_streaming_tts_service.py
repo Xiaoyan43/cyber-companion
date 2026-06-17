@@ -11,7 +11,9 @@ Auth: X-Api-Key (new-console) + X-Api-Resource-Id (auto-resolved from voice type
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import time
 import uuid
 from collections.abc import AsyncGenerator, AsyncIterator
 
@@ -164,61 +166,64 @@ class DoubaoStreamingTTSService(TTSService):
                     "format": "pcm",
                     "sample_rate": SAMPLE_RATE,
                 },
-                "additions": {
-                    "section_id": self._section_id,
-                },
+                "additions": json.dumps({"section_id": self._section_id}),
             },
         }
 
+        t0 = time.monotonic()
         try:
             ws = await self._ensure_connected()
         except Exception as exc:
             logger.error(f"{self}: connection error: {exc}")
             yield ErrorFrame(error=f"Doubao streaming TTS connection failed: {exc}")
             return
+        t_connected = time.monotonic()
 
         try:
             await self.start_tts_usage_metrics(cleaned)
+            # Pipeline all three control frames without waiting for SessionStarted —
+            # the server queues them in order; we handle SessionStarted in the read loop.
             await ws.send(build_start_session(session_id, tts_params))  # type: ignore[union-attr]
-
-            # Wait for SessionStarted
-            async for raw in ws:  # type: ignore[union-attr]
-                tts_frame = parse_tts_frame(raw)
-                if tts_frame.is_error:
-                    raise RuntimeError(f"session error: {tts_frame.json_payload}")
-                if tts_frame.is_session_started:
-                    break
-            else:
-                raise RuntimeError("TTS SessionStarted not received")
-
             await ws.send(build_task_request(session_id, cleaned))  # type: ignore[union-attr]
             await ws.send(build_finish_session(session_id))  # type: ignore[union-attr]
+            t_sent = time.monotonic()
 
-            # Collect all audio frames for this sentence, then stream to Pipecat.
-            # Buffering per-sentence is equivalent to the existing HTTP approach;
-            # the prosody benefit comes from section_id tying sentences together.
-            audio_buf = bytearray()
-            async for raw in ws:  # type: ignore[union-attr]
-                tts_frame = parse_tts_frame(raw)
-                if tts_frame.is_error:
-                    raise RuntimeError(
-                        f"TTS error {tts_frame.error_code}: {tts_frame.json_payload}"
-                    )
-                if tts_frame.event == EVENT_TTS_RESPONSE and tts_frame.audio_bytes:
-                    audio_buf.extend(tts_frame.audio_bytes)
-                if tts_frame.is_session_finished:
-                    if tts_frame.event == EVENT_SESSION_FAILED:
-                        logger.warning(f"{self}: session failed: {tts_frame.json_payload}")
-                    break
+            first_audio = True
 
-            if audio_buf:
-                async for audio_frame in self._stream_audio_frames_from_iterator(
-                    _single_chunk(bytes(audio_buf)),
-                    in_sample_rate=SAMPLE_RATE,
-                    context_id=context_id,
-                ):
-                    await self.stop_ttfb_metrics()
-                    yield audio_frame
+            async def _ws_audio_chunks() -> AsyncIterator[bytes]:
+                nonlocal first_audio
+                async for raw in ws:  # type: ignore[union-call]
+                    tts_frame = parse_tts_frame(raw)
+                    if tts_frame.is_error:
+                        raise RuntimeError(
+                            f"TTS error {tts_frame.error_code}: {tts_frame.json_payload}"
+                        )
+                    if tts_frame.is_session_started:
+                        logger.info(
+                            f"{self}: [TIMING] connect={t_connected-t0:.3f}s "
+                            f"send={t_sent-t_connected:.3f}s "
+                            f"session_started={time.monotonic()-t_sent:.3f}s"
+                        )
+                        continue  # pipelined — already sent task request
+                    if tts_frame.event == EVENT_TTS_RESPONSE and tts_frame.audio_bytes:
+                        if first_audio:
+                            first_audio = False
+                            logger.info(
+                                f"{self}: [TIMING] first_audio={time.monotonic()-t0:.3f}s total"
+                            )
+                        yield tts_frame.audio_bytes
+                    if tts_frame.is_session_finished:
+                        if tts_frame.event == EVENT_SESSION_FAILED:
+                            logger.warning(f"{self}: session failed: {tts_frame.json_payload}")
+                        return
+
+            async for audio_frame in self._stream_audio_frames_from_iterator(
+                _ws_audio_chunks(),
+                in_sample_rate=SAMPLE_RATE,
+                context_id=context_id,
+            ):
+                await self.stop_ttfb_metrics()
+                yield audio_frame
 
         except Exception as exc:
             logger.error(f"{self}: TTS failed: {exc}")
