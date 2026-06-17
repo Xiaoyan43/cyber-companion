@@ -2,8 +2,8 @@
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
 > P0（VM-6）/ P1（VE-2）/ R9 / R10 / P2（VE-1）/ R12（反编造）/ 信笺 UI P0 + P1 + P1-B + P1-C / **P5-A-1** 均已完成。
-> 当前优先候选 = **P5-A-2**（切 default + 冒烟，需 VENICE_API_KEY），其次 **P5-B**（Fish Audio，等用户提供文档），
-> 再次 **P2**（精细化 mood 映射，等用户回答 3 个问题），最后 **R11**（等 VikingDB 访问）。
+> P5-A（Venice）已取消（溢价太高）。
+> 当前优先候选 = **P6**（Pipecat 语音链路，已部分完成），其次 **P5-B**（Fish Audio TTS），再次 **P2**（精细化 mood 映射）。
 
 ---
 
@@ -114,28 +114,38 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 
 > 目标：把 `backend/realtime/` 的 Pipecat cascaded 路径延迟压到 <1.5s，作为纯 E2E 的替代，
 > 实现 Direction C"soul 写每个字"——LLM/TTS 完全可换，情绪/记忆/行为层完整跑通。
-> **前置条件**：P5-A（Venice AI）或 P5-B（Fish Audio）至少一项完成，确保有可用的无审查 LLM/TTS。
 
-### P6-A · 确认 Doubao 流式 ASR 增量识别能力（评估，不改代码）
-- **问题**：Session 37 的 `DoubaoStreamingSTTService` 是否真的提供 interim transcript（边说边出字）？
-  还是只做了流式上传、停止后才出结果？这决定 ASR 延迟能否从 2.7s 压到 <0.3s。
-- **Scope**：只读 `backend/realtime/doubao_streaming_stt_service.py`，看 interim result 处理逻辑
-- **验收**：明确结论——"支持增量 interim"或"需要替换 ASR"
-- **若不支持**：评估替代方案（Deepgram realtime / AssemblyAI streaming）
+### ~~P6-A · 确认 Doubao 流式 ASR 增量识别能力~~  ✅ 已完成（2026-06-17）
+- 结论：`DoubaoStreamingSTTService` 已支持真正的 interim transcript，不需要替换 ASR。
+- 同步完成：切换到 ASR 2.0（`volc.seedasr.sauc.duration` + `bigmodel_async` 接口），延迟和判停明显改善。
 
-### P6-B · LLM→TTS 流水线重叠（first-sentence-first）
-- **问题**：当前 LLM 生成完整回复后才发 TTS，应改为 LLM 流出第一个句子即触发 TTS 合成
-- **Scope**：`backend/realtime/companion_brain_processor.py`（切句逻辑）+ `doubao_tts_service.py`
-- **验收**：LLM TTFB（0.36s）+ 第一句 TTS 开始播放，总计 <1s
+### ~~P6-B · LLM→TTS 流水线重叠~~ ✅ 已验证（2026-06-17）
+- 日志确认：TTS 在 LLM first_text（1.15s）后 62ms 即开始，已是流式重叠，无需额外改动。
 
-### P6-C · 延迟基线测试
-- **Scope**：只跑 `python -m backend.realtime.run_voice`，实测 3-5 轮对话延迟
-- **目标**：user_end → first_audio <1.5s（对比旧基线 3.35s）
-- **验收**：填写延迟对比表，决定是否可以替换纯 E2E 作为默认语音路径
+### ~~P6-C · 延迟基线测试~~ ✅ 已完成（2026-06-17）
+- 实测基线：用户停说 → 首个音频 **~2.3s**（对比旧 3.35s，改善 31%）
+- 瓶颈：LLM ~1.3s（DeepSeek API，无法压缩）；ASR 判停已降至 80-400ms
+- 结论：可用，但 ~2.3s 仍稍高；瓶颈是 LLM，不是 ASR/TTS
 
-### P6-D · 接入 Venice / Fish Audio（P6-C 达标后）
-- LLM 换 Venice（无内容审查）；TTS 换 Fish Audio（若 P5-B 完成）
-- **Scope**：`backend/realtime/companion_brain.py` 中 provider 选择逻辑
+### ~~P6-D · TTS WebSocket 双向流式~~ ✅ 已完成（2026-06-17，commit cc3aed1）
+- 新建 `backend/realtime/doubao_bidirection_tts_protocol.py`（协议层，13 单测全绿）
+- 新建 `backend/realtime/doubao_streaming_tts_service.py`（DoubaoStreamingTTSService）
+- 持久 WebSocket + section_id 跨句韵律 + 每句独立 session
+- **待做**：P6-D-3 — 在 Pipecat pipeline 入口把 DoubaoTTSService 替换为 DoubaoStreamingTTSService，实机听感验收
+
+### P6-E · TTS 语音指令（逐段情绪控制）
+- **前置**：P6-D 完成后（双向流式支持语音指令）
+- **动机**：TTS 2.0 expressive 支持 `[#用嗤笑带点无奈的语气说]` 这类自然语言指令嵌入文本，LLM 可在每段回复前自动生成语气指令，实现真正的逐轮情绪控制。
+- **Scope**：
+  1. 确认 `seed-tts-2.0-expressive` 与当前音色（`zh_female_vv_uranus_bigtts`）兼容
+  2. 在 CompanionBrain system prompt 加指令：回复前加 `[#语气指令]`
+  3. TTS 服务透传（不 strip）
+- **要读**：`reference/02.md`（语音指令示例）、`reference/08.md`（expressive vs standard 能力对比）
+
+### P6-F · ASR 语义顺滑（可选小优化）
+- **Scope**：`doubao_streaming_stt_service.py` 的 `_request_params` 加 `"enable_ddc": True`
+- **效果**：过滤"那个"、"嗯"等口语填充词，transcript 更干净，LLM 理解更准确
+- **验收**：实测口语化输入的 transcript 质量，无副作用
 
 ## P4 ·（可选）记忆/延迟/persona
 - **VM-7**：评估用 `get_context` 替代手动 `SearchMemory`（`reference/06.md`）。Scope=评估+spec，不直接重写。

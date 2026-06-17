@@ -1,4 +1,4 @@
-# HANDOFF — 上下文交接（2026-06-17，第九轮）
+# HANDOFF — 上下文交接（2026-06-17，第十一轮）
 
 > 本文件每次「瘦身交接」/「工作流交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
 
@@ -8,55 +8,45 @@
 
 ## 当前阶段目标
 文本 MVP + 主动发起（PI）已完成并实机 PASS。**信笺 UI** 方向 P0～P1-C 全部完成并已 commit。
-Provider 替换计划（Venice AI + Fish Audio）已列入 P5 任务队列，P5-A-1 代码完成但**尚未 commit**。
-**P6（Pipecat 语音链路复活）**本轮新增入队列，是实现 Direction C 的关键路径。
+**P6-D（TTS WebSocket 双向流式）已完成**，`DoubaoStreamingTTSService` 建好，待 pipeline 接入实机验收。
+下一步：P6-D-3（pipeline 切换一行 + 实机验收）→ P6-F（ASR `enable_ddc`，5 分钟）→ P6-E（TTS 语音指令 `[#...]`）。
 
-## 本轮已完成（本 session，均为讨论/规划，无新代码 commit）
+## 本轮已完成（2026-06-17，第十一轮）
 
-- **架构核实**：
-  - 实际 TTS 音色来自 env var `DOUBAO_TTS_VOICE_TYPE`，不是 `tts.json` 的 `model` 字段。
-    - Cascaded TTS：`zh_female_vv_uranus_bigtts`（vv，天王星系列，seed-tts-2.0）
-    - 纯 E2E RTC：`zh_female_vv_jupiter_bigtts`（vv，木星系列）
-    - 两条链路都是 **vv** 的声音，音色系列略有不同（uranus vs jupiter）
-  - DeepSeek LLM：`deepseek-chat`（V3 alias，直接透传 API，无硬编码版本号）
-  - STT：豆包 `bigmodel` + resource_id `volc.bigasr.auc_turbo`，V3 flash ASR
+- **reference/ 全量通读完成**（本轮补完 `流式.md`、`02.md`、`08.md`）：
+  - `流式.md`：ASR bigmodel_async 协议文档，`enable_ddc` / `enable_emotion_detection` 参数确认
+  - `02.md`：TTS 语音指令 `[#...]` 详细示例；嵌在文本里，P6-E 时 `clean_text_for_tts` 不能 strip 它
+  - `08.md`：TTS 2.0 standard 支持 `context_texts`；嵌入指令 `[#...]` 需切 expressive 子版本；O2.0 支持声音复刻 v3（未来 Boxi 专属音色方向）
 
-- **Pipecat 历史复盘（读 SESSION_LOG 确认）**：
-  - 搁置原因：Pipecat cascaded 路径延迟 ~3.35s（STT 占 2.7s 是瓶颈），火山 RTC-AIGC 纯 E2E sub-second 实机 PASS 后自然取代
-  - STT 2.7s 根因：flash ASR 一次性文件识别，不是流式增量识别
-  - DeepSeek 文字链路从未走 Pipecat：两者定位不同（HTTP 文字 vs 实时音频流水线），从一开始就是并行独立的
+- **commit `9885550`（P6-A/B/C 补 commit）**：
+  - ASR 2.0 升级：`doubao_streaming_stt_service.py` 切 `bigmodel_async` + `volc.seedasr.sauc.duration`
+  - TTS 句间上下文：`doubao_tts_service.py` 加 `context_texts` accumulation
+  - `test_doubao_streaming.py` 断言同步更新
 
-- **Pipecat vs 纯 E2E 自定义能力对比（结论）**：
-  - 纯 E2E = 借豆包 O2.0 的嘴说话，`system_role`/`speaking_style` 与 O2.0 RLHF 竞争，A/B 实测 stance 影响有限
-  - Pipecat cascaded = Boxi 自己说话：LLM/TTS 完全可换，灵魂层（behavior/ signals/kernel）每轮完整跑，情绪→TTS 完全受控
-  - Direction C"soul 写每个字"只有 Pipecat 路径才能真正实现
+- **commit `cc3aed1`（P6-D）**：
+  - 新建 `backend/realtime/doubao_bidirection_tts_protocol.py` — TTS 2.0 bidirection 协议层（pure stdlib，帧构建 + 解析，13 单测全绿）
+  - 新建 `backend/realtime/doubao_streaming_tts_service.py` — `DoubaoStreamingTTSService`（持久 WebSocket + `section_id` 跨句韵律，每句独立 session）
+  - 新建 `backend/tests/test_doubao_bidirection_tts_protocol.py` — 13 离线单测
 
-- **P6（Pipecat 复活）新增入 TASK_QUEUE**：分 P6-A（ASR 增量识别评估）→ P6-B（LLM→TTS 流水线重叠）→ P6-C（延迟基线测试）→ P6-D（Venice/Fish Audio 接入）
+**验证结果**：428 pytest passed，tsc 零错误。实机 TTS 双向流式尚未接入 pipeline（P6-D-3 待做）。
 
-- **Venice AI 模型选型讨论**：
-  - 当前 venice 配置为 `llama-3.3-70b`（3.3 版安全训练加强，伴侣场景会拒绝）
-  - 推荐换 `dolphin-2.9.2-qwen2-72b` 或更新 Dolphin 变体（专门去审查微调，中文底座好，指令跟随强）
-  - **用户尚未确定模型**，需去 Venice 控制台确认当前可用模型列表再决定
-  - P5-A-2 仍需 VENICE_API_KEY（用户尚未提供）
+## 已修改文件 + 改动摘要（本轮新增 commit）
 
-## 已修改文件 + 改动摘要（本轮）
-
-**本轮唯一代码改动（docs）**：
-- `docs/TASK_QUEUE.md` — 新增 P6（Pipecat 语音链路复活）四个子任务
-
-**上轮遗留，尚未 commit（P5-A-1）**：
-- `backend/app/providers/venice.py` — 新建 VeniceProvider（OpenAI-compatible，~190 行）
-- `backend/app/providers/registry.py` — +import VeniceProvider，+if 分支（+9 行）
-- `config/providers.example.json` — +venice entry（enabled:false，llama-3.3-70b）
-
-**验证结果**：本轮无代码改动，无需运行测试。P5-A-1 验收（上轮）：415 pytest passed，tsc --noEmit 零错误。
+| commit | 文件 | 说明 |
+|---|---|---|
+| `9885550` | `backend/realtime/doubao_streaming_stt_service.py` | ASR 2.0：切 bigmodel_async + volc.seedasr.sauc.duration |
+| `9885550` | `backend/realtime/doubao_tts_service.py` | TTS 句间上下文：context_texts accumulation |
+| `9885550` | `backend/tests/test_doubao_streaming.py` | 断言更新 |
+| `cc3aed1` | `backend/realtime/doubao_bidirection_tts_protocol.py` | **新建** TTS 2.0 bidirection 协议层 |
+| `cc3aed1` | `backend/realtime/doubao_streaming_tts_service.py` | **新建** DoubaoStreamingTTSService |
+| `cc3aed1` | `backend/tests/test_doubao_bidirection_tts_protocol.py` | **新建** 13 单测 |
 
 ## 当前未完成（产品侧）
 
-- **P5-A-2**：切换默认 provider 为 Venice + 冒烟验证。**阻塞：** ① 用户提供 VENICE_API_KEY；② 用户去 Venice 控制台选定无审查模型（推荐 Dolphin 系列，非当前配置的 llama-3.3-70b）
-- **P5-A-1 commit**：venice.py / registry.py / providers.example.json 尚未 commit，需先处理
-- **P5-B**：TTS → Fish Audio。**阻塞：** 需用户提供 Fish Audio API 文档
-- **P6**：Pipecat 语音链路复活（延迟优化）。从 P6-A 开始（评估 Doubao 流式 ASR 增量识别）
+- **P6-D-3（验收，下一步）**：在 Pipecat pipeline 入口把 `DoubaoTTSService` 替换为 `DoubaoStreamingTTSService`（一行改动），实机听多句 Boxi 回复，验收：语气自然衔接，无割裂感
+- **P6-F（5 分钟小改）**：`doubao_streaming_stt_service.py` 的 `_request_params` 加 `"enable_ddc": True`，过滤口语填充词
+- **P6-E**：TTS 语音指令 `[#...]`——切换到 `seed-tts-2.0-expressive`；LLM system prompt 加指令要求；`clean_text_for_tts` 不能 strip `[#...]`
+- **P5-B**：TTS → Fish Audio。**阻塞：** 用户已购买，需提供 Fish Audio API 文档
 - **信笺 UI · P2**：精细化 mood 映射 + Voice 模式信笺呈现。**阻塞：** 需用户回答 `docs/LETTER_UI_MOOD_MAPPING_DRAFT.md` 的 3 个问题
 - **R11（搁置）**：纯 E2E 长期记忆部分失忆。等用户可访问 VikingDB 控制台
 - **VE-1 收尾**：playful 待 `relationship.closeness≥0.67` 自然达成后补测
@@ -64,31 +54,28 @@ Provider 替换计划（Venice AI + Fish Audio）已列入 P5 任务队列，P5-
 
 ## 已知 bug / 风险
 
-- **R2（仍存在）**：本地 master ahead of origin 1 commit（含上轮 letter-ui P1-C），未 push
-- **P5-A-1 未 commit**：venice.py 等三个文件已改但未进 git，下次 session 开始前需确认 commit 或继续
-- **Venice 模型选型未定**：当前 providers.json 写的 `llama-3.3-70b` 有内容审查，实际切换前需改成 Dolphin 等无审查模型
+- **R2**：本地 master ahead of origin 4 个 commit，未 push
 - **R8（低优先级）**：`.env` 中 `VIKING_MEMORY_API_KEY` 曾明文截图分享，建议轮换
 - **R4**：`experiments/` 未跟踪（一次性视觉 spike）——不要继续开发它
+- **P6-D-3 未验收**：`DoubaoStreamingTTSService` 协议层单测全绿，但实机 WebSocket 行为未验证（连接成功/音频正常/section_id 韵律效果）
 
 ## 下一步只需读取（按任务，只读这些）
 
-- 永远先读：`docs/HANDOFF.md` + `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`
-- 若做 **P5-A-2**（切换 Venice）：读 `config/providers.json` + `.env`；先确认模型已换为无审查版本
-- 若做 **P6-A**（ASR 评估）：只读 `backend/realtime/doubao_streaming_stt_service.py`
+- **永远先读**：`docs/HANDOFF.md` + `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`
+- 若做 **P6-D-3**（pipeline 切换）：找 Pipecat pipeline 入口文件（grep `DoubaoTTSService`），读 `backend/realtime/doubao_streaming_tts_service.py`
+- 若做 **P6-F**（enable_ddc）：只读 `backend/realtime/doubao_streaming_stt_service.py`
+- 若做 **P6-E**（语音指令）：读 `reference/02.md`（已读，可跳过）+ `backend/app/tts/text_cleanup.py` + `backend/app/behavior/tone.py`
 - 若做 **P5-B**（Fish Audio）：等用户提供文档后，读 `backend/app/tts/base.py` + `backend/app/tts/doubao.py`
 
 ## 下一步不要读取（省上下文）
 
-- ❌ `docs/SESSION_LOG.md`（历史日志，已用过，本轮已从中提取所需结论）
-- ❌ `reference/01.md…15.md` 全文（用 `reference/SYNTHESIS.md` 代替）
+- ❌ `docs/SESSION_LOG.md`（历史日志，不维护）
+- ❌ `reference/01.md…15.md` 全文（用 `reference/SYNTHESIS.md` 代替；本轮已全量读完）
 - ❌ `experiments/`（废弃 spike）
 - ❌ 全仓库扫描 / 与当前任务无关的模块
 
 ## 推荐下一个最小任务
 
-**先 commit P5-A-1**（三个文件进 git，清理 working tree），然后：
+**P6-D-3**：grep `DoubaoTTSService` 找 pipeline 入口，改一行 import + 一行实例化，启动 pipeline 实机验收多句语气连续性。如果 WebSocket 连接有问题，优先检查 `_ensure_connected` 里 ConnectionStarted 的 frame 解析。
 
-- 若用户已决定 Venice 模型 + 有 API Key → 做 **P5-A-2**（改两行 JSON + 冒烟验证）
-- 若用户想先推进语音 → 做 **P6-A**（只读一个文件，评估 Doubao 流式 ASR 增量识别能力）
-
-两者都是 small diff，P6-A 甚至不需要改代码。
+其次 **P6-F**（`enable_ddc: True`，5 分钟，不需要实机验证协议）。
