@@ -151,6 +151,10 @@ class DoubaoStreamingTTSService(TTSService):
             return
 
         logger.debug(f"{self}: TTS [{cleaned[:60]}]")
+        if instruction:
+            logger.info(f"{self}: [P6-E] voice instruction extracted: [{instruction}]")
+        else:
+            logger.debug(f"{self}: [P6-E] no voice instruction in text")
 
         if context_id != self._context_id:
             self._context_id = context_id
