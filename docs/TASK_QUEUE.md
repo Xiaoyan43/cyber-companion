@@ -1,9 +1,9 @@
 # TASK_QUEUE — 按优先级（2026-06-17）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
-> P0（VM-6）/ P1（VE-2）/ R9 / R10 / P2（VE-1）/ R12（反编造）/ 信笺 UI P0 + P1 + P1-B 均已完成。
-> 当前优先候选 = **信笺 UI · P1-C**（真实 Boxi 消息驱动打字机），其次 **P5-A**（Venice AI，随时可开始），
-> 再次 **P5-B**（Fish Audio，等用户提供文档），最后 **R11**（等 VikingDB 访问）。
+> P0（VM-6）/ P1（VE-2）/ R9 / R10 / P2（VE-1）/ R12（反编造）/ 信笺 UI P0 + P1 + P1-B + P1-C / **P5-A-1** 均已完成。
+> 当前优先候选 = **P5-A-2**（切 default + 冒烟，需 VENICE_API_KEY），其次 **P5-B**（Fish Audio，等用户提供文档），
+> 再次 **P2**（精细化 mood 映射，等用户回答 3 个问题），最后 **R11**（等 VikingDB 访问）。
 
 ---
 
@@ -25,12 +25,11 @@
   - `App.tsx` 新增 `letterMood` state + useEffect（`uiMode==='letter'` 时 one-shot fetch `/memory/mood`，映射传入）。
   - 映射：`sad|worried|angry→fragile`，`happy→excited`，`annoyed→hesitant`，其余→`calm`（TODO 注释标记）。
   - `tsc --noEmit` 通过；preview 验证：picker 隐藏，mood 正确映射，console 零错误。
-- **P1-C · 真实 Boxi 消息驱动打字机（P1-B 之后）**：
-  - 把最新一条 Boxi 回复文本传给 `LetterView`，驱动打字机替代 demo scripts。
-  - 需给 `useTypewriter.ts` 加受控文本 prop；`LetterView` 加 `text?: string` prop。
-  - 要读：`useTypewriter.ts` + `LetterView.tsx` + `App.tsx`（messages state）。
-  - 验收：letter 模式下能看到 Boxi 最新回复以打字机节奏呈现。
-  - 预计 diff：small-medium。
+- **~~P1-C · 真实 Boxi 消息驱动打字机~~** ✅ 已完成并 commit（`22e7f77`）：
+  - `useTypewriter.ts` 新增 `externalText?: string` + `hasExternalTextRef` + useEffect（externalText 变化触发打字机）。
+  - `LetterView.tsx` 新增 `text?: string` prop，传入 `useTypewriter`。
+  - `App.tsx` 新增 `lastBoxiText = useMemo(...)` + `<LetterView text={lastBoxiText} />`。
+  - preview 验证 PASS：真实 Boxi 回复以打字机节奏呈现，mood 映射正确，console 零新错误。
 - **P2 ·（待用户回答 `docs/LETTER_UI_MOOD_MAPPING_DRAFT.md` 的 3 个开放问题后）**：精细化 mood 映射 + Voice 模式信笺呈现。
 
 ---
@@ -89,19 +88,54 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - **验收**：括号指令不进语音、能在前端拿到并触发一个 cue。
 - **要读**：`docs/VOICE_EMOTION_MEMORY_PLAN.md`、`reference/14.md`（IgnoreBracketText 段）、待补的 2386107。
 
-## P5 · Provider 替换（已计划，待排期）
+## P5 · Provider 替换
 
-### P5-A · LLM → Venice AI
-- **Scope**：`backend/app/providers/` 新增 `venice.py`（OpenAI-compatible），`config/providers.json` 加 venice entry，env 加 `VENICE_API_KEY`。
-- **可行性**：Venice AI 使用 OpenAI-compatible API（`/v1/chat/completions`），项目已有 provider 抽象层，DeepSeek 也走同一套接口——预计改动极小（~1 文件 + 配置）。
-- **注意**：Venice AI 是隐私/无审查平台，需评估模型选型对 Boxi 人设一致性的影响（Llama/Mistral 系列 vs DeepSeek-chat）。
-- **阻塞**：无；可随时开始。
+### ~~P5-A-1 · 新增 venice.py + 配置注册~~ ✅ 已完成（2026-06-17，未 commit）
+- `backend/app/providers/venice.py` 新建（VeniceProvider，OpenAI-compatible）
+- `backend/app/providers/registry.py` +venice 分支
+- `config/providers.json` +venice entry（enabled:false，llama-3.3-70b）
+- 415 pytest passed，tsc --noEmit 零错误
+- **价格**：$0.70/$2.80 per 1M (in/out)，比 DeepSeek 贵 5x/10x，绝对量小可接受
+
+### P5-A-2 · 切换默认 + 冒烟验证
+- **前置**：用户在 `.env` 加 `VENICE_API_KEY=...`
+- **Scope**：`config/providers.json`（`default_provider: venice`，`venice.enabled: true`）；不改任何 Python
+- **验收**：`/chat/complete` 返回含 `<<<BOXI_SIGNALS>>>` 的非空回复；pytest 全绿（测试用 mock 不受影响）
+- **要读**：只需 `config/providers.json` + `.env`
+- **阻塞**：需用户提供 VENICE_API_KEY
 
 ### P5-B · TTS → Fish Audio
 - **Scope**：`backend/app/tts/` 新增 `fish_audio.py`，provider registry 注册，env 加 `FISH_AUDIO_API_KEY`。
 - **可行性**：TTS 抽象层已存在（`backend/app/tts/base.py` + registry），新增一个 provider 文件即可。
   **核心未知**：Fish Audio 是否支持情绪/语速参数（等价于 Doubao bigtts 的 `context_texts`/`speech_rate`）——需看文档才能判断情绪通道（VE-1）能否保留。
 - **阻塞**：需用户提供 Fish Audio API 文档（无法自行搜索）。
+
+## P6 · Pipecat 语音链路复活（延迟优化 + 完整灵魂自定义）
+
+> 目标：把 `backend/realtime/` 的 Pipecat cascaded 路径延迟压到 <1.5s，作为纯 E2E 的替代，
+> 实现 Direction C"soul 写每个字"——LLM/TTS 完全可换，情绪/记忆/行为层完整跑通。
+> **前置条件**：P5-A（Venice AI）或 P5-B（Fish Audio）至少一项完成，确保有可用的无审查 LLM/TTS。
+
+### P6-A · 确认 Doubao 流式 ASR 增量识别能力（评估，不改代码）
+- **问题**：Session 37 的 `DoubaoStreamingSTTService` 是否真的提供 interim transcript（边说边出字）？
+  还是只做了流式上传、停止后才出结果？这决定 ASR 延迟能否从 2.7s 压到 <0.3s。
+- **Scope**：只读 `backend/realtime/doubao_streaming_stt_service.py`，看 interim result 处理逻辑
+- **验收**：明确结论——"支持增量 interim"或"需要替换 ASR"
+- **若不支持**：评估替代方案（Deepgram realtime / AssemblyAI streaming）
+
+### P6-B · LLM→TTS 流水线重叠（first-sentence-first）
+- **问题**：当前 LLM 生成完整回复后才发 TTS，应改为 LLM 流出第一个句子即触发 TTS 合成
+- **Scope**：`backend/realtime/companion_brain_processor.py`（切句逻辑）+ `doubao_tts_service.py`
+- **验收**：LLM TTFB（0.36s）+ 第一句 TTS 开始播放，总计 <1s
+
+### P6-C · 延迟基线测试
+- **Scope**：只跑 `python -m backend.realtime.run_voice`，实测 3-5 轮对话延迟
+- **目标**：user_end → first_audio <1.5s（对比旧基线 3.35s）
+- **验收**：填写延迟对比表，决定是否可以替换纯 E2E 作为默认语音路径
+
+### P6-D · 接入 Venice / Fish Audio（P6-C 达标后）
+- LLM 换 Venice（无内容审查）；TTS 换 Fish Audio（若 P5-B 完成）
+- **Scope**：`backend/realtime/companion_brain.py` 中 provider 选择逻辑
 
 ## P4 ·（可选）记忆/延迟/persona
 - **VM-7**：评估用 `get_context` 替代手动 `SearchMemory`（`reference/06.md`）。Scope=评估+spec，不直接重写。

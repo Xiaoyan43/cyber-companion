@@ -4,6 +4,7 @@ from backend.app.providers.deepseek import DeepSeekProvider
 from backend.app.providers.local import LocalModelProvider
 from backend.app.providers.mock import MockProvider
 from backend.app.providers.openai import OpenAIProvider
+from backend.app.providers.venice import VeniceProvider
 
 
 def build_provider(entry: ProviderConfigEntry) -> ChatProvider:
@@ -29,6 +30,14 @@ def build_provider(entry: ProviderConfigEntry) -> ChatProvider:
         return LocalModelProvider(
             model=entry.model,
             base_url=entry.base_url or "http://localhost:11434",
+            enabled=entry.enabled,
+        )
+
+    if entry.name == "venice":
+        return VeniceProvider(
+            model=entry.model,
+            base_url=entry.base_url or "https://api.venice.ai/api/v1",
+            api_key_env=entry.api_key_env or "VENICE_API_KEY",
             enabled=entry.enabled,
         )
 

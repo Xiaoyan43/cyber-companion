@@ -23,6 +23,12 @@
       "base_url": "http://localhost:11434",
       "model": "local-model",
       "placeholder": true
+    },
+    "venice": {
+      "enabled": false,
+      "base_url": "https://api.venice.ai/api/v1",
+      "model": "llama-3.3-70b",
+      "api_key_env": "VENICE_API_KEY"
     }
   }
 }
