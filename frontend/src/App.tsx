@@ -92,6 +92,18 @@ function parseAvatarState(value: string): AvatarState {
 function App() {
   const [uiMode, setUiMode] = useState<"classic" | "letter">("classic");
   const [letterMood, setLetterMood] = useState<LetterMood | undefined>(undefined);
+  const [pipecatStatus, setPipecatStatus] = useState<"stopped" | "running" | "loading">("stopped");
+
+  const togglePipecat = async () => {
+    setPipecatStatus("loading");
+    try {
+      const endpoint = pipecatStatus === "running" ? "/realtime/stop" : "/realtime/start";
+      await fetch(endpoint, { method: "POST" });
+      setPipecatStatus(pipecatStatus === "running" ? "stopped" : "running");
+    } catch {
+      setPipecatStatus("stopped");
+    }
+  };
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const lastBoxiText = useMemo(
@@ -905,6 +917,15 @@ function App() {
             <small>{apiHealth.version ? `v${apiHealth.version}` : apiHealth.detail}</small>
           </div>
           <div className="chat-header-actions">
+            <button
+              type="button"
+              className={pipecatStatus === "running" ? "letter-toggle-button active" : "letter-toggle-button"}
+              onClick={() => void togglePipecat()}
+              disabled={pipecatStatus === "loading" || apiHealth.status !== "ok"}
+              title="Pipecat 本地语音（麦克风 + 扬声器）"
+            >
+              {pipecatStatus === "loading" ? "…" : pipecatStatus === "running" ? "Pipecat 开" : "Pipecat"}
+            </button>
             <button
               type="button"
               className={uiMode === "letter" ? "letter-toggle-button active" : "letter-toggle-button"}

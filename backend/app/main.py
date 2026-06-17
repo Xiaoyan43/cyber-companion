@@ -54,6 +54,7 @@ from backend.app.providers.router import get_provider_router, reset_provider_rou
 from backend.app.providers.cost import estimate_cost
 from backend.app.providers.types import ChatCompletionRequest, ChatCompletionResult, ChatMessage
 from backend.app.rtc.routes import router as rtc_router
+from backend.realtime.pipeline_router import router as pipecat_router
 from backend.app.schemas import (
     BehaviorDecisionSchema,
     BehaviorEvaluateRequest,
@@ -192,6 +193,7 @@ app.add_middleware(
 )
 
 app.include_router(rtc_router)
+app.include_router(pipecat_router)
 
 
 @app.get("/health", response_model=HealthResponse)
