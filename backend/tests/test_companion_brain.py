@@ -22,6 +22,12 @@ def test_append_voice_mode_instruction_adds_system_message() -> None:
     assert augmented[-1].content == VOICE_MODE_INSTRUCTION
 
 
+def test_voice_mode_instruction_requests_voice_directive() -> None:
+    assert "[#" in VOICE_MODE_INSTRUCTION
+    assert "语气" in VOICE_MODE_INSTRUCTION
+    assert "最前" in VOICE_MODE_INSTRUCTION
+
+
 def test_stream_turn_local_reply_without_llm() -> None:
     reset_memory_store()
     reset_provider_router()

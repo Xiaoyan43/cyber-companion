@@ -124,3 +124,44 @@ def test_streaming_service_imports_when_pipecat_present() -> None:
     assert module.DoubaoStreamingSTTService is not None
     assert module.INPUT_SAMPLE_RATE == 16_000
     assert module.DEFAULT_RESOURCE_ID == "volc.seedasr.sauc.duration"
+
+
+def test_request_params_include_enable_ddc(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("pipecat")
+    pytest.importorskip("websockets")
+    monkeypatch.setenv("DOUBAO_API_KEY", "test-key")
+    module = importlib.import_module("backend.realtime.doubao_streaming_stt_service")
+    svc = module.DoubaoStreamingSTTService()
+    params = svc._request_params()
+    assert params["request"]["enable_ddc"] is True
+
+
+def test_streaming_tts_additions_includes_context_texts_when_instruction_present() -> None:
+    from backend.app.tts.text_cleanup import extract_voice_instruction
+
+    section_id = "test-section"
+    text = "[#用低沉带倦意的语气]好吧，随你。"
+
+    instruction, body = extract_voice_instruction(text)
+    additions: dict = {"section_id": section_id}
+    if instruction:
+        additions["context_texts"] = [instruction]
+
+    assert additions["context_texts"] == ["用低沉带倦意的语气"]
+    assert body == "好吧，随你。"
+    assert additions["section_id"] == section_id
+
+
+def test_streaming_tts_additions_omits_context_texts_when_no_instruction() -> None:
+    from backend.app.tts.text_cleanup import extract_voice_instruction
+
+    section_id = "test-section"
+    text = "好吧，随你。"
+
+    instruction, body = extract_voice_instruction(text)
+    additions: dict = {"section_id": section_id}
+    if instruction:
+        additions["context_texts"] = [instruction]
+
+    assert "context_texts" not in additions
+    assert body == "好吧，随你。"

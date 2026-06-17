@@ -25,7 +25,7 @@ from pipecat.services.tts_service import TTSService
 from pipecat.utils.tracing.service_decorators import traced_tts
 
 from backend.app.tts.doubao import resolve_resource_id
-from backend.app.tts.text_cleanup import clean_text_for_tts
+from backend.app.tts.text_cleanup import clean_text_for_tts, extract_voice_instruction
 from backend.realtime.doubao_bidirection_tts_protocol import (
     EVENT_CONNECTION_STARTED,
     EVENT_FINISH_CONNECTION,
@@ -145,7 +145,8 @@ class DoubaoStreamingTTSService(TTSService):
 
     @traced_tts
     async def run_tts(self, text: str, context_id: str) -> AsyncGenerator[Frame, None]:
-        cleaned = clean_text_for_tts(text)
+        instruction, text_body = extract_voice_instruction(text)
+        cleaned = clean_text_for_tts(text_body)
         if not cleaned.strip():
             return
 
@@ -154,6 +155,10 @@ class DoubaoStreamingTTSService(TTSService):
         if context_id != self._context_id:
             self._context_id = context_id
             self._section_id = uuid.uuid4().hex
+
+        additions: dict[str, object] = {"section_id": self._section_id}
+        if instruction:
+            additions["context_texts"] = [instruction]
 
         session_id = uuid.uuid4().hex
         tts_params = {
@@ -166,7 +171,7 @@ class DoubaoStreamingTTSService(TTSService):
                     "format": "pcm",
                     "sample_rate": SAMPLE_RATE,
                 },
-                "additions": json.dumps({"section_id": self._section_id}),
+                "additions": json.dumps(additions),
             },
         }
 

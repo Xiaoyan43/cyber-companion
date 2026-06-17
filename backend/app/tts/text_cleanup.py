@@ -17,6 +17,7 @@ _EMOJI_PATTERN = re.compile(
     "]+",
     flags=re.UNICODE,
 )
+_VOICE_INSTRUCTION_PATTERN = re.compile(r"^\s*\[#([^\]]+)\]\s*")
 _FENCED_CODE_PATTERN = re.compile(r"```[\s\S]*?```", re.MULTILINE)
 _INLINE_CODE_PATTERN = re.compile(r"`([^`]+)`")
 _IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\([^)]+\)")
@@ -40,7 +41,7 @@ def _strip_stage_directions(text: str) -> str:
     stripped = re.sub(r"（[^）]*）", "", protected)
     stripped = re.sub(r"【[^】]*】", "", stripped)
     stripped = re.sub(r"\([^)]*\)", "", stripped)
-    stripped = re.sub(r"\[(?!#)[^\]]*\]", "", stripped)  # [动作] stripped; [#语音指令] preserved for P6-E
+    stripped = re.sub(r"\[[^\]]*\]", "", stripped)  # strip all [...] — [#指令] extracted upstream
     return re.sub(
         r"\x00Q(\d+)\x00",
         lambda match: placeholders[int(match.group(1))],
@@ -78,3 +79,15 @@ def clean_text_for_tts(text: str) -> str:
     cleaned = _EMOJI_PATTERN.sub("", cleaned)
     cleaned = _strip_markdown(cleaned)
     return _normalize_speech_text(cleaned)
+
+
+def extract_voice_instruction(text: str) -> tuple[str | None, str]:
+    """Extract a leading [#语气指令] tag from LLM output.
+
+    Returns (instruction, remaining_text). If no tag is found at the start,
+    returns (None, original_text) unchanged.
+    """
+    match = _VOICE_INSTRUCTION_PATTERN.match(text)
+    if match:
+        return match.group(1).strip(), text[match.end():]
+    return None, text

@@ -27,7 +27,7 @@ from backend.app.tts.openai_tts import OpenAITTSProvider
 from backend.app.tts.policy import evaluate_speech_policy
 from backend.app.tts.registry import build_tts_provider
 from backend.app.tts.router import TTSRouter, reset_tts_router
-from backend.app.tts.text_cleanup import clean_text_for_tts
+from backend.app.tts.text_cleanup import clean_text_for_tts, extract_voice_instruction
 from backend.app.tts.types import SynthesisRequest
 from backend.app.tts.wav_utils import generate_silent_wav, parse_wav_duration_ms
 
@@ -812,3 +812,20 @@ def test_tts_stream_lonely_kernel_includes_emotion_on_doubao(
     assert response.status_code == 200
     assert captured["context_texts"] == ["明显想找人说话、更热络、黏一点"]
     assert captured["speech_rate"] == 19
+
+
+def test_extract_voice_instruction_finds_leading_tag() -> None:
+    instruction, body = extract_voice_instruction("[#用低沉带倦意的语气]好吧，随你。")
+    assert instruction == "用低沉带倦意的语气"
+    assert body == "好吧，随你。"
+
+
+def test_extract_voice_instruction_returns_none_when_absent() -> None:
+    instruction, body = extract_voice_instruction("好吧，随你。")
+    assert instruction is None
+    assert body == "好吧，随你。"
+
+
+def test_clean_text_for_tts_strips_voice_instruction_if_not_extracted() -> None:
+    # 如果 [#...] 没有被提前提取，clean_text_for_tts 兜底 strip 掉它
+    assert clean_text_for_tts("[#用嗤笑语气]随你。") == "随你。"

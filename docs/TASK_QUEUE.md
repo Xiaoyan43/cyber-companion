@@ -97,12 +97,8 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - 415 pytest passed，tsc --noEmit 零错误
 - **价格**：$0.70/$2.80 per 1M (in/out)，比 DeepSeek 贵 5x/10x，绝对量小可接受
 
-### P5-A-2 · 切换默认 + 冒烟验证
-- **前置**：用户在 `.env` 加 `VENICE_API_KEY=...`
-- **Scope**：`config/providers.json`（`default_provider: venice`，`venice.enabled: true`）；不改任何 Python
-- **验收**：`/chat/complete` 返回含 `<<<BOXI_SIGNALS>>>` 的非空回复；pytest 全绿（测试用 mock 不受影响）
-- **要读**：只需 `config/providers.json` + `.env`
-- **阻塞**：需用户提供 VENICE_API_KEY
+### ~~P5-A-2 · 切换默认 + 冒烟验证~~ ❌ 取消
+- 用户决定不使用 Venice，后续考虑换其他 provider。
 
 ### P5-B · TTS → Fish Audio
 - **Scope**：`backend/app/tts/` 新增 `fish_audio.py`，provider registry 注册，env 加 `FISH_AUDIO_API_KEY`。
@@ -127,11 +123,12 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - 瓶颈：LLM ~1.3s（DeepSeek API，无法压缩）；ASR 判停已降至 80-400ms
 - 结论：可用，但 ~2.3s 仍稍高；瓶颈是 LLM，不是 ASR/TTS
 
-### ~~P6-D · TTS WebSocket 双向流式~~ ✅ 已完成（2026-06-17，commit cc3aed1）
+### ~~P6-D · TTS WebSocket 双向流式~~ ✅ 已完成（含 P6-D-3，commit cc3aed1 + 7d6a24b）
 - 新建 `backend/realtime/doubao_bidirection_tts_protocol.py`（协议层，13 单测全绿）
 - 新建 `backend/realtime/doubao_streaming_tts_service.py`（DoubaoStreamingTTSService）
 - 持久 WebSocket + section_id 跨句韵律 + 每句独立 session
-- **待做**：P6-D-3 — 在 Pipecat pipeline 入口把 DoubaoTTSService 替换为 DoubaoStreamingTTSService，实机听感验收
+- P6-D-3：pipeline 切换 + 修复 additions JSON 序列化 + 流式 yield + 帧连发优化，实机验收 PASS
+- STT 默认同步升级为 doubao_stream（补完 P6-A 收尾）；动作描述 `[...]` 不再被 TTS 朗读
 
 ### P6-E · TTS 语音指令（逐段情绪控制）
 - **前置**：P6-D 完成后（双向流式支持语音指令）
@@ -142,10 +139,9 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
   3. TTS 服务透传（不 strip）
 - **要读**：`reference/02.md`（语音指令示例）、`reference/08.md`（expressive vs standard 能力对比）
 
-### P6-F · ASR 语义顺滑（可选小优化）
-- **Scope**：`doubao_streaming_stt_service.py` 的 `_request_params` 加 `"enable_ddc": True`
-- **效果**：过滤"那个"、"嗯"等口语填充词，transcript 更干净，LLM 理解更准确
-- **验收**：实测口语化输入的 transcript 质量，无副作用
+### ~~P6-F · ASR 语义顺滑~~ ✅ 已完成（2026-06-17，未单独 commit）
+- `doubao_streaming_stt_service.py` `_request_params` 加 `"enable_ddc": True`
+- 新增单测 `test_request_params_include_enable_ddc`，429 pytest passed
 
 ## P4 ·（可选）记忆/延迟/persona
 - **VM-7**：评估用 `get_context` 替代手动 `SearchMemory`（`reference/06.md`）。Scope=评估+spec，不直接重写。

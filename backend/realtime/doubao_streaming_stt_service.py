@@ -107,6 +107,7 @@ class DoubaoStreamingSTTService(STTService):
                 "show_utterances": True,
                 "result_type": "single",
                 "end_window_size": self._end_window_size_ms,
+                "enable_ddc": True,
             },
         }
 
