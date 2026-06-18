@@ -22,3 +22,6 @@ class OpenRouterProvider(VeniceProvider):
             enabled=enabled,
             **kwargs,
         )
+
+    def _extra_payload_params(self) -> dict[str, object]:
+        return {"provider": {"allow_fallbacks": False}}

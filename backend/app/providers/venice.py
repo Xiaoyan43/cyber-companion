@@ -63,6 +63,9 @@ class VeniceProvider(ChatProvider):
             placeholder=False,
         )
 
+    def _extra_payload_params(self) -> dict[str, object]:
+        return {}
+
     def complete(self, request: ChatCompletionRequest) -> ChatCompletionResult:
         if not self._enabled:
             raise ProviderNotConfiguredError(
@@ -77,11 +80,12 @@ class VeniceProvider(ChatProvider):
                 provider=self.name,
             )
 
-        payload = {
+        payload: dict[str, object] = {
             "model": self._model,
             "messages": [{"role": message.role, "content": message.content} for message in request.messages],
             "max_tokens": request.max_output_tokens,
             "stream": False,
+            **self._extra_payload_params(),
         }
 
         try:
@@ -149,12 +153,13 @@ class VeniceProvider(ChatProvider):
                 provider=self.name,
             )
 
-        payload = {
+        payload: dict[str, object] = {
             "model": self._model,
             "messages": [{"role": message.role, "content": message.content} for message in request.messages],
             "max_tokens": request.max_output_tokens,
             "stream": True,
             "stream_options": {"include_usage": True},
+            **self._extra_payload_params(),
         }
 
         try:
