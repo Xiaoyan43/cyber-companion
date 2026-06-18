@@ -67,9 +67,6 @@ TTS 已切换为 Fish Audio（文字聊天路径）。
 
 ## 当前未完成（产品侧）
 
-- **⚠️ 两轮改动均未 commit**：建议合并为两个 commit：
-  1. `feat(tts+persona): ban brackets, user-message context_texts, inline [#指令]`（第二十五轮 8 个文件）
-  2. `feat(tts): add FishAudioTTSProvider, switch text-chat TTS to Fish Audio`（第二十六轮 4 个文件）
 - **provider 选型（进行中）**：
   - 当前测 `google/gemini-2.5-flash-lite` via OpenRouter（临时伴侣人设）
   - 测完后：① 决定最终默认 provider；② 删 `config/persona.json` 恢复存在论人设；③ 更新 HANDOFF
@@ -83,8 +80,7 @@ TTS 已切换为 Fish Audio（文字聊天路径）。
 
 ## 已知 bug / 风险
 
-- **TTS 长句断裂（TTS 能力天花板）**：Doubao 单向 HTTP API 对超长文本内部分段，情绪不跨段传递。Fish Audio 是候选替换（P5-B）。
-- **`[#指令]` 内联效果待验证**：将 `[#...]` 从 `context_texts` 改为内联文本是基于官方文档推断，实际 doubao API 是否对内联 `[#...]` 有更好响应，需实测。
+- **Fish Audio 情绪 bracket 效果待验证**：context_texts[0] 包进 `[phrase]` 前置文本，S2-Pro 是否对中文自由描述（如 `[带着叹息的语气]`）有稳定响应，需实测观察。
 - **`（动作描述）` 可能仍偶发**：加了禁令，但某些模型对否定指令遵守度不稳定，需观察。
 - **cost 模块不认 openrouter 模型**：`estimate_cost()` 对未知模型返回 $0.0，不影响功能。
 - **R8（低优先级）**：`.env` 中 `VIKING_MEMORY_API_KEY` 曾明文截图分享，建议轮换。
@@ -97,17 +93,16 @@ TTS 已切换为 Fish Audio（文字聊天路径）。
 - `config/providers.json`（本地）：`default_provider: openrouter`，model 字段写完整 OpenRouter 模型路径
 - 换模型：只改 `providers.json` 的 `model` 字段 + `.env` 的 `OPENROUTER_API_KEY`，不需改代码
 
-## TTS 管道说明（本轮变更后）
+## TTS 管道说明（第二十六轮变更后）
 
-| 路径 | `[#指令]` | `context_texts` |
+| 路径 | TTS Provider | 情绪控制 |
 |---|---|---|
-| 文字聊天 `/tts/stream` | LLM 不生成（文字模式无此指令） | 用户上一句话（有时）；回退 `tts_emotion_directive()`（无时） |
-| Pipecat `doubao_streaming_tts_service` | 内联留在合成文本里 | 仅 `section_id`（用户 STT 话语暂未接入） |
+| 文字聊天 `/tts/stream` | **Fish Audio** `fish_audio.py` | `tts_emotion_directive()` phrase → `[bracket]` 前置文本 |
+| Pipecat `doubao_streaming_tts_service` | Doubao（未换） | `[#指令]` 内联留在合成文本里 |
 
 ## 下一步只需读取（按任务，只读这些）
 
 - **永远先读**：`docs/HANDOFF.md` + `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`
-- 若做 **commit 两轮改动**：`git diff --stat` 确认文件，分两次 commit
 - 若做 **provider 选型收尾**：读 `config/providers.json`（本地）、`.env`；删 `config/persona.json` 后验证存在论人设恢复
 - 若做 **Pipecat TTS → Fish Audio（P1）**：读 `backend/realtime/doubao_streaming_tts_service.py` + `backend/realtime/companion_brain.py`；pip install pipecat-ai[fish]
 - 若做 **P1（RTC manifest 同步）**：读 `config/persona.example.json`（`rtc_character_manifest` 字段）+ `backend/app/memory/persona.py`（`_DEFAULT_RTC_CHARACTER_MANIFEST`）
