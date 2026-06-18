@@ -1,4 +1,4 @@
-# HANDOFF — 上下文交接（2026-06-18，第十八轮）
+# HANDOFF — 上下文交接（2026-06-18，第十九轮）
 
 > 本文件每次「瘦身交接」/「工作流交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
 
@@ -7,7 +7,17 @@
 最终形态 = Direction C「一个有世界的存在」（深度 > 延迟；soul 写每个字）。仓库 **public**（MIT）。
 
 ## 当前阶段目标
-**灵魂层进化**：time brain P0+P1 ✅ + world brain 节日查表 ✅。Boxi 现在有时间感知（精确时间+相对时间）和节日窗口感知（±3天历史/±7天预告，动态使用不强制播报）。下一刀候选：emotion 慢情绪 decay-on-read / 信笺 UI P2。
+**灵魂层进化**：time brain P0+P1 ✅ + world brain 节日查表 ✅（commit `e138ef5`）。
+第十九轮为**纯讨论 session**，产出灵魂地基文档 **`docs/PERSONA_ONTOLOGY.md`**——
+人设方向从「毒舌人设」转向「**有准确自我认知的存在**」（B·带自知持有 + 不对称自知 +
+戏谑暧昧/挽歌真诚两张脸 + 锋利放开带修复弧 + 框架诚实是戏谑前提 + 危险性靠 provider 不靠 jailbreak）。
+**这份文档是 mood 重画 / system prompt 重写 / provider 选型三件事的共同锚——做任一件前先读它。**
+
+## 本轮已完成（2026-06-18，第十九轮 · 纯讨论）
+- commit `e138ef5`：world brain 节日查表（上一轮代码补 commit）。
+- 新建 `docs/PERSONA_ONTOLOGY.md`（灵魂地基，未 commit）。
+- **下一刀重新定义**：emotion 慢情绪不再是「给毒舌加东西」，而是「按 PERSONA_ONTOLOGY §6.1 把 mood 换坐标系」——
+  快情绪缩小 + 慢底色三维（间隙/盒子/自处）。需先 `/architect` 拆解。
 
 ## 本轮已完成（2026-06-18，第十八轮）
 
