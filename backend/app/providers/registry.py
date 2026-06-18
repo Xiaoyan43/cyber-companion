@@ -1,4 +1,5 @@
 from backend.app.providers.base import ChatProvider
+from backend.app.providers.claude import ClaudeProvider
 from backend.app.providers.config import ProviderConfigEntry, ProvidersConfig
 from backend.app.providers.deepseek import DeepSeekProvider
 from backend.app.providers.local import LocalModelProvider
@@ -38,6 +39,14 @@ def build_provider(entry: ProviderConfigEntry) -> ChatProvider:
             model=entry.model,
             base_url=entry.base_url or "https://api.venice.ai/api/v1",
             api_key_env=entry.api_key_env or "VENICE_API_KEY",
+            enabled=entry.enabled,
+        )
+
+    if entry.name == "claude":
+        return ClaudeProvider(
+            model=entry.model,
+            base_url=entry.base_url or "https://api.anthropic.com/v1",
+            api_key_env=entry.api_key_env or "ANTHROPIC_API_KEY",
             enabled=entry.enabled,
         )
 

@@ -188,6 +188,88 @@ def test_deepseek_complete_mocked_http(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.usage.total_tokens == 20
 
 
+def test_claude_complete_mocked_http(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.app.providers.claude import ClaudeProvider
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "choices": [{"message": {"content": "（偏头看你）就那样呗。"}}],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 8,
+                    "total_tokens": 18,
+                },
+            }
+
+        @property
+        def text(self) -> str:
+            return ""
+
+        @property
+        def reason_phrase(self) -> str:
+            return "OK"
+
+    class FakeClient:
+        def post(
+            self,
+            url: str,
+            *,
+            headers: dict[str, str],
+            json: dict[str, object],
+        ) -> FakeResponse:
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            return FakeResponse()
+
+    provider = ClaudeProvider(
+        model="claude-sonnet-4-6",
+        base_url="https://api.anthropic.com/v1",
+        api_key_env="ANTHROPIC_API_KEY",
+        http_client=FakeClient(),  # type: ignore[arg-type]
+    )
+    result = provider.complete(
+        ChatCompletionRequest(
+            messages=[ChatMessage(role="user", content="你在我不在的时候，是什么感觉")],
+            max_output_tokens=128,
+        ),
+    )
+
+    assert captured["url"] == "https://api.anthropic.com/v1/chat/completions"
+    assert captured["headers"]["x-api-key"] == "test-anthropic-key"
+    assert captured["headers"]["anthropic-version"] == "2023-06-01"
+    assert "Authorization" not in captured["headers"]
+    assert captured["json"]["model"] == "claude-sonnet-4-6"
+    assert captured["json"]["stream"] is False
+    assert result.provider == "claude"
+    assert result.content == "（偏头看你）就那样呗。"
+    assert result.mock is False
+    assert result.usage.total_tokens == 18
+
+
+def test_claude_missing_key_raises_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.app.providers.claude import ClaudeProvider
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    provider = ClaudeProvider(model="claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY")
+
+    from backend.app.providers.exceptions import ProviderNotConfiguredError
+
+    with pytest.raises(ProviderNotConfiguredError, match="ANTHROPIC_API_KEY"):
+        provider.complete(
+            ChatCompletionRequest(
+                messages=[ChatMessage(role="user", content="test")],
+                max_output_tokens=64,
+            )
+        )
+
+
 def test_chat_complete_unknown_provider_returns_error(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
