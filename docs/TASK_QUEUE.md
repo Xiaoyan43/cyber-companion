@@ -5,8 +5,9 @@
 > P5-A（Venice）已取消（溢价太高）。
 > **2026-06-18（第十六轮）纯讨论 session**：新增「灵魂层进化（Soul Layer）」节，沉淀六脑/time brain/活人感/审核/记忆消解/移动迁移/画面搁置等方向（均未拆解，要做时先 `/architect`）。
 > **2026-06-18（第十七轮）**：time brain P0（注入新西兰时间）+ P1（recent_event 相对时间前缀）完成，commit `16d1b74`，440 pytest passed。
-> **当前重心：灵魂层进化。** 推荐下一最小任务 = **world brain · 节日查表**（节日静态表 + `_format_time_block` 追加节日信息，近免费）。
-> 其余候选：信笺 UI P2（需用户答问）/ emotion 慢情绪 decay-on-read / R11（搁置，下次失忆当场验）/ P5-B（Fish Audio，需文档）。
+> **2026-06-18（第十八轮）**：world brain · 节日查表完成（`holidays.py` 新建 + `_format_time_block` 注入±3/7天节日窗口，设计为动态使用非机器播报），445 pytest passed，待 commit。
+> **当前重心：灵魂层进化。** 推荐下一最小任务 = **emotion · 慢情绪 + decay-on-read**（先读 `mood.py` 评估规模）。
+> 其余候选：信笺 UI P2（需用户答问）/ R11（搁置，下次失忆当场验）/ P5-B（Fish Audio，需文档）。
 
 ---
 
@@ -185,7 +186,7 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - "时间在流逝"：用 **decay-on-read（惰性求值）** 实现 90%，不需常驻时钟
 
 ### 优先级（性价比排序）
-- **第一档**（近免费、收益最大）：~~time-现在注入~~ ✅ / **world-节日查表（推荐下一刀）** / emotion-慢情绪+decay-on-read
+- **第一档**（近免费、收益最大）：~~time-现在注入~~ ✅ / ~~world-节日查表~~ ✅ / **emotion-慢情绪+decay-on-read（推荐下一刀）**
 - **第二档**（中等）：world-天气API / time-未来事件表 / memory 分类细化
 - **第三档**（贵/险/最后）：world-新闻（后台LLM筛选）/ identity-成长（drift风险）
 

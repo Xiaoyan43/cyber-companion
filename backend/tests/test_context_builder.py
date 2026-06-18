@@ -1,5 +1,6 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -7,11 +8,13 @@ from backend.app.memory.budget import BudgetConfig
 from backend.app.memory.context_builder import (
     _TRAILER_REMINDER,
     _WEEKDAYS_CN,
+    _delta_to_label,
     _format_memories_block,
     _format_time_block,
     _relative_time,
     build_provider_context,
 )
+from backend.app.memory.holidays import get_holiday_window
 from backend.app.memory.persona import OUTPUT_PROTOCOL, load_persona_system_prompt
 from backend.app.memory.retrieval import rank_memories, score_memory
 from backend.app.memory.store import MemoryStore
@@ -328,6 +331,47 @@ def test_format_memories_block_stable_profile_no_time_prefix() -> None:
     block = _format_memories_block(memories, now=now)  # type: ignore[arg-type]
     assert "天前" not in block
     assert "用户住在新西兰" in block
+
+
+def test_get_holiday_window_returns_holiday_on_exact_day() -> None:
+    # 2026-06-22 = 端午节，delta=0
+    results = get_holiday_window(date(2026, 6, 22))
+    assert any(delta == 0 and name == "端午节" for delta, name in results)
+
+
+def test_get_holiday_window_returns_upcoming_holiday() -> None:
+    # 2026-06-20（后天就是端午节），delta=2
+    results = get_holiday_window(date(2026, 6, 20))
+    assert any(delta == 2 and name == "端午节" for delta, name in results)
+
+
+def test_format_time_block_includes_holiday_window_when_present() -> None:
+    with patch("backend.app.memory.context_builder.get_holiday_window") as mock_hw:
+        mock_hw.return_value = [(0, "端午节"), (3, "某节日")]
+        block = _format_time_block()
+    assert "近期节日" in block
+    assert "今天：端午节" in block
+    assert "3天后：某节日" in block
+
+
+def test_format_time_block_no_holiday_section_when_empty() -> None:
+    with patch("backend.app.memory.context_builder.get_holiday_window") as mock_hw:
+        mock_hw.return_value = []
+        block = _format_time_block()
+    assert "近期节日" not in block
+    assert "[Time]" in block
+    assert "新西兰时间" in block
+
+
+def test_delta_to_label_all_named_offsets() -> None:
+    assert _delta_to_label(-3) == "3天前"
+    assert _delta_to_label(-2) == "前天"
+    assert _delta_to_label(-1) == "昨天"
+    assert _delta_to_label(0) == "今天"
+    assert _delta_to_label(1) == "明天"
+    assert _delta_to_label(2) == "后天"
+    assert _delta_to_label(5) == "5天后"
+    assert _delta_to_label(-7) == "7天前"
 
 
 def test_summary_policy_ignores_behavior_tick_lines(store: MemoryStore) -> None:

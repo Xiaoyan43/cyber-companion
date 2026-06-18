@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from backend.app.behavior.local_responses import behavior_tone_instruction
 from backend.app.behavior.types import BehaviorDecision
 from backend.app.memory.budget import BudgetConfig
+from backend.app.memory.holidays import get_holiday_window
 from backend.app.memory.database import (
     ConversationSummaryRecord,
     MemoryRecord,
@@ -23,15 +24,32 @@ from backend.app.providers.types import ChatMessage
 
 _NZ_TZ = ZoneInfo("Pacific/Auckland")
 _WEEKDAYS_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+_DELTA_LABELS = {-3: "3天前", -2: "前天", -1: "昨天", 0: "今天", 1: "明天", 2: "后天"}
+
+
+def _delta_to_label(delta: int) -> str:
+    if delta in _DELTA_LABELS:
+        return _DELTA_LABELS[delta]
+    return f"{delta}天后" if delta > 0 else f"{abs(delta)}天前"
 
 
 def _format_time_block() -> str:
     now = datetime.now(_NZ_TZ)
     weekday = _WEEKDAYS_CN[now.weekday()]
-    return (
-        "[Time]\n"
+    time_line = (
         f"现在是 {now.year}年{now.month}月{now.day}日 {weekday} "
         f"{now.strftime('%H:%M')}（新西兰时间）"
+    )
+    holidays = get_holiday_window(now.date())
+    if not holidays:
+        return f"[Time]\n{time_line}"
+    holiday_lines = "\n".join(
+        f"- {_delta_to_label(delta)}：{name}" for delta, name in holidays
+    )
+    return (
+        f"[Time]\n{time_line}\n"
+        "[近期节日（参考用，不必主动提及，可提前预告也可事后回顾）]\n"
+        f"{holiday_lines}"
     )
 
 
