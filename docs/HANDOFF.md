@@ -1,4 +1,4 @@
-# HANDOFF — 上下文交接（2026-06-17，第十五轮）
+# HANDOFF — 上下文交接（2026-06-18，第十六轮）
 
 > 本文件每次「瘦身交接」/「工作流交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
 
@@ -7,65 +7,70 @@
 最终形态 = Direction C「一个有世界的存在」（深度 > 延迟；soul 写每个字）。仓库 **public**（MIT）。
 
 ## 当前阶段目标
-**P7 完成。** 三种说话方式均可从前端使用：
-- 文字聊天（原有）✅
-- 纯 E2E 语音（Volcengine RTC-AIGC）✅
-- Pipecat 本地语音（前端按钮开关）✅ — 已实机验证 PASS
+**P7 完成（语音三路全通，见第十五轮）。本轮无代码改动——是一轮纯方向性讨论 session，成果全部沉淀进 `docs/TASK_QUEUE.md`「灵魂层进化」节。**
+项目重心已明确转向**灵魂层**（time/world/记忆消解/活人感），画面前端明确搁置，移动迁移定为"待灵魂成熟后做、零返工"。
 
-## 本轮已完成（2026-06-17，第十五轮）
+## 本轮已完成（2026-06-18，第十六轮 · 纯讨论，无 commit）
 
-- **P7 · Pipecat 前端入口**（commits `9a7a278` → `dc4ce4e`）：
-  - 新建 `backend/realtime/pipeline_router.py`：`POST /realtime/start`、`POST /realtime/stop`、`GET /realtime/status`
-  - `backend/app/main.py` 注册 router
-  - 前端 `App.tsx` header 加「Pipecat」切换按钮，含 loading/error 状态 + useRef 防止 stale closure
-  - 实机验证：点按钮启动后，STT→LLM→TTS 全链路正常，`half_duplex=on`，first_audio ~0.4s
-  - 两个声音问题根因：旧进程未退出导致两个 pipeline 同时跑；杀旧进程后正常
+> 本轮**没有写任何代码、没有跑任何测试**。唯一文件改动 = `docs/TASK_QUEUE.md` 增量扩充（+83 行）。
+> 以下是讨论结论（细节见 TASK_QUEUE「灵魂层进化」节）：
 
-- **中途废弃的 WS 方案**（已撤销）：
-  - 原计划用 `FastAPIWebsocketTransport` 把音频流搬进浏览器，实现远程访问
-  - 因当前只有本地使用需求，改为更简单的 start/stop HTTP 端点（`LocalAudioTransport` 不变）
+1. **Pipecat 延迟归因**：瓶颈是 LLM（DeepSeek ~1.3s），ASR/TTS 已优化到位。延迟是"旋钮"不是"飞跃"（LLM 1.3s→0.7s 也只 2.5s→1.9s）。**待区分模型 vs 网络**（极短请求测 TTFT；靠近 API 区域云主机对比）。豆包 LLM 可作候选（同厂少一跳网络）。
+
+2. **Provider 三方对比（Fish Audio / MiniMax / 豆包）**：
+   - **ASR**：MiniMax 无 ASR；Fish 仅批处理无流式 → **两家都不能替代豆包**实时 ASR。
+   - **TTS**：豆包当前很强（62ms TTFA，双向流式，中文原生，context_texts 情绪通道已通）；MiniMax 中文原生+情绪自动预测、协议相似；Fish 标签情绪最细但中文质量未验。**现阶段无换 TTS 的必要**。
+
+3. **灵魂层六脑**（核心认知：**「脑」≠「LLM」**，5/6 是状态+数据+定时，不需新增 LLM）：relationship/emotion/memory 多已有骨架；**time brain = 真缺口（核心）**；world brain 新增但简单（天气API/节日查表）；identity-成长高风险最后做。
+
+4. **活人感 / 审核**：用户要"擦边"（暧昧不露骨）→ 提升伴侣感。**LLM 决定走 A 路线**（聪明+低成本 managed API，非无审核）；擦边在 A 下基本可行（轻/中档），取决于选哪个 provider。B 路线（自托管去审核）成本高一个数量级，仅作后备。审核可能在 ASR/LLM/TTS 三层，语音擦边需三层都放行。
+
+5. **记忆消解（ADD/UPDATE/DELETE）**：借鉴 Mem0 一致性管理思路加进 `write_policy`（保留灵魂，补"记忆不矛盾"），**不整体换 Mem0**。疑似 R11 失忆根因，但 R11 验证搁置（当下无固定事件可测，下次发现失忆当场验）。
+
+6. **移动迁移（iPhone 17 Pro Max）**：手机是客户端、后端跑不到手机上；后端上云 VM + PWA + 移动语音优先 RTC 路径。不碰灵魂层，零返工。
+
+7. **画面前端**：**明确搁置重视觉**，保留信笺/typography UI 为默认，触发重启 = 灵魂成熟/有具体点子。
 
 ## 已修改文件 + 改动摘要（本轮）
 
-| 文件 | commit | 说明 |
+| 文件 | 改动 | 说明 |
 |---|---|---|
-| `backend/realtime/pipeline_router.py` | `9a7a278` | 新建，start/stop/status 端点 |
-| `backend/app/main.py` | `9a7a278` | 注册 pipecat_router |
-| `frontend/src/App.tsx` | `9a7a278` + `7282476` + `dc4ce4e` | Pipecat 按钮，apiBaseUrl 修复，stale closure 修复 |
+| `docs/TASK_QUEUE.md` | +83 行（未 commit）| 新增「灵魂层进化（Soul Layer）」节：六脑维度 + time brain 要点 + 优先级 + 探针 + 活人感/审核约束 + 记忆消解 + LLM provider 验证清单 + 活人感工程 7 项 + 移动迁移 + 画面前端搁置 |
 
-## 当前未完成（产品侧）
+> 副产物：`.firecrawl/` 下抓取的 Fish Audio / MiniMax 文档（gitignored，仅供本轮对比，不入库）。
 
-- **信笺 UI · P2**：精细化 mood 映射 + Voice 模式信笺呈现。**阻塞：** 需用户回答 `docs/LETTER_UI_MOOD_MAPPING_DRAFT.md` 的 3 个问题
-- **R11（搁置）**：纯 E2E 长期记忆部分失忆。等用户可访问 VikingDB 控制台
-- **VE-1 收尾**：playful 待 `relationship.closeness≥0.67` 自然达成后补测
-- **P3 · VE-3**：IgnoreBracketText→avatar，阻塞，需用户补文档 6348/2386107
-- **P5-B**：TTS → Fish Audio。**阻塞：** 需用户提供 Fish Audio API 文档
+## 当前未完成（产品侧，沿用上轮 + 本轮新增方向）
+
+- **灵魂层进化（本轮新增，方向性、未拆解）**：time brain（核心缺口）/ world brain / 记忆消解 / 活人感工程——见 TASK_QUEUE「灵魂层进化」节。**要做时先 `/architect` 拆最小任务**。
+- **信笺 UI · P2**：精细化 mood 映射 + Voice 模式信笺呈现。**阻塞：** 需用户回答 `docs/LETTER_UI_MOOD_MAPPING_DRAFT.md` 的 3 个问题。
+- **R11（搁置）**：纯 E2E 长期记忆偶发失忆。**下次发现失忆当场验证**，不主动排查。
+- **P5-B**：TTS → Fish Audio。**阻塞：** 需用户提供 Fish Audio API 文档（注：本轮已抓取部分公开文档，结论=中文质量待验、为审核换 TTS 则 Fish>MiniMax）。
+- **VE-1 收尾**：playful 待 `relationship.closeness≥0.67` 自然达成后补测。
+- **P3 · VE-3**：IgnoreBracketText→avatar，阻塞，需用户补文档 6348/2386107。
 
 ## 已知 bug / 风险
 
-- **R8（低优先级）**：`.env` 中 `VIKING_MEMORY_API_KEY` 曾明文截图分享，建议轮换
-- **R4**：`experiments/` 未跟踪（一次性视觉 spike）——不要继续开发它
-- **TIMING 日志**：`[TIMING]` 和 `[P6-E]` 日志目前是 INFO 级别，生产前可降为 DEBUG
-- **Pipecat 记忆写回**：`CompanionBrain` 写入 SQLite（文字+记忆），但语音轮次的 off-path 反思（`analyze_turn`）未确认是否与 RTC 路径等价。如发现记忆遗漏，查 `companion_brain.py` 的 `persist_chat_turn` 调用链
+- **R8（低优先级）**：`.env` 中 `VIKING_MEMORY_API_KEY` 曾明文截图分享，建议轮换。
+- **R4**：`experiments/` 未跟踪（一次性视觉 spike）——不要继续开发它。
+- **记忆消解缺口（本轮新增怀疑，未验证）**：我们记忆可能只追加、不消解矛盾 → 疑似 R11 失忆根因。等下次失忆复现时连同 R11 一起验。
+- **Pipecat 记忆写回**：`CompanionBrain` 写 SQLite，但语音轮次 off-path 反思（`analyze_turn`）是否与 RTC 路径等价未确认。如发现记忆遗漏，查 `companion_brain.py` 的 `persist_chat_turn` 调用链。
 
 ## 下一步只需读取（按任务，只读这些）
 
 - **永远先读**：`docs/HANDOFF.md` + `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`
+- 若做 **time brain 起步探针**（推荐）：读 `backend/app/memory/context_builder.py`（确认是否注入真实时间）+ events 表结构（确认有无时间戳）
+- 若做 **记忆消解 / R11**：读 `backend/app/memory/write_policy.py` + `backend/app/rtc/viking_memory.py`
 - 若做 **P2**（信笺 UI）：读 `docs/LETTER_UI_MOOD_MAPPING_DRAFT.md` + `frontend/src/letter/LetterView.tsx`
-- 若做 **R11**（记忆失忆）：读 `frontend/src/voice/`（确认 `/rtc/memory/session` 调用链）+ `backend/app/rtc/routes.py:306-345`
-- 若做 **P5-B**（Fish Audio）：等用户提供文档后，读 `backend/app/tts/base.py` + `backend/app/tts/doubao.py`
-- 若做 **Pipecat 记忆核查**：读 `backend/realtime/companion_brain.py`
+- 若做 **延迟诊断 / 换 LLM**：读 `backend/app/providers/registry.py` + `config/providers.json`
 
 ## 下一步不要读取（省上下文）
 
 - ❌ `docs/SESSION_LOG.md`（历史日志，不维护）
 - ❌ `reference/01.md…15.md` 全文（用 `reference/SYNTHESIS.md` 代替）
 - ❌ `experiments/`（废弃 spike）
+- ❌ `.firecrawl/`（本轮抓取的厂商文档缓存，gitignored）
 - ❌ 全仓库扫描 / 与当前任务无关的模块
 
 ## 推荐下一个最小任务
 
-视用户意向：
-- 若 VikingDB 控制台可访问 → 做 R11-A（前端语音记忆调用链确认）
-- 若不可访问 → 回答 `docs/LETTER_UI_MOOD_MAPPING_DRAFT.md` 的 3 个问题后做信笺 UI P2
-- 若想确认 Pipecat 记忆是否完整 → 读 `backend/realtime/companion_brain.py` 确认写回路径
+**time brain 起步探针**（纯读代码、零改动、性价比最高）：核实两件事 ——(a) 现在有没有把真实 `datetime` 注入 prompt；(b) events 表有没有时间戳。这两个答案决定 time brain 的起点。确认后若 (a) 缺失，"注入真实时间"是近乎零成本、临场感断崖式提升的第一刀。
