@@ -53,7 +53,7 @@ def test_start_session_includes_session_id_and_persona_json() -> None:
     decoded = json.loads(gzip.decompress(frame[offset + 4 : offset + 4 + size]))
     assert decoded["dialog"]["bot_name"]
     assert "Boxi" in decoded["dialog"]["system_role"]
-    assert "透明盒子" in decoded["dialog"]["system_role"]
+    assert "透明的盒子" in decoded["dialog"]["system_role"]
     assert "边界" not in decoded["dialog"]["system_role"]
     assert "口语化" in decoded["dialog"]["speaking_style"]
     assert decoded["asr"]["extra"]["end_smooth_window_ms"] == 1000
