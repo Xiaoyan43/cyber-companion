@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from backend.app.behavior.local_responses import behavior_tone_instruction
 from backend.app.behavior.types import BehaviorDecision
@@ -18,6 +19,20 @@ from backend.app.memory.retrieval import is_expired, rank_memories, tokenize
 from backend.app.memory.store import MemoryStore
 from backend.app.providers.cost import estimate_token_count
 from backend.app.providers.types import ChatMessage
+
+
+_NZ_TZ = ZoneInfo("Pacific/Auckland")
+_WEEKDAYS_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+
+
+def _format_time_block() -> str:
+    now = datetime.now(_NZ_TZ)
+    weekday = _WEEKDAYS_CN[now.weekday()]
+    return (
+        "[Time]\n"
+        f"现在是 {now.year}年{now.month}月{now.day}日 {weekday} "
+        f"{now.strftime('%H:%M')}（新西兰时间）"
+    )
 
 
 @dataclass(frozen=True)
@@ -55,14 +70,41 @@ def _format_impression_block(store: MemoryStore) -> str | None:
     return f"[Impression]\n{memories[0].content}"
 
 
-def _format_memories_block(memories: list[MemoryRecord]) -> str:
+def _relative_time(created_at_iso: str, now: datetime) -> str:
+    try:
+        normalized = created_at_iso.replace(" ", "T")
+        created = datetime.fromisoformat(normalized)
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        delta_days = (now.astimezone(_NZ_TZ).date() - created.astimezone(_NZ_TZ).date()).days
+        if delta_days < 0:
+            return ""
+        if delta_days == 0:
+            return "今天"
+        if delta_days == 1:
+            return "昨天"
+        if delta_days < 7:
+            return f"{delta_days}天前"
+        if delta_days < 30:
+            return f"{delta_days // 7}周前"
+        return f"{delta_days // 30}个月前"
+    except (ValueError, TypeError):
+        return ""
+
+
+def _format_memories_block(memories: list[MemoryRecord], now: datetime | None = None) -> str:
     if not memories:
         return "[Relevant memories]\n(none selected)"
 
     lines = ["[Relevant memories]"]
     for memory in memories:
         tag_text = ", ".join(memory.tags) if memory.tags else "no-tags"
-        lines.append(f"- ({memory.type}) [{tag_text}] {memory.content}")
+        time_prefix = ""
+        if memory.type == "recent_event" and now is not None:
+            rel = _relative_time(memory.created_at, now)
+            if rel:
+                time_prefix = f"[{rel}] "
+        lines.append(f"- ({memory.type}) [{tag_text}] {time_prefix}{memory.content}")
     return "\n".join(lines)
 
 
@@ -129,6 +171,7 @@ def build_provider_context(
     relationship = store.get_relationship_state()
     latest_summary = store.get_latest_conversation_summary()
     now_iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    now_nz = datetime.now(_NZ_TZ)
     active_memories = [
         memory
         for memory in store.list_memories(limit=200)
@@ -172,6 +215,7 @@ def build_provider_context(
 
     system_sections = [
         load_persona_system_prompt(),
+        _format_time_block(),
         _format_mood_block(mood),
         _format_relationship_block(relationship),
     ]
@@ -185,7 +229,7 @@ def build_provider_context(
     summary_block = _format_summary_block(latest_summary)
     if summary_block:
         system_sections.append(summary_block)
-    system_sections.append(_format_memories_block(selected_memories))
+    system_sections.append(_format_memories_block(selected_memories, now=now_nz))
     system_sections.append(_ANTI_FABRICATION_NOTE)
 
     provider_user_input = _truncate_user_input_for_provider(
