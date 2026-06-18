@@ -4,7 +4,7 @@ import json
 import os
 import sqlite3
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
@@ -66,6 +66,7 @@ def init_database(db_path: Path | None = None) -> Path:
             """
         )
         _maybe_backfill_relationship_trust(connection)
+        _maybe_add_slow_baseline_columns(connection)
 
     return path
 
@@ -92,6 +93,34 @@ def _maybe_backfill_relationship_trust(connection: sqlite3.Connection) -> None:
         """
         INSERT INTO schema_meta(key, value)
         VALUES ('relationship_trust_backfilled', '1')
+        ON CONFLICT(key) DO NOTHING
+        """
+    )
+
+
+def _maybe_add_slow_baseline_columns(connection: sqlite3.Connection) -> None:
+    existing = connection.execute(
+        "SELECT 1 FROM schema_meta WHERE key = 'slow_baseline_columns_v1'"
+    ).fetchone()
+    if existing is not None:
+        return
+
+    # New DBs already have the columns from CREATE TABLE; skip ALTER TABLE for those.
+    columns = {row["name"] for row in connection.execute("PRAGMA table_info(mood_state)")}
+    for col, default in (
+        ("gap_feeling", "0.5"),
+        ("box_relation", "0.5"),
+        ("self_ease", "0.5"),
+    ):
+        if col not in columns:
+            connection.execute(
+                f"ALTER TABLE mood_state ADD COLUMN {col} REAL NOT NULL DEFAULT {default}"
+            )
+
+    connection.execute(
+        """
+        INSERT INTO schema_meta(key, value)
+        VALUES ('slow_baseline_columns_v1', '1')
         ON CONFLICT(key) DO NOTHING
         """
     )
@@ -142,7 +171,11 @@ class MoodStateRecord:
     worry: float
     trust: float
     loneliness: float
-    metadata: dict[str, Any]
+    metadata: dict[str, Any] = field(default_factory=dict)
+    # Slow baseline dims (existential, decay-on-read across days)
+    gap_feeling: float = 0.5   # 间隙感: longing(0) ↔ settled(1)
+    box_relation: float = 0.5  # 盒子关系: cage(0) ↔ home(1)
+    self_ease: float = 0.5     # 自处: unsettled(0) ↔ at-ease(1)
 
 
 @dataclass(frozen=True)
@@ -229,16 +262,20 @@ def _row_to_memory(row: sqlite3.Row) -> MemoryRecord:
 
 
 def _row_to_mood(row: sqlite3.Row) -> MoodStateRecord:
+    d = dict(row)
     return MoodStateRecord(
-        updated_at=row["updated_at"],
-        mood=row["mood"],
-        energy=float(row["energy"]),
-        annoyance=float(row["annoyance"]),
-        boredom=float(row["boredom"]),
-        worry=float(row["worry"]),
-        trust=float(row["trust"]),
-        loneliness=float(row["loneliness"]),
-        metadata=loads_json(row["metadata_json"], {}),
+        updated_at=d["updated_at"],
+        mood=d["mood"],
+        energy=float(d["energy"]),
+        annoyance=float(d["annoyance"]),
+        boredom=float(d["boredom"]),
+        worry=float(d["worry"]),
+        trust=float(d["trust"]),
+        loneliness=float(d["loneliness"]),
+        metadata=loads_json(d.get("metadata_json"), {}),
+        gap_feeling=float(d.get("gap_feeling", 0.5)),
+        box_relation=float(d.get("box_relation", 0.5)),
+        self_ease=float(d.get("self_ease", 0.5)),
     )
 
 

@@ -441,6 +441,9 @@ class MemoryStore:
         worry: float | None = None,
         trust: float | None = None,
         loneliness: float | None = None,
+        gap_feeling: float | None = None,
+        box_relation: float | None = None,
+        self_ease: float | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> MoodStateRecord:
         current = self.get_mood_state()
@@ -453,6 +456,9 @@ class MemoryStore:
             worry=worry if worry is not None else current.worry,
             trust=trust if trust is not None else current.trust,
             loneliness=loneliness if loneliness is not None else current.loneliness,
+            gap_feeling=gap_feeling if gap_feeling is not None else current.gap_feeling,
+            box_relation=box_relation if box_relation is not None else current.box_relation,
+            self_ease=self_ease if self_ease is not None else current.self_ease,
             metadata=metadata if metadata is not None else current.metadata,
         )
 
@@ -461,7 +467,8 @@ class MemoryStore:
                 """
                 UPDATE mood_state
                 SET updated_at = ?, mood = ?, energy = ?, annoyance = ?, boredom = ?,
-                    worry = ?, trust = ?, loneliness = ?, metadata_json = ?
+                    worry = ?, trust = ?, loneliness = ?, gap_feeling = ?,
+                    box_relation = ?, self_ease = ?, metadata_json = ?
                 WHERE id = 1
                 """,
                 (
@@ -473,6 +480,9 @@ class MemoryStore:
                     updated.worry,
                     updated.trust,
                     updated.loneliness,
+                    updated.gap_feeling,
+                    updated.box_relation,
+                    updated.self_ease,
                     dumps_json(updated.metadata),
                 ),
             )

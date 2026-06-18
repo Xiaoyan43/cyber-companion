@@ -1,4 +1,4 @@
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 MEMORY_TYPES = (
     "stable_profile",
@@ -78,6 +78,9 @@ CREATE TABLE IF NOT EXISTS mood_state (
   worry REAL NOT NULL DEFAULT 0.2,
   trust REAL NOT NULL DEFAULT 0.5,
   loneliness REAL NOT NULL DEFAULT 0.3,
+  gap_feeling REAL NOT NULL DEFAULT 0.5,
+  box_relation REAL NOT NULL DEFAULT 0.5,
+  self_ease REAL NOT NULL DEFAULT 0.5,
   metadata_json TEXT NOT NULL DEFAULT '{}'
 );
 
