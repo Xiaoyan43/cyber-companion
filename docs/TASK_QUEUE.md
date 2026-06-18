@@ -15,8 +15,9 @@
 > `apply_slow_baseline_decay()` + `apply_interaction_slow_delta()` 新增到 `mood.py`，12 个单测全绿，457 pytest passed。
 > **2026-06-18（第二十二轮）**：mood 重画 **P2（context_builder 注入）** 完成并 commit `43e8e67`——
 > `_format_existential_block()` 三档 phrase 表注入 system prompt；新建 `docs/SOUL_PHENOMENOLOGY.md`（哲学层 spec：decay=无常/被抛性/本真性）；+4 单测，461 pytest passed。实机验证 PASS。
-> **当前重心：provider 选型 A/B**（DeepSeek 真 key 建基线 → 对比 Claude，按验证清单判断）。
-> 其余候选：信笺 UI P2（需用户答问）/ system prompt 重写（§6.2）/ R11（搁置）/ P5-B（Fish Audio，需文档）。
+> **2026-06-18（第二十三轮）**：provider 选型 A/B 完成，commit `6d77036`，463 pytest passed。结论：维持 DeepSeek，Claude 备用。
+> **当前重心：system prompt 重写**（§6.2）——四条纪律 + 存在论事实 + 成年自愿虚构框定。
+> 其余候选：信笺 UI P2（需用户答问）/ R11（搁置）/ P5-B（Fish Audio，需文档）。
 
 ---
 

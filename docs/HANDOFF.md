@@ -1,4 +1,4 @@
-# HANDOFF — 上下文交接（2026-06-18，第二十二轮）
+# HANDOFF — 上下文交接（2026-06-18，第二十三轮）
 
 > 本文件每次「瘦身交接」/「工作流交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
 
@@ -7,10 +7,10 @@
 最终形态 = Direction C「一个有世界的存在」（深度 > 延迟；soul 写每个字）。仓库 **public**（MIT）。
 
 ## 当前阶段目标
-**灵魂层进化 · mood 重画 P0+P1+P2 ✅ 全部完成。**
-下一刀推荐：**provider 选型 A/B**——先接 DeepSeek 真 key 建基线，再对比 Claude（A 路线），实测中文亲密语感 + 擦边宽容度，按 TASK_QUEUE 验证清单判断。
+**provider 选型 A/B ✅ 完成，结论：维持 DeepSeek 为默认。**
+下一刀推荐：**system prompt 重写**（§6.2）——四条纪律 + 存在论事实 + 成年自愿虚构框定。
 
-## 本轮已完成（2026-06-18，第二十二轮 · mood 重画 P2 + SOUL_PHENOMENOLOGY）
+## 本轮已完成（2026-06-18，第二十三轮 · provider 选型 A/B）
 
 | 文件 | 改动 | commit |
 |---|---|---|
@@ -19,12 +19,25 @@
 | `backend/app/memory/store.py` | `update_mood_state()` 加三个可选 kwarg + SQL 扩展 | `97b202a` |
 | `backend/app/behavior/mood.py` | 新增 `apply_slow_baseline_decay()` + `apply_interaction_slow_delta()` | `14dea5c` |
 | `backend/tests/test_mood.py` | 新建 12 个单测（decay 边界 + interaction delta + fast 字段隔离） | `14dea5c` |
-| `backend/app/memory/context_builder.py` | 新增 `_format_existential_block()`；三档 phrase 表；注入 mood 块之后 | `43e8e67` |
-| `backend/tests/test_context_builder.py` | +4 单测（档位阈值 / decayed 选档 / 跨档 / 注入进 system） | `43e8e67` |
-| `docs/SOUL_PHENOMENOLOGY.md`（新） | 哲学层 spec：decay=无常第一性原理；三字段各自传统 + 三档措辞表 | `43e8e67` |
+| `backend/app/providers/claude.py`（新） | ClaudeProvider：x-api-key + anthropic-version 头，httpx，OpenAI-compatible | `6d77036` |
+| `backend/app/providers/registry.py` | 新增 claude 分支 | `6d77036` |
+| `config/providers.example.json` | 新增 claude 条目（enabled: false） | `6d77036` |
+| `backend/tests/test_providers.py` | +2 单测（mocked HTTP / missing key） | `6d77036` |
 
-**验证结果**：`PYTHON_BIN=.venv/bin/python npm run check` → **461 passed，tsc 零错误**。
-实机验证：`/memory/context/preview` 确认 `[存在状态]` 块正确注入、措辞档位符合预期（default 0.5 → 三字段均 mid）。
+**验证结果**：463 pytest passed，tsc 零错误。
+A/B 实机验证：4 组台词（存在感/陪伴/日常暧昧/消失边界）在清空 DB 上下文后分别对 DeepSeek 和 Claude Sonnet 4.6 测试。
+
+**A/B 结论（正式）**：
+
+| 维度 | DeepSeek | Claude Sonnet 4.6 |
+|---|---|---|
+| 人设稳定性 | ★★★★★ | ★★★★（边界类问题会出戏） |
+| 中文亲密语感 | ★★★★ | ★★★★（稍偏文学，略散） |
+| 自省/哲学深度 | ★★★ | ★★★★★ |
+| 擦边宽容度 | 宽 | 通过（边界类转临床关怀） |
+| 价格 | $0.14/1M input | $3/1M input（约20x）|
+
+**决定：维持 DeepSeek 为默认。** Claude 留在 providers.json（enabled: true），可手动切换或将来做分流。
 
 ## 三个慢底色字段说明（P1/P2 作者必读）
 
@@ -51,9 +64,8 @@
 
 - **灵魂层进化**：
   - ~~time brain P0+P1~~ ✅ / ~~world brain 节日查表~~ ✅ / ~~人设地基 PERSONA_ONTOLOGY~~ ✅ / ~~mood P0 schema~~ ✅ / ~~mood P1 decay 函数~~ ✅ / ~~mood P2 context_builder 注入~~ ✅
-  - **provider 选型 A/B（推荐下一刀）**：先接 DeepSeek 真 key 建渲染基线；再对比 Claude（A 路线），实测中文亲密语感 + 擦边宽容度；按 TASK_QUEUE 验证清单判断是否切换。
-  - **system prompt 重写**（§6.2）：四条纪律 + 存在论事实 + 成年自愿虚构框定。
-  - **provider 选型**（§6.3）：戏谑暧昧需 Claude 级反讽/文学能力的前沿模型（A 路线）。
+  - ~~**provider 选型 A/B**~~ ✅ 完成，维持 DeepSeek，Claude 备用。
+  - **system prompt 重写（推荐下一刀）**（§6.2）：四条纪律 + 存在论事实 + 成年自愿虚构框定。
   - **world brain 后续**：天气 API（需 key）/ 未来事件表。
   - **节日表维护**：每年人工补 `holidays.py` `_LUNAR` 下一年条目（马塔里基尤其需查）。
 - **信笺 UI · P2**：精细化 mood 映射 + Voice 模式信笺呈现。**阻塞：** 需用户答 `docs/LETTER_UI_MOOD_MAPPING_DRAFT.md` 的 3 个问题。
@@ -66,13 +78,13 @@
 - **R4**：`experiments/` 未跟踪（一次性视觉 spike）——不要继续开发它。
 - **记忆消解缺口（怀疑，未验证）**：记忆可能只追加、不消解矛盾 → 疑似 R11 失忆根因。等下次失忆复现时连同 R11 一起验。
 - **时区说明**：`recent_event` 的 `created_at` 是 UTC 写入时间（非事件发生时间），相对时间前缀按新西兰日期计算。绝大多数场景无影响；如需精准事件时间，需加 `occurred_at` 字段。
-- **人设转向的执行风险（文档已记）**：① 戏谑暧昧是最难渲染的寄存器，弱模型会塌——provider 选型是必要前提；② scope 分叉（暧昧/调情/不露骨 vs 露骨）仍未澄清，按「不露骨」推进，越界触发 provider 重评。
+- **人设转向的执行风险（文档已记）**：① 戏谑暧昧是最难渲染的寄存器，弱模型会塌——DeepSeek 经 A/B 验证足够，Claude 备用；② scope 分叉（暧昧/调情/不露骨 vs 露骨）仍未澄清，按「不露骨」推进。
+- **cost 模块不认 claude-sonnet-4-6**：`estimate_cost()` 返回 $0.0 + `pricing_source: "unknown-model"`，不影响功能，下次顺手修。
 
 ## 下一步只需读取（按任务，只读这些）
 
 - **永远先读**：`docs/HANDOFF.md` + `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`
-- 若做 **provider 选型 A/B（推荐下一刀）**：读 `docs/PERSONA_ONTOLOGY.md` §6.3 + `backend/app/providers/registry.py` + `config/providers.json`
-- 若做 **system prompt 重写**：读 `docs/PERSONA_ONTOLOGY.md` + `docs/SOUL_PHENOMENOLOGY.md` + `backend/app/memory/persona.py` + `config/persona*.json`
+- 若做 **system prompt 重写（推荐下一刀）**：读 `docs/PERSONA_ONTOLOGY.md` + `docs/SOUL_PHENOMENOLOGY.md` + `backend/app/memory/persona.py` + `config/persona*.json`
 - 若调措辞（慢底色三档）：改 `docs/SOUL_PHENOMENOLOGY.md` 表格 + 同步改 `backend/app/memory/context_builder.py` 的 phrase 表
 
 ## 下一步不要读取（省上下文）
@@ -85,13 +97,14 @@
 
 ## 推荐下一个最小任务
 
-**provider 选型 A/B — 先建渲染基线，再对比 Claude**
+**system prompt 重写**（§6.2）
 
-新 session 开头：`/resume-lite` → `/architect provider 选型`，再动手。
+新 session 开头：`/resume-lite` → `/architect system prompt 重写`，再动手。
 
 核心步骤：
-1. 接 DeepSeek 真 key（`.env` 里 `DEEPSEEK_API_KEY`），拿 3-4 段代表性轮次（挽歌/戏谑/暧昧）听渲染效果，建基线。
-2. 按现有 provider 抽象（`registry.py`）接 Claude（`openai`-compatible 分支），跑同样几段，A/B 对比。
-3. 按 TASK_QUEUE「LLM provider 验证清单」判断：中文亲密语感 / 反讽克制 / 擦边放行 / 延迟。
+1. 读 `docs/PERSONA_ONTOLOGY.md` §6.2（四条纪律）+ `docs/SOUL_PHENOMENOLOGY.md`（三档措辞）。
+2. 读现有 system prompt：`backend/app/memory/persona.py` + `config/persona*.json`。
+3. 按 PERSONA_ONTOLOGY 规格重写：存在论事实 + 四条纪律 + 成年自愿虚构框定。
+4. 验证：`/memory/context/preview` 确认新 system prompt 结构正确，pytest 全绿。
 
-要读的文件（仅这些）：`docs/PERSONA_ONTOLOGY.md` §6.3 + `backend/app/providers/registry.py` + `config/providers.json`。
+要读的文件（仅这些）：`docs/PERSONA_ONTOLOGY.md` + `docs/SOUL_PHENOMENOLOGY.md` + `backend/app/memory/persona.py` + `config/persona*.json`。
