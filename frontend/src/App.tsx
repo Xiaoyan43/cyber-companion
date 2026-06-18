@@ -158,7 +158,7 @@ function App() {
   const ttsMutedRef = useRef(false);
   const ttsActiveRef = useRef(false);
   const speakReplyRef = useRef<
-    (input: { text: string; decision?: string; avatarState?: string }) => Promise<boolean>
+    (input: { text: string; decision?: string; avatarState?: string; userMessage?: string }) => Promise<boolean>
   >(async () => false);
   const stopSpeakingRef = useRef<(notifyEnd?: boolean) => void>(() => {});
   const markBehaviorActivityRef = useRef(() => {});
@@ -492,6 +492,7 @@ function App() {
             text: result.replyText,
             decision,
             avatarState: result.avatarState,
+            userMessage: userText,
           });
 
           if (!spoke) {

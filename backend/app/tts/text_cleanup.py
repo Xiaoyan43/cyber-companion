@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 
-_QUOTED_SPAN_PATTERN = re.compile(r'"[^"]*"|「[^」]*」|\'[^\']*\'')
 _EMOJI_PATTERN = re.compile(
     "["
     "\U0001F600-\U0001F64F"
@@ -30,23 +29,7 @@ _HEADER_PATTERN = re.compile(r"^#{1,6}\s+", re.MULTILINE)
 
 
 def _strip_stage_directions(text: str) -> str:
-    """Remove bracketed stage cues; preserve quoted dialogue (aligned with speechText.ts)."""
-    placeholders: list[str] = []
-
-    def _protect(match: re.Match[str]) -> str:
-        placeholders.append(match.group(0))
-        return f"\x00Q{len(placeholders) - 1}\x00"
-
-    protected = _QUOTED_SPAN_PATTERN.sub(_protect, text)
-    stripped = re.sub(r"（[^）]*）", "", protected)
-    stripped = re.sub(r"【[^】]*】", "", stripped)
-    stripped = re.sub(r"\([^)]*\)", "", stripped)
-    stripped = re.sub(r"\[[^\]]*\]", "", stripped)  # strip all [...] — [#指令] extracted upstream
-    return re.sub(
-        r"\x00Q(\d+)\x00",
-        lambda match: placeholders[int(match.group(1))],
-        stripped,
-    )
+    return re.sub(r"\([^)]*\)", "", text)
 
 
 def _strip_markdown(text: str) -> str:

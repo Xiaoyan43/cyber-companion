@@ -521,6 +521,7 @@ def tts_stream(
     decision: str | None = Query(default=None),
     avatar_state: str | None = Query(default=None),
     force: bool = Query(default=False),
+    user_message: str | None = Query(default=None),
 ) -> StreamingResponse | Response:
     router = get_tts_router()
     context_texts: list[str] | None = None
@@ -534,19 +535,22 @@ def tts_stream(
     if provider_name == "doubao":
         doubao = router.providers.get("doubao")
         if doubao is not None and doubao.is_configured():
-            store = get_memory_store()
-            mood = store.get_mood_state()
-            relationship = store.get_relationship_state()
-            projection = project_tone(
-                mood,
-                relationship,
-                performative_active=performative_active_from_metadata(mood.metadata),
-            )
-            intensity = register_intensity(mood, relationship, projection)
-            context_texts, speech_rate = tts_emotion_directive(
-                projection,
-                intensity=intensity,
-            )
+            if user_message and user_message.strip():
+                context_texts = [user_message.strip()]
+            else:
+                store = get_memory_store()
+                mood = store.get_mood_state()
+                relationship = store.get_relationship_state()
+                projection = project_tone(
+                    mood,
+                    relationship,
+                    performative_active=performative_active_from_metadata(mood.metadata),
+                )
+                intensity = register_intensity(mood, relationship, projection)
+                context_texts, speech_rate = tts_emotion_directive(
+                    projection,
+                    intensity=intensity,
+                )
 
     try:
         policy, chunks = router.stream_synthesize(

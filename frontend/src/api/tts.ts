@@ -38,6 +38,7 @@ export function buildTtsStreamUrl(payload: {
   decision?: string;
   avatarState?: string;
   force?: boolean;
+  userMessage?: string;
 }): string {
   const params = new URLSearchParams();
   params.set("text", payload.text);
@@ -49,6 +50,9 @@ export function buildTtsStreamUrl(payload: {
   }
   if (payload.force) {
     params.set("force", "true");
+  }
+  if (payload.userMessage) {
+    params.set("user_message", payload.userMessage);
   }
   return `${apiBaseUrl}/tts/stream?${params.toString()}`;
 }

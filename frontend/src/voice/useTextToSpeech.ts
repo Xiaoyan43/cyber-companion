@@ -14,6 +14,7 @@ type SpeakReplyInput = {
   text: string;
   decision?: string;
   avatarState?: string;
+  userMessage?: string;
 };
 
 type UseTextToSpeechOptions = {
@@ -301,11 +302,13 @@ export function useTextToSpeech({
       avatarState: string | undefined,
       sessionId: number,
       abortController: AbortController,
+      userMessage?: string,
     ): Promise<boolean> => {
       const streamUrl = buildTtsStreamUrl({
         text: speechText,
         decision,
         avatarState,
+        userMessage,
       });
       const playbackUrl = `${streamUrl}&_play=${sessionId}`;
 
@@ -333,7 +336,7 @@ export function useTextToSpeech({
   );
 
   const speakReply = useCallback(
-    async ({ text, decision, avatarState }: SpeakReplyInput) => {
+    async ({ text, decision, avatarState, userMessage }: SpeakReplyInput) => {
       const maxChars = maxSpeechCharsRef.current;
       const chunks = textChunksForSpeech(text, maxChars);
       if (!enabledRef.current || mutedRef.current || chunks.length === 0) {
@@ -391,6 +394,7 @@ export function useTextToSpeech({
             avatarState,
             sessionId,
             abortController,
+            userMessage,
           );
           anyPlayed = anyPlayed || played;
         }
