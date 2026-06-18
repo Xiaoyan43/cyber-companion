@@ -1,6 +1,7 @@
 from backend.app.tts.base import TextToSpeechProvider
 from backend.app.tts.config import TTSConfig, TTSProviderConfigEntry
 from backend.app.tts.doubao import DoubaoTTSProvider
+from backend.app.tts.fish_audio import FishAudioTTSProvider
 from backend.app.tts.mac_say import MacSayTTSProvider
 from backend.app.tts.mock import MockTTSProvider
 from backend.app.tts.openai_tts import OpenAITTSProvider
@@ -27,6 +28,13 @@ def build_tts_provider(entry: TTSProviderConfigEntry) -> TextToSpeechProvider:
 
     if entry.name == "doubao":
         return DoubaoTTSProvider(enabled=entry.enabled)
+
+    if entry.name == "fish_audio":
+        return FishAudioTTSProvider(
+            enabled=entry.enabled,
+            api_key_env=entry.api_key_env or "FISH_AUDIO_API_KEY",
+            voice_id=entry.voice,
+        )
 
     return MockTTSProvider(model=entry.model)
 

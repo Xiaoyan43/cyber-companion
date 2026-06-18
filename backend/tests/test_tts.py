@@ -21,6 +21,11 @@ from backend.app.tts.doubao import (
     resolve_resource_id,
 )
 from backend.app.tts.exceptions import TTSConfigError, TTSError
+from backend.app.tts.fish_audio import (
+    FISH_AUDIO_TTS_URL,
+    FishAudioTTSProvider,
+    speech_rate_to_speed,
+)
 from backend.app.tts.mac_say import MacSayTTSProvider
 from backend.app.tts.mock import MockTTSProvider
 from backend.app.tts.openai_tts import OpenAITTSProvider
@@ -608,14 +613,12 @@ def test_doubao_cloud_provider_blocked_without_budget_flag(monkeypatch: pytest.M
     assert "Cloud TTS is disabled" in str(error.value)
 
 
-def test_clean_text_for_tts_strips_markdown_emoji_and_stage_directions() -> None:
-    raw = "（叹气）**你好** 😀（翻白眼）"
+def test_clean_text_for_tts_strips_markdown_and_emoji() -> None:
+    raw = "**你好** 😀 随便说"
     cleaned = clean_text_for_tts(raw)
     assert "你好" in cleaned
     assert "**" not in cleaned
     assert "😀" not in cleaned
-    assert "叹气" not in cleaned
-    assert "翻白眼" not in cleaned
 
 
 def test_clean_text_for_tts_preserves_ellipsis() -> None:
@@ -634,7 +637,7 @@ def test_doubao_payload_includes_emotion_directive(monkeypatch: pytest.MonkeyPat
     provider = DoubaoTTSProvider(http_client=_fake_stream_client(lines, captured))  # type: ignore[arg-type]
     provider.synthesize(
         SynthesisRequest(
-            text="（小声）短句。",
+            text="短句。",
             context_texts=["更冲、更不耐烦但别凶"],
             speech_rate=12,
         )
@@ -826,6 +829,147 @@ def test_extract_voice_instruction_returns_none_when_absent() -> None:
     assert body == "好吧，随你。"
 
 
-def test_clean_text_for_tts_strips_voice_instruction_if_not_extracted() -> None:
-    # 如果 [#...] 没有被提前提取，clean_text_for_tts 兜底 strip 掉它
-    assert clean_text_for_tts("[#用嗤笑语气]随你。") == "随你。"
+def test_clean_text_for_tts_preserves_voice_instruction_inline() -> None:
+    # [#...] 现在留在文本里作为内联语气指令传给 doubao，不再被 strip
+    assert clean_text_for_tts("[#用嗤笑语气]随你。") == "[#用嗤笑语气]随你。"
+
+
+# ── Fish Audio ────────────────────────────────────────────────────────────────
+
+
+def _fake_fish_stream_client(chunks: list[bytes], captured: dict) -> object:
+    class FakeStreamResponse:
+        status_code = 200
+
+        def __init__(self, data: list[bytes]) -> None:
+            self._data = data
+
+        def iter_bytes(self) -> list[bytes]:
+            return self._data
+
+        def __enter__(self) -> "FakeStreamResponse":
+            return self
+
+        def __exit__(self, *args: object) -> bool:
+            return False
+
+    class FakeClient:
+        def stream(self, method: str, url: str, *, json: dict, headers: dict, timeout: float):
+            captured["method"] = method
+            captured["url"] = url
+            captured["json"] = json
+            captured["headers"] = headers
+            return FakeStreamResponse(chunks)
+
+    return FakeClient()
+
+
+def test_registry_builds_fish_audio_provider() -> None:
+    entry = TTSProviderConfigEntry(
+        name="fish_audio",
+        enabled=False,
+        model="s2-pro",
+        voice="fbe02f8306fc4d3d915e9871722a39d5",
+        api_key_env="FISH_AUDIO_API_KEY",
+        cloud=True,
+    )
+    provider = build_tts_provider(entry)
+    assert isinstance(provider, FishAudioTTSProvider)
+    assert provider.name == "fish_audio"
+    assert provider.cloud is True
+
+
+def test_fish_audio_provider_status_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FISH_AUDIO_API_KEY", "test-key")
+    provider = FishAudioTTSProvider(enabled=True)
+    status = provider.status()
+    assert status.name == "fish_audio"
+    assert status.enabled is True
+    assert status.model == "s2-pro"
+    assert status.configured is True
+    assert status.api_key_present is True
+    assert status.placeholder is False
+    assert status.cloud is True
+
+
+def test_fish_audio_unconfigured_raises_config_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("FISH_AUDIO_API_KEY", raising=False)
+    provider = FishAudioTTSProvider()
+    assert provider.is_configured() is False
+    with pytest.raises(TTSConfigError) as exc:
+        list(provider.synthesize_stream(SynthesisRequest(text="你好")))
+    assert "FISH_AUDIO_API_KEY" in str(exc.value)
+
+
+def test_fish_audio_speech_rate_to_speed() -> None:
+    assert speech_rate_to_speed(0) == 1.0
+    assert speech_rate_to_speed(20) == 1.5
+    assert speech_rate_to_speed(-20) == 0.5
+    assert speech_rate_to_speed(100) == 2.0   # clamped
+    assert speech_rate_to_speed(-100) == 0.5  # clamped
+
+
+def test_fish_audio_synthesize_stream_yields_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FISH_AUDIO_API_KEY", "test-key")
+    captured: dict = {}
+    fake_client = _fake_fish_stream_client([b"audio-chunk-1", b"audio-chunk-2"], captured)
+    provider = FishAudioTTSProvider(http_client=fake_client)  # type: ignore[arg-type]
+
+    chunks = list(provider.synthesize_stream(SynthesisRequest(text="你好")))
+
+    assert chunks == [b"audio-chunk-1", b"audio-chunk-2"]
+    assert captured["url"] == FISH_AUDIO_TTS_URL
+    assert captured["headers"]["model"] == "s2-pro"
+    assert captured["headers"]["Authorization"] == "Bearer test-key"
+    assert captured["json"]["format"] == "opus"
+    assert captured["json"]["latency"] == "balanced"
+    assert "prosody" not in captured["json"]   # speech_rate=0 → no prosody field
+
+
+def test_fish_audio_emotion_prefix_from_context_texts(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FISH_AUDIO_API_KEY", "test-key")
+    captured: dict = {}
+    fake_client = _fake_fish_stream_client([b"audio"], captured)
+    provider = FishAudioTTSProvider(http_client=fake_client)  # type: ignore[arg-type]
+
+    list(provider.synthesize_stream(
+        SynthesisRequest(text="随便吧", context_texts=["带着叹息的语气"])
+    ))
+
+    assert captured["json"]["text"].startswith("[带着叹息的语气]")
+
+
+def test_fish_audio_speech_rate_mapped_to_prosody(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FISH_AUDIO_API_KEY", "test-key")
+    captured: dict = {}
+    fake_client = _fake_fish_stream_client([b"audio"], captured)
+    provider = FishAudioTTSProvider(http_client=fake_client)  # type: ignore[arg-type]
+
+    list(provider.synthesize_stream(SynthesisRequest(text="快点说", speech_rate=20)))
+
+    assert captured["json"]["prosody"] == {"speed": 1.5}
+
+
+def test_fish_audio_auth_failure_raises_tts_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FISH_AUDIO_API_KEY", "bad-key")
+
+    class FakeUnauth:
+        status_code = 401
+
+        def iter_bytes(self):
+            return []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    class FakeClient:
+        def stream(self, *args, **kwargs):
+            return FakeUnauth()
+
+    provider = FishAudioTTSProvider(http_client=FakeClient())  # type: ignore[arg-type]
+    with pytest.raises(TTSError) as exc:
+        list(provider.synthesize_stream(SynthesisRequest(text="你好")))
+    assert exc.value.status_code == 503

@@ -9,6 +9,13 @@
 > - **`disable_existential_block` 标志** ✅ 完成，commit `448c784`——临时人设可屏蔽存在论注入，测试隔离修复。
 > - **provider 选型（第二轮）进行中**：DeepSeek ❌ 文学天花板低；Claude ❌ 延迟高+干瘪；当前测 `google/gemini-2.5-flash-lite`（via OpenRouter，临时伴侣人设+disable_existential_block）。
 > - **当前重心：provider 选型收尾** → 测完 Gemini 后决定最终默认 provider，删 `config/persona.json`，恢复存在论人设。
+>
+> **2026-06-19（第二十五轮）— 未 commit，待下一 session commit**：
+> - **persona 格式纪律调整**：`persona.example.json` + `persona.json`——删"动作放（）"，改为明确禁令；加"说话方式：口语，自然，不做客服"；伴侣人设加"感受就是感受，直接说"。
+> - **TTS strip 简化**：`text_cleanup.py` `_strip_stage_directions` 削减为只 strip 半角 `(...)`，`[#指令]` 现在内联透传给 doubao。
+> - **Pipecat TTS 去抽取**：`doubao_streaming_tts_service.py` 删 `extract_voice_instruction`，全文含 `[#...]` 直传合成。
+> - **文字聊天 TTS context_texts 修正**：`/tts/stream` 加 `user_message` 参数，前端 `submitToBackend` 传用户消息，作为 doubao `context_texts` 对话上下文（回退 `tts_emotion_directive()`）。
+> - **验证**：465 pytest passed，tsc --noEmit 零错误。
 
 ---
 
@@ -105,11 +112,17 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 ### ~~P5-A-2 · 切换默认 + 冒烟验证~~ ❌ 取消
 - 用户决定不使用 Venice，后续考虑换其他 provider。
 
-### P5-B · TTS → Fish Audio
-- **Scope**：`backend/app/tts/` 新增 `fish_audio.py`，provider registry 注册，env 加 `FISH_AUDIO_API_KEY`。
-- **可行性**：TTS 抽象层已存在（`backend/app/tts/base.py` + registry），新增一个 provider 文件即可。
-  **核心未知**：Fish Audio 是否支持情绪/语速参数（等价于 Doubao bigtts 的 `context_texts`/`speech_rate`）——需看文档才能判断情绪通道（VE-1）能否保留。
-- **阻塞**：需用户提供 Fish Audio API 文档（无法自行搜索）。
+### ~~P5-B · TTS → Fish Audio（文字聊天路径）~~ ✅ 已完成（2026-06-19，第二十六轮）
+- `backend/app/tts/fish_audio.py` 新建（FishAudioTTSProvider，s2-pro，opus，emotion bracket，prosody.speed）
+- registry 注册，tts.example.json 加模板条目，473 pytest passed
+- 情绪：context_texts[0] 包进 `[phrase]` 前置文本，S2-Pro 自动读取
+- speed 映射：`prosody.speed = 1.0 + speech_rate * 0.025`，钳位 [0.5, 2.0]
+- 实机验证：文字聊天有音频输出 ✅
+
+### P5-B-2 · Pipecat TTS → Fish Audio（语音路径）
+- **Scope**：`backend/realtime/doubao_streaming_tts_service.py` 替换为 FishAudioTTSService（官方 pipecat-ai[fish]），更新 companion_brain.py 引用，更新 VOICE_MODE_INSTRUCTION 格式
+- **依赖**：pip install "pipecat-ai[fish]"
+- **要读**：`backend/realtime/doubao_streaming_tts_service.py`、`backend/realtime/companion_brain.py`
 
 ## ~~P7 · Pipecat 前端入口~~ ✅ 已完成并实机验证 PASS（2026-06-17，commits `9a7a278`→`dc4ce4e`）
 - `backend/realtime/pipeline_router.py` 新建：`POST /realtime/start` / `POST /realtime/stop` / `GET /realtime/status`

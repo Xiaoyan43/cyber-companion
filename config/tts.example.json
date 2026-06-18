@@ -24,6 +24,13 @@
       "enabled": false,
       "model": "doubao-tts",
       "cloud": true
+    },
+    "fish_audio": {
+      "enabled": false,
+      "model": "s2-pro",
+      "voice": "fbe02f8306fc4d3d915e9871722a39d5",
+      "api_key_env": "FISH_AUDIO_API_KEY",
+      "cloud": true
     }
   }
 }

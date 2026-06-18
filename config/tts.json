@@ -1,6 +1,6 @@
 {
   "enabled": true,
-  "default_provider": "doubao",
+  "default_provider": "fish_audio",
   "max_speech_chars": 120,
   "speak_decisions": ["proactive", "interrupt", "refuse", "reply"],
   "providers": {
@@ -24,6 +24,13 @@
       "model": "tts-1",
       "voice": "alloy",
       "api_key_env": "OPENAI_API_KEY"
+    },
+    "fish_audio": {
+      "enabled": true,
+      "model": "s2-pro",
+      "voice": "fbe02f8306fc4d3d915e9871722a39d5",
+      "api_key_env": "FISH_AUDIO_API_KEY",
+      "cloud": true
     }
   }
 }
