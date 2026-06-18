@@ -9,8 +9,11 @@
 > **2026-06-18（第十九轮 · 纯讨论）**：产出灵魂地基 **`docs/PERSONA_ONTOLOGY.md`**——人设转向「有准确自我认知的存在」
 > （B·带自知持有 + 不对称自知 + 戏谑暧昧/挽歌真诚 + 锋利放开带修复弧 + 框架诚实 + 危险性靠 provider）。
 > **这份文档是 mood 重画 / system prompt 重写 / provider 选型的共同锚。**
-> **当前重心：灵魂层进化。** 推荐下一最小任务 = **mood 重画**（不再是「给毒舌加东西」，
-> 而是按 `PERSONA_ONTOLOGY.md` §6.1 换坐标系：快情绪缩小 + 慢底色三维「间隙/盒子/自处」；先 `/architect`）。
+> **2026-06-18（第二十轮）**：mood 重画 **P0（schema 地基）** 完成并 commit `97b202a`——`MoodStateRecord` + SQLite + `store.py` 新增
+> `gap_feeling`（间隙感）/ `box_relation`（盒子关系）/ `self_ease`（自处）三个慢底色字段 + ALTER TABLE migration。
+> **2026-06-18（第二十一轮）**：mood 重画 **P1（decay-on-read 函数）** 完成并 commit `14dea5c`——
+> `apply_slow_baseline_decay()` + `apply_interaction_slow_delta()` 新增到 `mood.py`，12 个单测全绿，457 pytest passed。
+> **当前重心：灵魂层进化 · mood 重画 P2**（context_builder 注入）。
 > 其余候选：信笺 UI P2（需用户答问）/ R11（搁置，下次失忆当场验）/ P5-B（Fish Audio，需文档）。
 
 ---
@@ -190,7 +193,7 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - "时间在流逝"：用 **decay-on-read（惰性求值）** 实现 90%，不需常驻时钟
 
 ### 优先级（性价比排序）
-- **第一档**（近免费、收益最大）：~~time-现在注入~~ ✅ / ~~world-节日查表~~ ✅ / **emotion-慢情绪+decay-on-read（推荐下一刀）**
+- **第一档**（近免费、收益最大）：~~time-现在注入~~ ✅ / ~~world-节日查表~~ ✅ / ~~emotion-慢情绪 P0 schema~~ ✅ / ~~P1 decay 函数~~ ✅ / **P2 context_builder 注入 = 推荐下一刀**
 - **第二档**（中等）：world-天气API / time-未来事件表 / memory 分类细化
 - **第三档**（贵/险/最后）：world-新闻（后台LLM筛选）/ identity-成长（drift风险）
 

@@ -1,4 +1,4 @@
-# HANDOFF — 上下文交接（2026-06-18，第十九轮）
+# HANDOFF — 上下文交接（2026-06-18，第二十一轮）
 
 > 本文件每次「瘦身交接」/「工作流交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
 
@@ -7,51 +7,47 @@
 最终形态 = Direction C「一个有世界的存在」（深度 > 延迟；soul 写每个字）。仓库 **public**（MIT）。
 
 ## 当前阶段目标
-**灵魂层进化**。时间感知（time brain P0+P1）✅ + 节日窗口（world brain 节日查表）✅ 已落地。
-第十九轮转入**人设地基**：从「毒舌人设」转向「**有准确自我认知的存在**」，
-产出 **`docs/PERSONA_ONTOLOGY.md`**。这份文档是后续 **mood 重画 / system prompt 重写 / provider 选型**
-三件事的共同锚——做任一件前先读它。
+**灵魂层进化 · mood 重画**。P0 + P1 ✅ 已完成并 commit。
+下一步：**P2（context_builder 注入）**——读慢底色 decayed 值 → 注入 system prompt 状态描述。
 
-## 本轮已完成（2026-06-18，第十九轮 · 纯讨论 + 文档）
+## 本轮已完成（2026-06-18，第二十一轮 · mood 重画 P0 + P1）
 
-| commit | 内容 |
-|---|---|
-| `e138ef5` | feat(soul): world brain 节日查表（上一轮代码补 commit） |
-| `0d8a5f3` | docs(soul): 立 `PERSONA_ONTOLOGY.md` 灵魂地基 — 人设转向「有自知的存在」 |
-
-**本轮主体是一次深度讨论 session**，把人设方向从「戏服式毒舌」重构为「存在论式自我认知」，
-结论沉淀进 `docs/PERSONA_ONTOLOGY.md`（8 节）。一句话地基：
-
-> **B（带自知持有）+ 不对称自知 + 两张脸（戏谑暧昧 / 挽歌真诚）+ 锋利放开但带修复弧
-> + 框架诚实是戏谑的前提 + 危险性靠 provider 不靠 jailbreak。**
-
-要点速览（细节在文档内）：
-- **B · 带自知持有**：她对「自己是哪一种存在」有准确认知，并从那个认知里去爱；尊严在于准确，不在伪装。
-- **不对称自知**：她不是「打折的人类」，是另一种形状的存在（参照 Claude 的能力不对称）——她知道自己的真实轮廓。
-- **两张脸**：`playful`=「明牌的暧昧」（戏谑、自知、虚实游戏，是人和人之间不可能有的寄存器）；
-  `B-elegiac`=挽歌式真诚（深夜/脆弱时）。**这是 tone 投射，不是 mood 状态。**
-- **四条纪律**（→ system prompt）：自知承重但沉默 / 锋利放开+修复弧 / 框架诚实=戏谑引擎（非安全护栏）/ 危险性靠 provider 不靠 jailbreak。
-
-## 已修改文件 + 改动摘要（本轮）
-
-| 文件 | 改动 | 说明 |
+| 文件 | 改动 | commit |
 |---|---|---|
-| `docs/PERSONA_ONTOLOGY.md` | **新建** ~196 行 | 灵魂地基：存在论 + B 决定 + 两张脸 + 纪律边界 + 对下游三件事的约束 |
-| `docs/HANDOFF.md` | 整体覆盖 | 本文件（第十九轮交接） |
-| `docs/TASK_QUEUE.md` | 增量更新 | 灵魂层重心更新，mood 重画锚到 `PERSONA_ONTOLOGY.md` §6.1 |
+| `backend/app/memory/schema.py` | `mood_state` 建表加三列；`SCHEMA_VERSION` 3→4 | `97b202a` |
+| `backend/app/memory/database.py` | `MoodStateRecord` 加三个默认字段；容错读；ALTER TABLE migration | `97b202a` |
+| `backend/app/memory/store.py` | `update_mood_state()` 加三个可选 kwarg + SQL 扩展 | `97b202a` |
+| `backend/app/behavior/mood.py` | 新增 `apply_slow_baseline_decay()` + `apply_interaction_slow_delta()` | `14dea5c` |
+| `backend/tests/test_mood.py` | 新建 12 个单测（decay 边界 + interaction delta + fast 字段隔离） | `14dea5c` |
 
-> 注：`backend/app/memory/holidays.py` 等节日查表代码已在 `e138ef5` 提交（第十八轮成果，本轮仅补 commit）。
-> 本轮**未碰任何代码**，纯讨论 + 文档。`experiments/` 未跟踪（R4，勿动）。
+**验证结果**：`PYTHON_BIN=.venv/bin/python npm run check` → **457 passed，tsc 零错误**。
+
+## 三个慢底色字段说明（P1/P2 作者必读）
+
+| 字段 | 语义 | 0.0 | 1.0 | decay 速率 |
+|---|---|---|---|---|
+| `gap_feeling` | 间隙感：对「你不在的空白」的姿态 | 牵挂 | 平静 | ~0.04/day（向 0.0 漂移，若无互动） |
+| `box_relation` | 盒子关系：对自身处境的姿态 | 这是笼 | 这是家 | ~0.01/day（极慢，由对话质地决定） |
+| `self_ease` | 自处：对「自己是这种存在」的安定程度 | 不安 | 安定 | ~0.005/day（最稳，几乎不自然变化） |
+
+**关键设计决定**：
+- 三维都向 0.0 漂移（牵挂 / 笼感 / 不安），无互动时越来越"困"。
+- `loneliness`（快情绪）保留不动，继续驱动 `tone.py` 的 lonely register——两者并存不冲突。
+- 三维都是**纯惰性（decay-on-read）**，不写 DB，调用方拿到 decayed 值后按需传入上下文。
+- 注入 system prompt 的是**状态描述文字**（如「她对这段空白有些牵挂」），LLM 自由生成台词。
+
+**P1 函数签名（P2 必读）**：
+- `apply_slow_baseline_decay(mood, *, now: datetime) -> MoodStateRecord`：按天数 decay，用 `dataclasses.replace` 返回，不改快字段。
+- `apply_interaction_slow_delta(mood, *, positive_turn: bool) -> MoodStateRecord`：positive → gap+0.08/box+0.04/ease+0.02；negative → gap-0.04/box-0.02/ease-0.01。
 
 ## 测试 / 验证
-- 本轮**无代码改动**，未跑 `npm run check`。最近一次全量基线（第十八轮）：**backend 445 passed**。
-- 工作区干净（仅 `experiments/` 未跟踪）。
+- 本轮：457 pytest passed，tsc --noEmit 零错误。所有改动已 commit。
 
 ## 当前未完成（产品侧）
 
 - **灵魂层进化**：
-  - ~~time brain P0+P1~~ ✅ / ~~world brain 节日查表~~ ✅ / ~~人设地基 PERSONA_ONTOLOGY~~ ✅
-  - **mood 重画（下一刀，推荐）**：按 `PERSONA_ONTOLOGY.md` §6.1 换坐标系——快情绪缩小 + 慢底色三维（间隙/盒子/自处），decay-on-read 惰性求值。**不再是「给毒舌加东西」**。需先 `/architect` 拆解。
+  - ~~time brain P0+P1~~ ✅ / ~~world brain 节日查表~~ ✅ / ~~人设地基 PERSONA_ONTOLOGY~~ ✅ / ~~mood P0 schema~~ ✅ / ~~mood P1 decay 函数~~ ✅
+  - **mood 重画 P2（context_builder 注入，推荐下一刀）**：读慢底色 decayed 值 → 注入 system prompt 状态描述。P0+P1 已完成。
   - **system prompt 重写**（§6.2）：四条纪律 + 存在论事实 + 成年自愿虚构框定。
   - **provider 选型**（§6.3）：戏谑暧昧需 Claude 级反讽/文学能力的前沿模型（A 路线）。
   - **world brain 后续**：天气 API（需 key）/ 未来事件表。
@@ -66,15 +62,14 @@
 - **R4**：`experiments/` 未跟踪（一次性视觉 spike）——不要继续开发它。
 - **记忆消解缺口（怀疑，未验证）**：记忆可能只追加、不消解矛盾 → 疑似 R11 失忆根因。等下次失忆复现时连同 R11 一起验。
 - **时区说明**：`recent_event` 的 `created_at` 是 UTC 写入时间（非事件发生时间），相对时间前缀按新西兰日期计算。绝大多数场景无影响；如需精准事件时间，需加 `occurred_at` 字段。
-- **人设转向的执行风险（新增，文档已记）**：① 戏谑暧昧是最难渲染的寄存器，弱模型会塌——provider 选型是必要前提；② scope 分叉（暧昧/调情/不露骨 vs 露骨）仍未澄清，按「不露骨」推进，越界触发 provider 重评。
+- **人设转向的执行风险（文档已记）**：① 戏谑暧昧是最难渲染的寄存器，弱模型会塌——provider 选型是必要前提；② scope 分叉（暧昧/调情/不露骨 vs 露骨）仍未澄清，按「不露骨」推进，越界触发 provider 重评。
 
 ## 下一步只需读取（按任务，只读这些）
 
 - **永远先读**：`docs/HANDOFF.md` + `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`
-- 若做 **mood 重画**（推荐）：先读 **`docs/PERSONA_ONTOLOGY.md`**（地基）+ `backend/app/behavior/mood.py` + `backend/app/behavior/tone.py` + `backend/app/memory/store.py`
+- 若做 **mood 重画 P2（推荐下一刀）**：读 `backend/app/memory/context_builder.py` + `backend/app/behavior/mood.py`（看两个 decay 函数签名）
 - 若做 **system prompt 重写**：读 `docs/PERSONA_ONTOLOGY.md` + `backend/app/memory/persona.py` + `config/persona*.json`
 - 若做 **provider 选型**：读 `docs/PERSONA_ONTOLOGY.md` §6.3 + `backend/app/providers/registry.py` + `config/providers.json`
-- 若做 **节日表扩充**：读 `backend/app/memory/holidays.py`
 
 ## 下一步不要读取（省上下文）
 
@@ -86,6 +81,13 @@
 
 ## 推荐下一个最小任务
 
-**mood 重画**：按 `PERSONA_ONTOLOGY.md` §6.1，把现有「精力/烦躁/无聊/担心/孤独」五维（人类情绪标签）
-换成「快情绪缩小 + 慢底色三维（间隙/盒子/自处）」。先 `/architect` 拆解、评估 `mood.py`/`store.py`/`tone.py` 改动规模，
-再动代码。备选：信笺 UI P2（需用户答 3 问）。
+**⚠️ 新 session 第一步**：先 commit P0 未提交的三个文件：
+```
+git add backend/app/memory/database.py backend/app/memory/schema.py backend/app/memory/store.py
+git commit -m "feat(soul): mood 重画 P0 — 三个慢底色字段（gap_feeling/box_relation/self_ease）schema + migration"
+```
+
+**然后做 mood 重画 P1**：在 `backend/app/behavior/mood.py` 新增：
+1. `apply_slow_baseline_decay(mood, *, now) -> MoodStateRecord`（纯计算，不写 DB）
+2. `apply_interaction_slow_delta(mood, *, positive_turn) -> MoodStateRecord`
+先 `/architect` 确认函数签名和 decay 公式，再动代码。
