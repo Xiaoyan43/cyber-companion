@@ -81,13 +81,14 @@
 
 ## 推荐下一个最小任务
 
-**⚠️ 新 session 第一步**：先 commit P0 未提交的三个文件：
-```
-git add backend/app/memory/database.py backend/app/memory/schema.py backend/app/memory/store.py
-git commit -m "feat(soul): mood 重画 P0 — 三个慢底色字段（gap_feeling/box_relation/self_ease）schema + migration"
-```
+**mood 重画 P2 — context_builder 注入慢底色状态描述**
 
-**然后做 mood 重画 P1**：在 `backend/app/behavior/mood.py` 新增：
-1. `apply_slow_baseline_decay(mood, *, now) -> MoodStateRecord`（纯计算，不写 DB）
-2. `apply_interaction_slow_delta(mood, *, positive_turn) -> MoodStateRecord`
-先 `/architect` 确认函数签名和 decay 公式，再动代码。
+新 session 开头：`/resume-lite` → `/architect mood 重画 P2`，再动代码。
+
+P2 核心逻辑：
+1. 在 `context_builder.py` 的 system prompt 构建路径里，读取当前 `MoodStateRecord`。
+2. 调用 `apply_slow_baseline_decay(mood, now=now_nz)` 得到 decayed 值（不写 DB）。
+3. 把三个 decayed 值转成自然语言状态描述（如「她对这段空白有些牵挂」），注入 system prompt 专属段落。
+4. 门禁：457+ pytest passed，tsc 零错误。
+
+要读的文件（仅这些）：`backend/app/memory/context_builder.py` + `backend/app/behavior/mood.py`（看 decay 函数签名）。
