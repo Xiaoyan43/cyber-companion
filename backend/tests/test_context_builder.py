@@ -442,7 +442,9 @@ def test_existential_block_reflects_decay_over_time() -> None:
     assert _SELF_PHRASES["mid"] in block  # slowest decay (0.005/day) stays mid
 
 
-def test_existential_block_injected_into_system(store: MemoryStore) -> None:
+def test_existential_block_injected_into_system(store: MemoryStore, monkeypatch: pytest.MonkeyPatch) -> None:
+    import backend.app.memory.context_builder as cb
+    monkeypatch.setattr(cb, "load_persona", lambda: {})
     built = build_provider_context(store, user_input="hi")
     system = built.messages[0].content
     assert "[存在状态（慢底色，仅作内在基调，不要直接复述给用户）]" in system

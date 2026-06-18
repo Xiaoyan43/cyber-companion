@@ -16,7 +16,7 @@ from backend.app.memory.database import (
     MoodStateRecord,
     RelationshipStateRecord,
 )
-from backend.app.memory.persona import OUTPUT_PROTOCOL, load_persona_system_prompt
+from backend.app.memory.persona import OUTPUT_PROTOCOL, load_persona, load_persona_system_prompt
 from backend.app.memory.retrieval import is_expired, rank_memories, tokenize
 from backend.app.memory.store import MemoryStore
 from backend.app.providers.cost import estimate_token_count
@@ -277,7 +277,7 @@ def build_provider_context(
         load_persona_system_prompt(),
         _format_time_block(),
         _format_mood_block(mood),
-        _format_existential_block(mood, now=now_nz),
+        *([_format_existential_block(mood, now=now_nz)] if not load_persona().get("disable_existential_block") else []),
         _format_relationship_block(relationship),
     ]
     impression_block = _format_impression_block(store)

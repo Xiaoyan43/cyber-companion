@@ -88,9 +88,10 @@ def test_load_rtc_character_manifest_falls_back_to_default(tmp_path: Path) -> No
     assert "请始终以 Boxi 的身份出演" in loaded
 
 
-def test_load_rtc_character_manifest_reads_example_file() -> None:
-    from backend.app.memory.persona import _config_dir
+def test_load_rtc_character_manifest_reads_example_file(tmp_path: Path) -> None:
+    import shutil
 
-    loaded = load_rtc_character_manifest(_config_dir())
+    shutil.copy("config/persona.example.json", tmp_path / "persona.example.json")
+    loaded = load_rtc_character_manifest(tmp_path)
     assert "回应规则" in loaded
     assert "括号()" in loaded
