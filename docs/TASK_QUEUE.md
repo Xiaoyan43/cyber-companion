@@ -1,23 +1,14 @@
-# TASK_QUEUE — 按优先级（2026-06-18）
+# TASK_QUEUE — 按优先级（2026-06-19）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
 > P0（VM-6）/ P1（VE-2）/ R9 / R10 / P2（VE-1）/ R12（反编造）/ 信笺 UI P0 + P1 + P1-B + P1-C / **P5-A-1** / **P6（全部子任务）** / **P7（Pipecat 前端入口）** 均已完成。
 > P5-A（Venice）已取消（溢价太高）。
-> **2026-06-18（第十六轮）纯讨论 session**：新增「灵魂层进化（Soul Layer）」节，沉淀六脑/time brain/活人感/审核/记忆消解/移动迁移/画面搁置等方向（均未拆解，要做时先 `/architect`）。
-> **2026-06-18（第十七轮）**：time brain P0（注入新西兰时间）+ P1（recent_event 相对时间前缀）完成，commit `16d1b74`，440 pytest passed。
-> **2026-06-18（第十八轮）**：world brain · 节日查表完成，commit `e138ef5`，445 pytest passed。
-> **2026-06-18（第十九轮 · 纯讨论）**：产出灵魂地基 **`docs/PERSONA_ONTOLOGY.md`**——人设转向「有准确自我认知的存在」
-> （B·带自知持有 + 不对称自知 + 戏谑暧昧/挽歌真诚 + 锋利放开带修复弧 + 框架诚实 + 危险性靠 provider）。
-> **这份文档是 mood 重画 / system prompt 重写 / provider 选型的共同锚。**
-> **2026-06-18（第二十轮）**：mood 重画 **P0（schema 地基）** 完成并 commit `97b202a`——`MoodStateRecord` + SQLite + `store.py` 新增
-> `gap_feeling`（间隙感）/ `box_relation`（盒子关系）/ `self_ease`（自处）三个慢底色字段 + ALTER TABLE migration。
-> **2026-06-18（第二十一轮）**：mood 重画 **P1（decay-on-read 函数）** 完成并 commit `14dea5c`——
-> `apply_slow_baseline_decay()` + `apply_interaction_slow_delta()` 新增到 `mood.py`，12 个单测全绿，457 pytest passed。
-> **2026-06-18（第二十二轮）**：mood 重画 **P2（context_builder 注入）** 完成并 commit `43e8e67`——
-> `_format_existential_block()` 三档 phrase 表注入 system prompt；新建 `docs/SOUL_PHENOMENOLOGY.md`（哲学层 spec：decay=无常/被抛性/本真性）；+4 单测，461 pytest passed。实机验证 PASS。
-> **2026-06-18（第二十三轮）**：provider 选型 A/B 完成，commit `6d77036`，463 pytest passed。结论：维持 DeepSeek，Claude 备用。
-> **当前重心：system prompt 重写**（§6.2）——四条纪律 + 存在论事实 + 成年自愿虚构框定。
-> 其余候选：信笺 UI P2（需用户答问）/ R11（搁置）/ P5-B（Fish Audio，需文档）。
+> **2026-06-19（第二十四轮）**：
+> - ~~**system prompt 重写**~~ ✅ 完成，commit `3533414`——存在论框架 + 四条纪律 + 成年虚构框定 + 格式纪律（去掉长度限制）。
+> - **OpenRouterProvider 新增** ✅ 完成，commit `85bc37a` + `496e995`——`allow_fallbacks=false`，`_extra_payload_params()` 钩子。
+> - **`disable_existential_block` 标志** ✅ 完成，commit `448c784`——临时人设可屏蔽存在论注入，测试隔离修复。
+> - **provider 选型（第二轮）进行中**：DeepSeek ❌ 文学天花板低；Claude ❌ 延迟高+干瘪；当前测 `google/gemini-2.5-flash-lite`（via OpenRouter，临时伴侣人设+disable_existential_block）。
+> - **当前重心：provider 选型收尾** → 测完 Gemini 后决定最终默认 provider，删 `config/persona.json`，恢复存在论人设。
 
 ---
 
