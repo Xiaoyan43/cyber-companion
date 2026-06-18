@@ -4,8 +4,9 @@
 > P0（VM-6）/ P1（VE-2）/ R9 / R10 / P2（VE-1）/ R12（反编造）/ 信笺 UI P0 + P1 + P1-B + P1-C / **P5-A-1** / **P6（全部子任务）** / **P7（Pipecat 前端入口）** 均已完成。
 > P5-A（Venice）已取消（溢价太高）。
 > **2026-06-18（第十六轮）纯讨论 session**：新增「灵魂层进化（Soul Layer）」节，沉淀六脑/time brain/活人感/审核/记忆消解/移动迁移/画面搁置等方向（均未拆解，要做时先 `/architect`）。
-> **当前重心已转向灵魂层。** 推荐下一最小任务 = **time brain 起步探针**（纯读代码核实"真实时间是否注入 prompt"+"events 有无时间戳"）。
-> 其余候选不变：信笺 UI P2（需用户答问）/ R11（搁置，下次失忆当场验）/ P5-B（Fish Audio，需文档）。
+> **2026-06-18（第十七轮）**：time brain P0（注入新西兰时间）+ P1（recent_event 相对时间前缀）完成，commit `16d1b74`，440 pytest passed。
+> **当前重心：灵魂层进化。** 推荐下一最小任务 = **world brain · 节日查表**（节日静态表 + `_format_time_block` 追加节日信息，近免费）。
+> 其余候选：信笺 UI P2（需用户答问）/ emotion 慢情绪 decay-on-read / R11（搁置，下次失忆当场验）/ P5-B（Fish Audio，需文档）。
 
 ---
 
@@ -163,24 +164,30 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - **relationship**（亲密/信任/依恋）：✅ 已有 kernel `relationship_state`；"依恋"可作新增维度
 - **emotion**（快/慢情绪）：⚠️ 半有 `mood_state`；缺"双时间尺度"（快=瞬时情绪，慢=多日基线漂移）
 - **memory**（事实/经历/偏好）：✅ 已有 SQLite events/profile + Viking
-- **time**（过去/现在/未来）：❌ **真缺口（核心）**，机制全是代码，几乎不用 LLM
-- **world**（新闻/天气/节日）：❌ 新增；天气=API，节日=查表，新闻=可选 LLM 筛选
+- **time**（过去/现在/未来）：⚠️ **部分完成** — P0+P1 已做（现在几点 + recent_event 相对时间）；未来事件表待做
+- **world**（新闻/天气/节日）：❌ 新增；天气=API，节日=查表（**推荐下一刀**），新闻=可选 LLM 筛选
 - **identity**（人格/价值观/成长）：⚠️ persona 静态已有；"成长"=高风险 character drift，**最后做**
 
-### time brain 实现要点（核心缺口）
-- "现在几点"：注入真实 `datetime` → prompt（几乎零成本，临场感断崖式提升）
-- "昨天发生了什么"：events 相对时间格式化进上下文（检索+格式化，非推理）
+### ~~time brain 起步探针~~ ✅ 已完成（第十七轮，纯读代码）
+- (a) 真实时间未注入 prompt → 已修复（P0）
+- (b) events 表（`memories` type='recent_event'）有 `created_at`/`updated_at` → 已利用（P1）
+
+### ~~time brain P0 · 注入当前时间~~ ✅ 已完成（commit `16d1b74`）
+- `_format_time_block()`：新西兰时间（`Pacific/Auckland`）注入 system prompt
+- 验收：问"现在几点/星期几"Boxi 能答对；440 pytest passed
+
+### ~~time brain P1 · recent_event 相对时间前缀~~ ✅ 已完成（commit `16d1b74`）
+- `_relative_time()` + `_format_memories_block(now=now_nz)`：recent_event 记忆自动标"昨天/3天前"等
+- 验收：memories_block 中 recent_event 带前缀，stable_profile 不变；440 pytest passed
+
+### time brain 后续（待做）
 - "明天有安排"：新增未来事件表，接进现有 `proactive_*`/`longing`
 - "时间在流逝"：用 **decay-on-read（惰性求值）** 实现 90%，不需常驻时钟
 
 ### 优先级（性价比排序）
-- **第一档**（近免费、收益最大）：time-现在注入 / world-节日查表 / emotion-慢情绪+decay-on-read
+- **第一档**（近免费、收益最大）：~~time-现在注入~~ ✅ / **world-节日查表（推荐下一刀）** / emotion-慢情绪+decay-on-read
 - **第二档**（中等）：world-天气API / time-未来事件表 / memory 分类细化
 - **第三档**（贵/险/最后）：world-新闻（后台LLM筛选）/ identity-成长（drift风险）
-
-### 起步探针（纯读代码、零改动，做之前先核实）
-- (a) 现在有没有把真实时间注入 prompt？
-- (b) events 表有没有时间戳？
 
 ### 活人感 / 审核（Provider 选型约束）
 - **目标**：暧昧/冲动/偏激等"稍偏激"互动不被拦截 → 提升活人感（伴侣/恋人感）
