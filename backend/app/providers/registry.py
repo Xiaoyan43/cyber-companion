@@ -5,6 +5,7 @@ from backend.app.providers.deepseek import DeepSeekProvider
 from backend.app.providers.local import LocalModelProvider
 from backend.app.providers.mock import MockProvider
 from backend.app.providers.openai import OpenAIProvider
+from backend.app.providers.openrouter import OpenRouterProvider
 from backend.app.providers.venice import VeniceProvider
 
 
@@ -47,6 +48,14 @@ def build_provider(entry: ProviderConfigEntry) -> ChatProvider:
             model=entry.model,
             base_url=entry.base_url or "https://api.anthropic.com/v1",
             api_key_env=entry.api_key_env or "ANTHROPIC_API_KEY",
+            enabled=entry.enabled,
+        )
+
+    if entry.name == "openrouter":
+        return OpenRouterProvider(
+            model=entry.model,
+            base_url=entry.base_url or "https://openrouter.ai/api/v1",
+            api_key_env=entry.api_key_env or "OPENROUTER_API_KEY",
             enabled=entry.enabled,
         )
 

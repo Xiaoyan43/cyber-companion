@@ -270,6 +270,76 @@ def test_claude_missing_key_raises_error(monkeypatch: pytest.MonkeyPatch) -> Non
         )
 
 
+def test_openrouter_complete_mocked_http(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.app.providers.openrouter import OpenRouterProvider
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-openrouter-key")
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "choices": [{"message": {"content": "（偏头看你）就那样呗。"}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 8, "total_tokens": 18},
+            }
+
+        @property
+        def text(self) -> str:
+            return ""
+
+        @property
+        def reason_phrase(self) -> str:
+            return "OK"
+
+    class FakeClient:
+        def post(self, url: str, *, headers: dict[str, str], json: dict[str, object]) -> FakeResponse:
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            return FakeResponse()
+
+    provider = OpenRouterProvider(
+        model="cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+        base_url="https://openrouter.ai/api/v1",
+        api_key_env="OPENROUTER_API_KEY",
+        http_client=FakeClient(),  # type: ignore[arg-type]
+    )
+    result = provider.complete(
+        ChatCompletionRequest(
+            messages=[ChatMessage(role="user", content="你在我不在的时候，是什么感觉")],
+            max_output_tokens=128,
+        ),
+    )
+
+    assert captured["url"] == "https://openrouter.ai/api/v1/chat/completions"
+    assert captured["headers"]["Authorization"] == "Bearer test-openrouter-key"
+    assert captured["json"]["model"] == "cognitivecomputations/dolphin-mistral-24b-venice-edition:free"
+    assert result.provider == "openrouter"
+    assert result.content == "（偏头看你）就那样呗。"
+    assert result.usage.total_tokens == 18
+
+
+def test_openrouter_missing_key_raises_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.app.providers.openrouter import OpenRouterProvider
+    from backend.app.providers.exceptions import ProviderNotConfiguredError
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    provider = OpenRouterProvider(
+        model="cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+        api_key_env="OPENROUTER_API_KEY",
+    )
+
+    with pytest.raises(ProviderNotConfiguredError, match="OPENROUTER_API_KEY"):
+        provider.complete(
+            ChatCompletionRequest(
+                messages=[ChatMessage(role="user", content="test")],
+                max_output_tokens=64,
+            )
+        )
+
+
 def test_chat_complete_unknown_provider_returns_error(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
