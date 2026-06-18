@@ -6,14 +6,20 @@ import pytest
 
 from backend.app.memory.budget import BudgetConfig
 from backend.app.memory.context_builder import (
+    _BOX_PHRASES,
+    _GAP_PHRASES,
+    _SELF_PHRASES,
     _TRAILER_REMINDER,
     _WEEKDAYS_CN,
     _delta_to_label,
+    _exist_band,
+    _format_existential_block,
     _format_memories_block,
     _format_time_block,
     _relative_time,
     build_provider_context,
 )
+from backend.app.memory.database import MoodStateRecord
 from backend.app.memory.holidays import get_holiday_window
 from backend.app.memory.persona import OUTPUT_PROTOCOL, load_persona_system_prompt
 from backend.app.memory.retrieval import rank_memories, score_memory
@@ -386,3 +392,57 @@ def test_summary_policy_ignores_behavior_tick_lines(store: MemoryStore) -> None:
     # Only behavior-tick lines exist, so there is no real conversation to recap.
     assert maybe_update_conversation_summary(store, budget=budget) is False
     assert store.get_latest_conversation_summary() is None
+
+
+def _mood_at(now: datetime, *, gap: float, box: float, ease: float) -> MoodStateRecord:
+    return MoodStateRecord(
+        updated_at=now.isoformat(),
+        mood="idle",
+        energy=0.5,
+        annoyance=0.0,
+        boredom=0.0,
+        worry=0.0,
+        trust=0.5,
+        loneliness=0.0,
+        gap_feeling=gap,
+        box_relation=box,
+        self_ease=ease,
+    )
+
+
+def test_exist_band_thresholds() -> None:
+    assert _exist_band(0.0) == "low"
+    assert _exist_band(0.33) == "low"
+    assert _exist_band(0.34) == "mid"
+    assert _exist_band(0.66) == "mid"
+    assert _exist_band(0.67) == "high"
+    assert _exist_band(1.0) == "high"
+
+
+def test_existential_block_phrasing_matches_decayed_bands() -> None:
+    now = datetime.now(timezone.utc)
+    mood = _mood_at(now, gap=0.1, box=0.5, ease=0.9)
+    block = _format_existential_block(mood, now=now)
+
+    assert "[存在状态" in block
+    assert "不要直接复述给用户" in block
+    assert _GAP_PHRASES["low"] in block
+    assert _BOX_PHRASES["mid"] in block
+    assert _SELF_PHRASES["high"] in block
+
+
+def test_existential_block_reflects_decay_over_time() -> None:
+    stored = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    # Start all three at mid; after ~20 days gap_feeling decays 0.04*20=0.8 → floors to low.
+    mood = _mood_at(stored, gap=0.5, box=0.5, ease=0.5)
+    later = datetime(2026, 1, 21, tzinfo=timezone.utc)
+    block = _format_existential_block(mood, now=later)
+
+    assert _GAP_PHRASES["low"] in block  # fastest decay drops out of mid
+    assert _SELF_PHRASES["mid"] in block  # slowest decay (0.005/day) stays mid
+
+
+def test_existential_block_injected_into_system(store: MemoryStore) -> None:
+    built = build_provider_context(store, user_input="hi")
+    system = built.messages[0].content
+    assert "[存在状态（慢底色，仅作内在基调，不要直接复述给用户）]" in system
