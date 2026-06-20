@@ -61,6 +61,11 @@ const showAvatarDebug =
   import.meta.env.DEV || import.meta.env.VITE_SHOW_AVATAR_DEBUG === "1";
 const CHAT_VIEW_CLEARED_KEY = "cyber-companion-chat-view-cleared";
 
+const _LEADING_FISH_TAGS_RE = /^(\[[^\]]+\]\s*)+/;
+function stripLeadingFishTags(text: string): string {
+  return text.replace(_LEADING_FISH_TAGS_RE, "");
+}
+
 function completionToMessageMeta(completion: ChatCompleteResponse): MessageMeta {
   return {
     provider: completion.provider,
