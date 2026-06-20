@@ -6,7 +6,7 @@ import {
   synthesizeSpeech,
 } from "../api/tts";
 import { primeAudioPlayback } from "./audioUnlock";
-import { textChunksForSpeech, textForSpeech } from "./speechText";
+import { prepareTextForSpeech } from "./speechText";
 
 const MUTE_STORAGE_KEY = "cyber-companion-tts-muted";
 
@@ -135,7 +135,6 @@ export function useTextToSpeech({
   const ttsInFlightRef = useRef(false);
   const streamAbortRef = useRef<AbortController | null>(null);
   const playbackSessionRef = useRef(0);
-  const maxSpeechCharsRef = useRef(120);
   const onSpeakingStartRef = useRef(onSpeakingStart);
   const onSpeakingEndRef = useRef(onSpeakingEnd);
   const onErrorRef = useRef(onError);
@@ -181,7 +180,6 @@ export function useTextToSpeech({
         setEnabled(status.enabled);
         setProviderName(status.default_provider);
         setForceMock(status.force_mock);
-        maxSpeechCharsRef.current = status.max_speech_chars;
       } catch {
         if (!active) {
           return;
@@ -337,9 +335,8 @@ export function useTextToSpeech({
 
   const speakReply = useCallback(
     async ({ text, decision, avatarState, userMessage }: SpeakReplyInput) => {
-      const maxChars = maxSpeechCharsRef.current;
-      const chunks = textChunksForSpeech(text, maxChars);
-      if (!enabledRef.current || mutedRef.current || chunks.length === 0) {
+      const preparedText = prepareTextForSpeech(text);
+      if (!enabledRef.current || mutedRef.current || !preparedText) {
         return false;
       }
 
@@ -356,7 +353,7 @@ export function useTextToSpeech({
       try {
         try {
           const evaluation = await evaluateTtsSpeech({
-            text: chunks[0],
+            text: preparedText,
             decision,
             avatarState,
           });
@@ -378,26 +375,17 @@ export function useTextToSpeech({
         speakingRef.current = true;
         setSpeaking(true);
 
-        let anyPlayed = false;
-        for (const chunk of chunks) {
-          if (
-            !enabledRef.current ||
-            mutedRef.current ||
-            sessionId !== playbackSessionRef.current
-          ) {
-            break;
-          }
-
-          const played = await playSpeechChunk(
-            chunk,
-            decision,
-            avatarState,
-            sessionId,
-            abortController,
-            userMessage,
-          );
-          anyPlayed = anyPlayed || played;
-        }
+        // One streamed request for the whole reply — Fish Audio's HTTP streaming
+        // endpoint chunks audio internally, so there's no need to pre-split text
+        // into separate sequential requests (see docs/FISH_AUDIO_REFERENCE.md §9).
+        const played = await playSpeechChunk(
+          preparedText,
+          decision,
+          avatarState,
+          sessionId,
+          abortController,
+          userMessage,
+        );
 
         if (sessionId === playbackSessionRef.current) {
           speakingRef.current = false;
@@ -405,7 +393,7 @@ export function useTextToSpeech({
           onSpeakingEndRef.current?.();
         }
 
-        return anyPlayed;
+        return played;
       } catch (error) {
         const message = error instanceof Error ? error.message : "TTS playback failed.";
         setLastError(message);
