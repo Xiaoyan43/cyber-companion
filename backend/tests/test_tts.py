@@ -938,17 +938,30 @@ def test_fish_audio_synthesize_stream_yields_chunks(monkeypatch: pytest.MonkeyPa
     assert "prosody" not in captured["json"]   # speech_rate=0 → no prosody field
 
 
-def test_fish_audio_emotion_prefix_from_context_texts(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fish_audio_llm_tag_passes_through(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FISH_AUDIO_API_KEY", "test-key")
     captured: dict = {}
     fake_client = _fake_fish_stream_client([b"audio"], captured)
     provider = FishAudioTTSProvider(http_client=fake_client)  # type: ignore[arg-type]
 
     list(provider.synthesize_stream(
-        SynthesisRequest(text="随便吧", context_texts=["带着叹息的语气"])
+        SynthesisRequest(text="[sighing] 随便吧")
     ))
 
-    assert captured["json"]["text"].startswith("[带着叹息的语气]")
+    assert captured["json"]["text"] == "[sighing] 随便吧"
+
+
+def test_fish_audio_text_without_tag_passes_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FISH_AUDIO_API_KEY", "test-key")
+    captured: dict = {}
+    fake_client = _fake_fish_stream_client([b"audio"], captured)
+    provider = FishAudioTTSProvider(http_client=fake_client)  # type: ignore[arg-type]
+
+    list(provider.synthesize_stream(
+        SynthesisRequest(text="随便吧")
+    ))
+
+    assert captured["json"]["text"] == "随便吧"
 
 
 def test_fish_audio_speech_rate_mapped_to_prosody(monkeypatch: pytest.MonkeyPatch) -> None:

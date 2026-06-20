@@ -26,7 +26,7 @@ from backend.app.cors import load_cors_origins
 from backend.app.files.config import load_permissions_config
 from backend.app.files.gateway import get_file_gateway, reset_file_gateway
 from backend.app.memory.budget import load_budget_config
-from backend.app.memory.context_builder import build_provider_context, extract_latest_user_input
+from backend.app.memory.context_builder import append_text_chat_tag_instruction, build_provider_context, extract_latest_user_input
 from backend.app.memory.chat_persistence import (
     persist_chat_turn,
     persist_local_behavior_line,
@@ -768,7 +768,7 @@ def chat_complete(
                 behavior=decision,
             )
             completion_request = ChatCompletionRequest(
-                messages=built.messages,
+                messages=append_text_chat_tag_instruction(built.messages),
                 max_output_tokens=budget.max_output_tokens_per_turn,
             )
 
@@ -1034,7 +1034,7 @@ def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
                     behavior=decision,
                 )
                 completion_request = ChatCompletionRequest(
-                    messages=built.messages,
+                    messages=append_text_chat_tag_instruction(built.messages),
                     max_output_tokens=budget.max_output_tokens_per_turn,
                 )
 

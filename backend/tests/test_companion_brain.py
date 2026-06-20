@@ -22,10 +22,11 @@ def test_append_voice_mode_instruction_adds_system_message() -> None:
     assert augmented[-1].content == VOICE_MODE_INSTRUCTION
 
 
-def test_voice_mode_instruction_requests_voice_directive() -> None:
-    assert "[#" in VOICE_MODE_INSTRUCTION
-    assert "语气" in VOICE_MODE_INSTRUCTION
+def test_voice_mode_instruction_uses_fish_audio_tags() -> None:
+    assert "[sighing]" in VOICE_MODE_INSTRUCTION
+    assert "[gasping]" in VOICE_MODE_INSTRUCTION
     assert "最前" in VOICE_MODE_INSTRUCTION
+    assert "BOXI_SIGNALS" in VOICE_MODE_INSTRUCTION
 
 
 def test_stream_turn_local_reply_without_llm() -> None:

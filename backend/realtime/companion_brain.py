@@ -32,11 +32,22 @@ from backend.app.providers.types import ChatCompletionRequest, ChatCompletionRes
 from backend.app.schemas import ChatMessageSchema
 
 VOICE_MODE_INSTRUCTION = (
-    "语音对话模式：用一句话、口语化、简短回答（必要时最多两句）。"
-    "回复正文最前加一条语气指令，格式：[#语气描述]，10字以内，根据当前情绪选词。"
-    "示例：[#用低沉带倦意的语气]、[#用嗤笑带无奈的语气]、[#用轻快带笑意的语气]。"
-    "只加一条，放在最前，不在正文中重复。"
-    "正文之后仍按协议输出 <<<BOXI_SIGNALS>>> 行。"
+    "语音对话模式：口语化、自然。默认简短（1-3 句），但内容需要展开时（讲故事、深聊、安慰、解释）"
+    "就展开，跟着内容走，不要为了简短砍掉该说的话，也不要为了显得有内容硬拉长。\n"
+    "情绪标签从以下列表选，标签必须用英文写。最多叠加 3 个标签表达复合情绪：\n"
+    "情绪：[happy] [sad] [angry] [excited] [calm] [disdainful] [sarcastic] [nostalgic] "
+    "[compassionate] [determined] [anxious] [lonely] [worried]\n"
+    "音调：[in a hurry tone] [shouting] [whispering] [soft tone] [screaming]\n"
+    "音效：[laughing] [sobbing] [sighing] [gasping] [yawning]\n"
+    "硬性要求：第一组情绪标签放在回复最前；音调和音效标签不挑位置，要根据内容放在句子中间"
+    "合适的地方（紧跟在相关的词后面），不能只在开头放一次就不管正文。如果回复超过 2 句话，"
+    "正文中（不是开头）必须出现至少一次新标签——情绪转折处加新情绪标签，或者句中加音调/音效"
+    "标签都可以。这是硬性要求，不是可选项。\n"
+    "示例（正确）：你又这样[sighing]，真是拿你没办法。进来吧[laughing]，挤一挤还是能装下你的。\n"
+    "示例（错误，标签全堆开头、正文没有任何标签——不要这样做）：[disdainful][sighing] "
+    "你又这样，真是拿你没办法。进来吧，挤一挤还是能装下你的。\n"
+    "标签本身不朗读，不在正文重复，不解释。\n"
+    "正文之后按协议输出 <<<BOXI_SIGNALS>>> 行。"
 )
 
 BrainStreamEvent = (
