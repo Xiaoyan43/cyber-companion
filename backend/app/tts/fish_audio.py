@@ -14,6 +14,9 @@ FISH_AUDIO_TTS_URL = "https://api.fish.audio/v1/tts"
 DEFAULT_VOICE_ID = "fbe02f8306fc4d3d915e9871722a39d5"
 DEFAULT_MODEL = "s2-pro"
 DEFAULT_FORMAT = "opus"
+# Nudged above the API default (0.7) for more expressive delivery — listening-test value,
+# revisit if it trades too much stability for variety.
+DEFAULT_TEMPERATURE = 0.85
 
 ENV_API_KEY = "FISH_AUDIO_API_KEY"
 ENV_VOICE_ID = "FISH_AUDIO_VOICE_ID"
@@ -58,6 +61,7 @@ class FishAudioTTSProvider(TextToSpeechProvider):
         voice_id: str | None = None,
         audio_format: str = DEFAULT_FORMAT,
         model: str = DEFAULT_MODEL,
+        temperature: float = DEFAULT_TEMPERATURE,
         timeout_s: float = 30.0,
         http_client: httpx.Client | None = None,
     ) -> None:
@@ -66,6 +70,7 @@ class FishAudioTTSProvider(TextToSpeechProvider):
         self._voice_id = voice_id
         self._audio_format = audio_format
         self._model = model
+        self._temperature = temperature
         self._timeout_s = timeout_s
         self._http_client = http_client
 
@@ -120,18 +125,12 @@ class FishAudioTTSProvider(TextToSpeechProvider):
         if not text:
             raise TTSError("Text payload is empty.", provider=self.name, status_code=400)
 
-        # Prepend emotion bracket tag if context_texts provides a phrase.
-        # Fish Audio S2-Pro interprets [natural language description] as emotion cues.
-        if request.context_texts:
-            phrase = request.context_texts[0].strip()
-            if phrase:
-                text = f"[{phrase}] {text}"
-
         payload: dict[str, Any] = {
             "text": text,
             "reference_id": self._resolved_voice_id(),
             "format": self._audio_format,
             "latency": "balanced",
+            "temperature": self._temperature,
         }
         if request.speech_rate != 0:
             payload["prosody"] = {"speed": speech_rate_to_speed(request.speech_rate)}
