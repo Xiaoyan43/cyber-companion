@@ -346,7 +346,7 @@ def test_tts_config_defaults_to_doubao_without_force_mock(
     monkeypatch.delenv("CYBER_COMPANION_TTS_MODE", raising=False)
 
     config = load_tts_config(repo_root / "config")
-    assert config.default_provider == "doubao"
+    assert config.default_provider == "fish_audio"
     assert config.force_mock is False
 
 
@@ -369,6 +369,22 @@ def _set_doubao_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DOUBAO_TTS_VOICE_TYPE", CANCAN_BIGMODEL_SPEAKER)
     monkeypatch.setenv("DOUBAO_TTS_RESOURCE_ID", "seed-tts-2.0")
     monkeypatch.delenv("DOUBAO_TTS_ACCESS_TOKEN", raising=False)
+
+
+def _write_doubao_tts_config(tmp_path: Path) -> None:
+    """Write minimal tts.json + budget.json with doubao as default_provider for isolated tests."""
+    cfg = {
+        "enabled": True,
+        "default_provider": "doubao",
+        "max_speech_chars": 120,
+        "speak_decisions": ["proactive", "interrupt", "refuse", "reply"],
+        "providers": {
+            "mock": {"enabled": True, "model": "mock-tts"},
+            "doubao": {"enabled": True, "model": CANCAN_BIGMODEL_SPEAKER, "cloud": True},
+        },
+    }
+    (tmp_path / "tts.json").write_text(json.dumps(cfg))
+    (tmp_path / "budget.json").write_text(json.dumps({"allow_cloud_tts": True}))
 
 
 def test_registry_builds_doubao_provider() -> None:
@@ -669,10 +685,9 @@ def test_tts_synthesize_neutral_kernel_omits_emotion_on_doubao(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(repo_root / "config"))
+    _write_doubao_tts_config(tmp_path)
+    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(tmp_path))
     monkeypatch.setenv("CYBER_COMPANION_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("CYBER_COMPANION_TTS_MODE", "doubao")
     _set_doubao_env(monkeypatch)
     reset_tts_router()
 
@@ -706,10 +721,9 @@ def test_tts_stream_neutral_kernel_omits_emotion_on_doubao(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(repo_root / "config"))
+    _write_doubao_tts_config(tmp_path)
+    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(tmp_path))
     monkeypatch.setenv("CYBER_COMPANION_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("CYBER_COMPANION_TTS_MODE", "doubao")
     _set_doubao_env(monkeypatch)
     reset_tts_router()
 
@@ -743,10 +757,9 @@ def test_tts_synthesize_lonely_kernel_includes_emotion_on_doubao(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(repo_root / "config"))
+    _write_doubao_tts_config(tmp_path)
+    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(tmp_path))
     monkeypatch.setenv("CYBER_COMPANION_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("CYBER_COMPANION_TTS_MODE", "doubao")
     _set_doubao_env(monkeypatch)
     reset_tts_router()
     reset_memory_store()
@@ -782,10 +795,9 @@ def test_tts_stream_lonely_kernel_includes_emotion_on_doubao(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(repo_root / "config"))
+    _write_doubao_tts_config(tmp_path)
+    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(tmp_path))
     monkeypatch.setenv("CYBER_COMPANION_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("CYBER_COMPANION_TTS_MODE", "doubao")
     _set_doubao_env(monkeypatch)
     reset_tts_router()
     reset_memory_store()
@@ -948,6 +960,119 @@ def test_fish_audio_speech_rate_mapped_to_prosody(monkeypatch: pytest.MonkeyPatc
     list(provider.synthesize_stream(SynthesisRequest(text="快点说", speech_rate=20)))
 
     assert captured["json"]["prosody"] == {"speed": 1.5}
+
+
+def _write_fish_audio_tts_config(tmp_path: Path) -> None:
+    """Write minimal tts.json with fish_audio as default_provider for isolated tests."""
+    cfg = {
+        "enabled": True,
+        "default_provider": "fish_audio",
+        "max_speech_chars": 120,
+        "speak_decisions": ["proactive", "interrupt", "refuse", "reply"],
+        "providers": {
+            "mock": {"enabled": True, "model": "mock-tts"},
+            "fish_audio": {
+                "enabled": True,
+                "model": "s2-pro",
+                "voice": "fbe02f8306fc4d3d915e9871722a39d5",
+                "api_key_env": "FISH_AUDIO_API_KEY",
+                "cloud": True,
+            },
+        },
+    }
+    (tmp_path / "tts.json").write_text(json.dumps(cfg))
+    (tmp_path / "budget.json").write_text(json.dumps({"allow_cloud_tts": True}))
+
+
+def test_tts_stream_mood_speech_rate_reaches_fish_audio(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: speech_rate must flow to non-doubao providers too (was gated to
+    doubao-only, leaving fish_audio's prosody.speed permanently at default)."""
+    _write_fish_audio_tts_config(tmp_path)
+    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("CYBER_COMPANION_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("FISH_AUDIO_API_KEY", "test-key")
+    reset_tts_router()
+    reset_memory_store()
+    get_memory_store().update_mood_state(loneliness=0.9)
+
+    captured: dict = {}
+    fake_client = _fake_fish_stream_client([b"audio"], captured)
+    monkeypatch.setattr(
+        "backend.app.tts.fish_audio.get_shared_http_client", lambda: fake_client
+    )
+
+    client = TestClient(app)
+    response = client.get(
+        "/tts/stream",
+        params={"text": "短句测试。", "decision": "reply", "force": True},
+    )
+
+    assert response.status_code == 200
+    assert captured["json"]["text"] == "短句测试。"
+    assert captured["json"]["prosody"] == {"speed": 1.48}
+
+
+def test_tts_stream_tone_marker_tag_suppresses_speech_rate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: an LLM-authored pacing tag (e.g. [whispering]) should drive
+    delivery instead of being fought by the mood-driven numeric speech_rate."""
+    _write_fish_audio_tts_config(tmp_path)
+    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("CYBER_COMPANION_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("FISH_AUDIO_API_KEY", "test-key")
+    reset_tts_router()
+    reset_memory_store()
+    get_memory_store().update_mood_state(loneliness=0.9)
+
+    captured: dict = {}
+    fake_client = _fake_fish_stream_client([b"audio"], captured)
+    monkeypatch.setattr(
+        "backend.app.tts.fish_audio.get_shared_http_client", lambda: fake_client
+    )
+
+    client = TestClient(app)
+    response = client.get(
+        "/tts/stream",
+        params={"text": "[whispering] 别出声。", "decision": "reply", "force": True},
+    )
+
+    assert response.status_code == 200
+    assert captured["json"]["text"] == "[whispering] 别出声。"
+    assert "prosody" not in captured["json"]
+
+
+def test_tts_synthesize_tone_marker_tag_suppresses_speech_rate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_fish_audio_tts_config(tmp_path)
+    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("CYBER_COMPANION_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("FISH_AUDIO_API_KEY", "test-key")
+    reset_tts_router()
+    reset_memory_store()
+    get_memory_store().update_mood_state(loneliness=0.9)
+
+    captured: dict = {}
+    fake_client = _fake_fish_stream_client([b"audio"], captured)
+    monkeypatch.setattr(
+        "backend.app.tts.fish_audio.get_shared_http_client", lambda: fake_client
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/tts/synthesize",
+        json={"text": "[in a hurry tone] 快走快走！", "decision": "reply", "force": True},
+    )
+
+    assert response.status_code == 200
+    assert captured["json"]["text"] == "[in a hurry tone] 快走快走！"
+    assert "prosody" not in captured["json"]
 
 
 def test_fish_audio_auth_failure_raises_tts_error(monkeypatch: pytest.MonkeyPatch) -> None:

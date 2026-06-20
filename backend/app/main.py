@@ -15,6 +15,7 @@ from backend.app.behavior.proactive_opener import resolve_proactive_opener
 from backend.app.behavior.kernel import apply_signals_to_kernel
 from backend.app.behavior.parser import SignalStreamFilter, parse_structured_assistant_response
 from backend.app.behavior.tone import (
+    contains_tone_marker_tag,
     performative_active_from_metadata,
     project_tone,
     register_intensity,
@@ -447,29 +448,36 @@ def tts_evaluate(request: TTSEvaluateRequest) -> TTSEvaluateResponse:
 def tts_synthesize(request: TTSSynthesizeRequest) -> TTSSynthesizeResponse:
     router = get_tts_router()
     context_texts: list[str] | None = None
-    speech_rate = 0
 
     try:
         provider_name = router.resolve_provider_name(request.provider)
     except Exception:
         provider_name = None
 
+    store = get_memory_store()
+    mood = store.get_mood_state()
+    relationship = store.get_relationship_state()
+    projection = project_tone(
+        mood,
+        relationship,
+        performative_active=performative_active_from_metadata(mood.metadata),
+    )
+    intensity = register_intensity(mood, relationship, projection)
+    # speech_rate is provider-agnostic (doubao + fish_audio both read it); only
+    # the doubao-specific context_texts directive phrase stays gated below.
+    emotion_context_texts, speech_rate = tts_emotion_directive(
+        projection,
+        intensity=intensity,
+    )
+    if contains_tone_marker_tag(request.text):
+        # Boxi already wrote an explicit pacing/volume tag — let it drive
+        # delivery instead of fighting it with the mood-driven numeric rate.
+        speech_rate = 0
+
     if provider_name == "doubao":
         doubao = router.providers.get("doubao")
         if doubao is not None and doubao.is_configured():
-            store = get_memory_store()
-            mood = store.get_mood_state()
-            relationship = store.get_relationship_state()
-            projection = project_tone(
-                mood,
-                relationship,
-                performative_active=performative_active_from_metadata(mood.metadata),
-            )
-            intensity = register_intensity(mood, relationship, projection)
-            context_texts, speech_rate = tts_emotion_directive(
-                projection,
-                intensity=intensity,
-            )
+            context_texts = emotion_context_texts
 
     try:
         policy, result = router.synthesize(
@@ -525,12 +533,31 @@ def tts_stream(
 ) -> StreamingResponse | Response:
     router = get_tts_router()
     context_texts: list[str] | None = None
-    speech_rate = 0
 
     try:
         provider_name = router.resolve_provider_name(None)
     except Exception:
         provider_name = None
+
+    store = get_memory_store()
+    mood = store.get_mood_state()
+    relationship = store.get_relationship_state()
+    projection = project_tone(
+        mood,
+        relationship,
+        performative_active=performative_active_from_metadata(mood.metadata),
+    )
+    intensity = register_intensity(mood, relationship, projection)
+    # speech_rate is provider-agnostic (doubao + fish_audio both read it); only
+    # the doubao-specific context_texts directive phrase stays gated below.
+    emotion_context_texts, speech_rate = tts_emotion_directive(
+        projection,
+        intensity=intensity,
+    )
+    if contains_tone_marker_tag(text):
+        # Boxi already wrote an explicit pacing/volume tag — let it drive
+        # delivery instead of fighting it with the mood-driven numeric rate.
+        speech_rate = 0
 
     if provider_name == "doubao":
         doubao = router.providers.get("doubao")
@@ -538,19 +565,7 @@ def tts_stream(
             if user_message and user_message.strip():
                 context_texts = [user_message.strip()]
             else:
-                store = get_memory_store()
-                mood = store.get_mood_state()
-                relationship = store.get_relationship_state()
-                projection = project_tone(
-                    mood,
-                    relationship,
-                    performative_active=performative_active_from_metadata(mood.metadata),
-                )
-                intensity = register_intensity(mood, relationship, projection)
-                context_texts, speech_rate = tts_emotion_directive(
-                    projection,
-                    intensity=intensity,
-                )
+                context_texts = emotion_context_texts
 
     try:
         policy, chunks = router.stream_synthesize(

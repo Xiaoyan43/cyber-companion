@@ -65,6 +65,23 @@ _EMOTION_INTENSE_BY_REGISTER: dict[ToneRegister, str] = {
 
 STRONG_THRESHOLD = 0.75
 
+# Official Fish Audio S2 "Tone Marker" tags — these are the ones that explicitly
+# control delivery pace/volume. When the LLM has already written one of these
+# into the reply, the mood-driven numeric speech_rate fallback should stay out
+# of its way rather than fight the content-authored pacing.
+TONE_MARKER_TAGS: tuple[str, ...] = (
+    "[in a hurry tone]",
+    "[shouting]",
+    "[screaming]",
+    "[whispering]",
+    "[soft tone]",
+)
+
+
+def contains_tone_marker_tag(text: str) -> bool:
+    """True if text already carries an LLM-authored pacing/volume tag."""
+    return any(tag in text for tag in TONE_MARKER_TAGS)
+
 
 @dataclass(frozen=True)
 class ToneProjection:
