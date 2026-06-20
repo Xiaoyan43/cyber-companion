@@ -131,7 +131,7 @@ def test_apply_expression_tags_passes_mood_and_text_into_prompt() -> None:
     [
         "不改变原文一个字",
         "逐句重新判断",
-        "[sigh]",
+        "[sighing]",
         "[whispering]",
         "音效/生理反应类",
     ],
@@ -143,3 +143,10 @@ def test_tagger_instruction_contains_core_rules(expected_phrase: str) -> None:
 def test_tagger_instruction_has_no_hard_tag_count_quota() -> None:
     assert "至少一次" not in TAGGER_INSTRUCTION_TEMPLATE
     assert "硬性要求" not in TAGGER_INSTRUCTION_TEMPLATE
+
+
+def test_tagger_instruction_forbids_freeform_invention_and_intensity_modifiers() -> None:
+    assert "只能从下面词表中逐字选用标签" in TAGGER_INSTRUCTION_TEMPLATE
+    assert "不允许自创新词" in TAGGER_INSTRUCTION_TEMPLATE
+    assert "不允许在词后加程度修饰" in TAGGER_INSTRUCTION_TEMPLATE
+    assert "可在语义合理范围内自行扩展" not in TAGGER_INSTRUCTION_TEMPLATE

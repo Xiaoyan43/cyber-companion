@@ -945,7 +945,7 @@ def test_fish_audio_synthesize_stream_yields_chunks(monkeypatch: pytest.MonkeyPa
     assert captured["headers"]["Authorization"] == "Bearer test-key"
     assert captured["json"]["format"] == "opus"
     assert captured["json"]["latency"] == "balanced"
-    assert "prosody" not in captured["json"]   # speech_rate=0 → no prosody field
+    assert captured["json"]["prosody"] == {"normalize_loudness": False}  # speech_rate=0 → no speed key
 
 
 def test_fish_audio_llm_tag_passes_through(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -982,7 +982,7 @@ def test_fish_audio_speech_rate_mapped_to_prosody(monkeypatch: pytest.MonkeyPatc
 
     list(provider.synthesize_stream(SynthesisRequest(text="快点说", speech_rate=20)))
 
-    assert captured["json"]["prosody"] == {"speed": 1.5}
+    assert captured["json"]["prosody"] == {"normalize_loudness": False, "speed": 1.5}
 
 
 def _write_fish_audio_tts_config(tmp_path: Path) -> None:
@@ -1035,7 +1035,7 @@ def test_tts_stream_mood_speech_rate_reaches_fish_audio(
 
     assert response.status_code == 200
     assert captured["json"]["text"] == "短句测试。"
-    assert captured["json"]["prosody"] == {"speed": 1.48}
+    assert captured["json"]["prosody"] == {"normalize_loudness": False, "speed": 1.48}
 
 
 def test_tts_stream_reports_real_fish_audio_mime_type(
@@ -1094,7 +1094,7 @@ def test_tts_stream_tone_marker_tag_suppresses_speech_rate(
 
     assert response.status_code == 200
     assert captured["json"]["text"] == "[whispering] 别出声。"
-    assert "prosody" not in captured["json"]
+    assert captured["json"]["prosody"] == {"normalize_loudness": False}
 
 
 def test_tts_synthesize_tone_marker_tag_suppresses_speech_rate(
@@ -1123,7 +1123,7 @@ def test_tts_synthesize_tone_marker_tag_suppresses_speech_rate(
 
     assert response.status_code == 200
     assert captured["json"]["text"] == "[in a hurry tone] 快走快走！"
-    assert "prosody" not in captured["json"]
+    assert captured["json"]["prosody"] == {"normalize_loudness": False}
 
 
 def test_fish_audio_auth_failure_raises_tts_error(monkeypatch: pytest.MonkeyPatch) -> None:

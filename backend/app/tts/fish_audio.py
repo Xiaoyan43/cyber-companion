@@ -135,8 +135,12 @@ class FishAudioTTSProvider(TextToSpeechProvider):
             "latency": "balanced",
             "temperature": self._temperature,
         }
+        # normalize_loudness defaults to true server-side, which flattens the volume
+        # swing that [whispering]/[shouting]-style tags rely on to be audible.
+        prosody: dict[str, Any] = {"normalize_loudness": False}
         if request.speech_rate != 0:
-            payload["prosody"] = {"speed": speech_rate_to_speed(request.speech_rate)}
+            prosody["speed"] = speech_rate_to_speed(request.speech_rate)
+        payload["prosody"] = prosody
 
         headers = {
             "Authorization": f"Bearer {api_key}",
