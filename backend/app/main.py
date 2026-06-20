@@ -26,7 +26,7 @@ from backend.app.cors import load_cors_origins
 from backend.app.files.config import load_permissions_config
 from backend.app.files.gateway import get_file_gateway, reset_file_gateway
 from backend.app.memory.budget import load_budget_config
-from backend.app.memory.context_builder import append_text_chat_tag_instruction, build_provider_context, extract_latest_user_input
+from backend.app.memory.context_builder import build_provider_context, extract_latest_user_input
 from backend.app.memory.chat_persistence import (
     persist_chat_turn,
     persist_local_behavior_line,
@@ -48,6 +48,7 @@ from backend.app.stt.exceptions import STTError
 from backend.app.stt.router import get_stt_router, reset_stt_router
 from backend.app.stt.types import TranscriptionRequest
 from backend.app.tts.exceptions import TTSError
+from backend.app.tts.expression_tagger import apply_expression_tags
 from backend.app.tts.router import get_tts_router, reset_tts_router
 from backend.app.tts.types import SynthesisRequest
 from backend.app.providers.exceptions import ProviderError
@@ -587,9 +588,12 @@ def tts_stream(
     if chunks is None:
         return Response(status_code=204)
 
+    stream_provider = router.providers.get(provider_name) if provider_name else None
+    media_type = stream_provider.stream_mime_type() if stream_provider else "audio/mpeg"
+
     return StreamingResponse(
         chunks,
-        media_type="audio/mpeg",
+        media_type=media_type,
         headers={"Cache-Control": "no-store"},
     )
 
@@ -768,7 +772,7 @@ def chat_complete(
                 behavior=decision,
             )
             completion_request = ChatCompletionRequest(
-                messages=append_text_chat_tag_instruction(built.messages),
+                messages=built.messages,
                 max_output_tokens=budget.max_output_tokens_per_turn,
             )
 
@@ -787,19 +791,24 @@ def chat_complete(
             )
             if parsed.decision:
                 final_decision = parsed.decision
-            result = type(result)(
-                provider=result.provider,
-                model=result.model,
-                content=parsed.content,
-                usage=result.usage,
-                cost=result.cost,
-                mock=result.mock,
-            )
             called_llm = True
             try:
                 apply_signals_to_kernel(store, parsed.signals)
             except Exception:
                 pass
+            tagged_content = apply_expression_tags(
+                parsed.content,
+                store.get_mood_state(),
+                router=router,
+            )
+            result = type(result)(
+                provider=result.provider,
+                model=result.model,
+                content=tagged_content,
+                usage=result.usage,
+                cost=result.cost,
+                mock=result.mock,
+            )
     else:
         result = build_local_completion(decision, user_input=user_input)
         avatar_state = decision.avatar_state
@@ -913,7 +922,11 @@ def _finalize_streamed_turn(
         pass
     final_avatar_state = parsed.avatar_state or avatar_state
     final_decision = parsed.decision or decision
-    final_content = parsed.content
+    final_content = apply_expression_tags(
+        parsed.content,
+        store.get_mood_state(),
+        router=get_provider_router(),
+    )
     result = ChatCompletionResult(
         provider=result.provider,
         model=result.model,
@@ -1034,7 +1047,7 @@ def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
                     behavior=decision,
                 )
                 completion_request = ChatCompletionRequest(
-                    messages=append_text_chat_tag_instruction(built.messages),
+                    messages=built.messages,
                     max_output_tokens=budget.max_output_tokens_per_turn,
                 )
 

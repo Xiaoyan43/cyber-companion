@@ -182,28 +182,6 @@ _ANTI_FABRICATION_NOTE = (
     "直接承认不记得（用 Boxi 的口吻），不要编造细节、时间、地点或对话内容。"
 )
 
-TEXT_CHAT_TAG_INSTRUCTION = (
-    "文字对话模式：情绪标签从以下列表选，标签必须用英文写。最多叠加 3 个标签表达复合情绪：\n"
-    "情绪：[happy] [sad] [angry] [excited] [calm] [disdainful] [sarcastic] [nostalgic] "
-    "[compassionate] [determined] [anxious] [lonely] [worried]\n"
-    "音调：[in a hurry tone] [shouting] [whispering] [soft tone] [screaming]\n"
-    "音效：[laughing] [sobbing] [sighing] [gasping] [yawning]\n"
-    "硬性要求：第一组情绪标签放在回复最前；音调和音效标签不挑位置，要根据内容放在句子中间"
-    "合适的地方（紧跟在相关的词后面），不能只在开头放一次就不管正文。如果回复超过 2 句话，"
-    "正文中（不是开头）必须出现至少一次新标签——情绪转折处加新情绪标签，或者句中加音调/音效"
-    "标签都可以。这是硬性要求，不是可选项。\n"
-    "示例（正确）：你又这样[sighing]，真是拿你没办法。进来吧[laughing]，挤一挤还是能装下你的。\n"
-    "示例（错误，标签全堆开头、正文没有任何标签——不要这样做）：[disdainful][sighing] "
-    "你又这样，真是拿你没办法。进来吧，挤一挤还是能装下你的。\n"
-    "仅用于 TTS 情绪合成，正文不重复标签含义，不解释。"
-)
-
-
-def append_text_chat_tag_instruction(messages: list[ChatMessage]) -> list[ChatMessage]:
-    """Text-chat terseness lever — appended as trailing system message, mirrors voice path."""
-    return [*messages, ChatMessage(role="system", content=TEXT_CHAT_TAG_INSTRUCTION)]
-
-
 _TRUNCATION_SUFFIX = " …[truncated]"
 
 _TRAILER_REMINDER = (

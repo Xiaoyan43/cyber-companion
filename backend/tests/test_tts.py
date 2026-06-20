@@ -68,7 +68,7 @@ def test_tts_status_route(client: TestClient) -> None:
     assert payload["enabled"] is True
     assert payload["force_mock"] is True
     assert payload["allow_cloud_tts"] is True
-    assert payload["max_speech_chars"] == 120
+    assert payload["max_speech_chars"] == 4000
     assert any(provider["name"] == "mock" for provider in payload["providers"])
 
 
@@ -76,7 +76,7 @@ def test_tts_evaluate_skips_long_reply(client: TestClient) -> None:
     response = client.post(
         "/tts/evaluate",
         json={
-            "text": "x" * 200,
+            "text": "x" * 5000,
             "decision": "reply",
         },
     )
@@ -527,6 +527,11 @@ def test_doubao_synthesize_stream_yields_chunks(monkeypatch: pytest.MonkeyPatch)
     assert captured["json"]["req_params"]["audio_params"]["format"] == "mp3"
 
 
+def test_doubao_stream_mime_type_matches_configured_format() -> None:
+    provider = DoubaoTTSProvider(audio_format="mp3")
+    assert provider.stream_mime_type() == "audio/mpeg"
+
+
 def test_doubao_synthesize_mocked_http(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_doubao_env(monkeypatch)
     audio = b"mp3-audio-bytes"
@@ -913,6 +918,11 @@ def test_fish_audio_unconfigured_raises_config_error(monkeypatch: pytest.MonkeyP
     assert "FISH_AUDIO_API_KEY" in str(exc.value)
 
 
+def test_fish_audio_stream_mime_type_matches_configured_format() -> None:
+    provider = FishAudioTTSProvider(audio_format="opus")
+    assert provider.stream_mime_type() == "audio/ogg; codecs=opus"
+
+
 def test_fish_audio_speech_rate_to_speed() -> None:
     assert speech_rate_to_speed(0) == 1.0
     assert speech_rate_to_speed(20) == 1.5
@@ -1026,6 +1036,34 @@ def test_tts_stream_mood_speech_rate_reaches_fish_audio(
     assert response.status_code == 200
     assert captured["json"]["text"] == "短句测试。"
     assert captured["json"]["prosody"] == {"speed": 1.48}
+
+
+def test_tts_stream_reports_real_fish_audio_mime_type(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: /tts/stream used to hard-code audio/mpeg even though Fish Audio
+    streams opus (audio/ogg), which can stall browser decoders on long replies."""
+    _write_fish_audio_tts_config(tmp_path)
+    monkeypatch.setenv("CYBER_COMPANION_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("CYBER_COMPANION_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("FISH_AUDIO_API_KEY", "test-key")
+    reset_tts_router()
+    reset_memory_store()
+
+    fake_client = _fake_fish_stream_client([b"audio"], {})
+    monkeypatch.setattr(
+        "backend.app.tts.fish_audio.get_shared_http_client", lambda: fake_client
+    )
+
+    client = TestClient(app)
+    response = client.get(
+        "/tts/stream",
+        params={"text": "短句测试。", "decision": "reply", "force": True},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "audio/ogg; codecs=opus"
 
 
 def test_tts_stream_tone_marker_tag_suppresses_speech_rate(

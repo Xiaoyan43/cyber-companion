@@ -141,6 +141,9 @@ class DoubaoTTSProvider(TextToSpeechProvider):
             cloud=True,
         )
 
+    def stream_mime_type(self) -> str:
+        return FORMAT_TO_MIME.get(self._audio_format, "application/octet-stream")
+
     def synthesize(self, request: SynthesisRequest) -> SynthesisResult:
         creds = self._credentials()
         if not creds:

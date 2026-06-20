@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "default_provider": "fish_audio",
-  "max_speech_chars": 120,
+  "max_speech_chars": 4000,
   "speak_decisions": ["proactive", "interrupt", "refuse", "reply"],
   "providers": {
     "mock": {

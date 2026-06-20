@@ -17,6 +17,11 @@ class TextToSpeechProvider(ABC):
     def status(self) -> TTSProviderStatus:
         raise NotImplementedError
 
+    def stream_mime_type(self) -> str:
+        """MIME type of the bytes yielded by synthesize_stream(). Override when the
+        provider streams a different container/codec than the audio/mpeg default."""
+        return "audio/mpeg"
+
     def is_configured(self) -> bool:
         status = self.status()
         return status.configured and (status.api_key_present or not status.cloud)
