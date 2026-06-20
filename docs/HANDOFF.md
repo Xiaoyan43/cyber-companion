@@ -130,8 +130,8 @@
 | `config/tts.json`、`config/tts.example.json` | `max_speech_chars` 120→4000 |
 | `.claude/launch.json` | 移除 frontend 配置项的 `autoPort`（该 dev server 硬编码端口 5173，autoPort 会导致 preview 工具连错端口） |
 
-**本轮未 commit**（P8-A/P8-B + 两个 TTS 修复都已实施+测试+真机验证，等待用户确认后再 commit；
-用户对 P8 的标签效果还在继续测试，尚未最终拍板）。
+**已 commit**（`a022d8e` P8-A/P8-B + TTS mime-type 修复 + max_speech_chars 调整，`46475b6` TTS 切段移除）。
+用户真机听感确认长回复播放流畅，确认 commit。
 
 ## 当前未完成（产品侧）
 
@@ -147,6 +147,12 @@
 
 ## 已知 bug / 风险
 
+- 🆕 **P8 两阶段架构增加文字聊天延迟**：用户真机反馈长回复确认播放流畅后，发现延迟相应增加。
+  根因：标签器（DeepSeek）是主 LLM 调用之后**串行**追加的第二次 LLM 请求（`main LLM → apply_signals_to_kernel
+  → apply_expression_tags → 最终 content`），TTS 要等最终带标签文本才开始合成，所以总耗时=主LLM耗时+标签器
+  耗时，纯叠加无重叠；回复越长两段都越慢。第三十一轮设计延迟杠杆（B句子级重叠/C条件触发/D Fish API手段）时
+  默认"文字聊天路径不需要"，这个假设可能不成立。**用户决定本轮先接受、继续观察标签效果，延迟优化暂不处理**，
+  待后续需要时再量化（加 timing 日志拆分主LLM vs 标签器耗时）或直接设计优化。
 - **Fish 标签情绪准确性**：两阶段架构已落地 + 真机验证显示明显改善（标签分布+逐句判断两个症状本轮验证未再出现），
   但只测了 2 轮对话，样本小，需要日常使用持续观察是否稳定。
 - 🆕 持久化的 assistant 消息含 Fish 标签文本（如 `[sigh]`）——如果信笺 UI（LetterView）等展示层直接渲染
