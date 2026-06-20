@@ -79,6 +79,38 @@ def _build_tts(tts_backend: str) -> tuple[object, int]:
 
         return MacSayTTSService(), SAMPLE_RATE
 
+    if tts_backend == "fish_audio":
+        import json
+        import pathlib
+
+        from pipecat.services.fish.tts import FishAudioTTSService
+
+        api_key = _require_env("FISH_AUDIO_API_KEY")
+        reference_id = os.getenv("FISH_AUDIO_REFERENCE_ID", "").strip()
+        if not reference_id:
+            cfg_path = pathlib.Path(__file__).parent.parent.parent / "config" / "tts.json"
+            try:
+                reference_id = json.loads(cfg_path.read_text())["providers"]["fish_audio"]["voice"]
+            except Exception:
+                pass
+        if not reference_id:
+            raise SystemExit(
+                "FISH_AUDIO_REFERENCE_ID env or config/tts.json providers.fish_audio.voice required"
+            )
+
+        FISH_SAMPLE_RATE = 44_100
+        svc = FishAudioTTSService(
+            api_key=api_key,
+            settings=FishAudioTTSService.Settings(
+                voice=reference_id,
+                model="s2-pro",
+                latency="balanced",
+            ),
+            output_format="pcm",
+            sample_rate=FISH_SAMPLE_RATE,
+        )
+        return svc, FISH_SAMPLE_RATE
+
     from backend.realtime.doubao_streaming_tts_service import DoubaoStreamingTTSService, SAMPLE_RATE
 
     _require_env("DOUBAO_TTS_API_KEY")
@@ -151,8 +183,8 @@ async def _main_pipeline() -> None:
     )
     tts_backend = _voice_backend(
         "CYBER_COMPANION_VOICE_TTS",
-        allowed={"mac_say", "doubao"},
-        default="doubao",
+        allowed={"mac_say", "doubao", "fish_audio"},
+        default="fish_audio",
     )
 
     from pipecat.pipeline.pipeline import Pipeline

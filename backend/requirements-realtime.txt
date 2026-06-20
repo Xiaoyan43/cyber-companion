@@ -22,3 +22,4 @@ python-dotenv>=1.0.0
 onnxruntime==1.23.2
 numpy>=1.26.0,<2.3
 websockets>=12.0
+ormsgpack>=1.5.0   # required by pipecat Fish Audio WebSocket service
