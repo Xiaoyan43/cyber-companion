@@ -1,15 +1,26 @@
 # TASK_QUEUE — 按优先级（2026-06-20）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
-> **🎯 当前最高优先：Fish Audio 全量文档深度研究**（P8 前置，独立先做，见本文件「P8 前置」节）——
-> 真机验证+commit 第二十八轮改动已完成（第二十九轮，5 个 commit，见 `docs/HANDOFF.md`），
-> 真机验证发现标签问题比预期更深，文档研究做完后再用 `/architect` 拆 P8。
+> **🎯 当前最高优先：P8 · TTS 情绪标签两阶段表达层架构** —— **文字聊天路径（P8-A+P8-B）已完成并真机验证 PASS**，
+> 语音 Pipecat 路径待做（不急，可先观察文字聊天路径稳定性）。
 > P0（VM-6）/ P1（VE-2）/ R9 / R10 / P2（VE-1）/ R12（反编造）/ 信笺 UI P0 + P1 + P1-B + P1-C / **P5-A-1** / **P6（全部子任务）** / **P7（Pipecat 前端入口）** 均已完成。
 > P5-A（Venice）已取消（溢价太高）。
+> **2026-06-20（第三十一轮）**：**P8-A（表达层标签器模块）+ P8-B（接入文字聊天路径）已完成**——
+> 新建 `backend/app/tts/expression_tagger.py`，主 LLM 不再背标签任务，独立 DeepSeek 调用专职插标签。
+> 真机验证时用户顺带发现「长回复 TTS 播放中断」bug（与 P8 无关，预先存在），排查出两层根因并都已修复：
+> ①`/tts/stream` 硬编码 `media_type=audio/mpeg` 但 Fish Audio 实际吐 opus（`stream_mime_type()` 新方法）；
+> ②前端不必要地把长回复切成多个独立 HTTP 请求顺序播放，违反 Fish Audio 官方"整段一次性传入"的推荐用法
+> （移除 `textChunksForSpeech` 切段逻辑，`max_speech_chars` 120→4000）。用 Fish Audio 官方 realtime
+> streaming 文档（新增到 `docs/FISH_AUDIO_REFERENCE.md` 第9节）确认了"文字聊天不需要 WebSocket，
+> HTTP streaming 整段传才是官方推荐做法"。496 pytest + 25 前端 vitest 全绿，真机（含浏览器 preview 工具
+> 端到端验证）PASS。**本轮未 commit，等用户实际听感confirm 再一起 commit**。详见 HANDOFF。
+> **2026-06-20（第三十轮）**：**P8 前置（Fish Audio 全量文档深度研究）已完成**——
+> 产出 `docs/FISH_AUDIO_REFERENCE.md`（标签系统+phoneme+生成参数完整参考），新发现 `latency` 实际3档/
+> WebSocket `FlushEvent`/`chunk_length`默认值官方文档不一致等，详见 HANDOFF。
 > **2026-06-20（第二十九轮）**：第二十八轮全部改动（P5-C~P5-H + Provider 选型 + 漏 commit 的 P5-B-2）
 > 已真机验证 + 按主题拆 5 个 commit 落 master（`d39f6c8` `9f85fc7` `ca69cb9` `ab4d64d` `1dd96cb`，详见 HANDOFF）。
 > 验证发现 Fish 标签问题比预期更深（mood 快照式贴标签 + 音效类标签位置精度要求更高），
-> 新增「P8 前置」任务。
+> 触发了「P8 前置」任务（现已完成）。
 > **2026-06-19（第二十四轮）**：
 > - ~~**system prompt 重写**~~ ✅ 完成，commit `3533414`——存在论框架 + 四条纪律 + 成年虚构框定 + 格式纪律（去掉长度限制）。
 > - **OpenRouterProvider 新增** ✅ 完成，commit `85bc37a` + `496e995`——`allow_fallbacks=false`，`_extra_payload_params()` 钩子。
@@ -168,46 +179,47 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - `fish_audio.py` 加 `DEFAULT_TEMPERATURE=0.85`（官方默认 0.7），待用户实测听感
 - ⚠️ **实测结论：纯 prompt（含精简版）无法稳定纠正"标签只堆开头"——是任务结构问题。用户否决"精简掉 Fish 潜力"方向，定为走两阶段架构（见 P8）。当前指令是临时可用状态。**
 
-## P8 前置 ·【当前最高优先】Fish Audio 全量文档深度研究（独立先做）
+## ~~P8 前置 · Fish Audio 全量文档深度研究~~ ✅ 已完成（2026-06-20，第三十轮）
 
-> **触发**（2026-06-20，第二十九轮真机验证）：标签问题比预期更深，不只是"位置"——
-> ①标签像抄 mood 持续快照（连续多条回复带同样的 `[annoyed][worried]`），不是对当前这句话
-> 内容的现场判断；②音效类标签（`[sighing]`/`[anxious]` 等会触发真实声音事件）比纯语气类标签
-> 对位置精度要求更高，放错位置产生违和声音。用户原话："我们应该深度、完整地解析 Fish Audio
-> 的所有文档，并且完整地记录下来。不然每次得一遍有一遍地调用给你。"
+> **触发**（第二十九轮真机验证）：标签问题比预期更深，不只是"位置"——①标签像抄 mood 持续快照非逐句
+> 判断；②音效类标签比语气类标签对位置精度要求更高。用户要求深度+完整解析 Fish Audio 全部官方文档。
 >
-> **目标**：通读 Fish Audio 全部官方文档，产出独立、可复用的 reference doc
-> （建议 `docs/FISH_AUDIO_REFERENCE.md`），P8 `/architect` 设计表达层标签器 prompt 时直接引用。
-> **Scope**：只读 Fish Audio 官方文档（网页/已有 `.firecrawl/` 缓存如果还在），不读项目代码。
-> **要覆盖**：
-> - 标签全集 + 分类（情绪 / 音调 / 音效），明确标出哪些会触发真实声音事件 vs 只影响演绎风格
-> - 标签位置规则（句首/句中/任意位置，是否每类规则不同）
-> - phoneme 发音控制语法（英文 Arpabet / 中文声调拼音）
-> - S2-Pro 方括号语法 vs S1 圆括号固定集，二者不可混用的边界
-> - `temperature`/`top_p` 等生成参数的完整含义和取值建议
-> **验收标准**：产出的 doc 能让人不参考 Fish 官网就回答"这个场景该用哪个标签、放哪、会不会出声"。
-> **预计 diff 规模**：small（新增 1 个 doc 文件，不改代码）。
+> **产出**：`docs/FISH_AUDIO_REFERENCE.md`（8 节 + 附录，定稿）——S2-Pro vs S1 语法边界、语言质量分层、
+> 标签 6 类词表+扩展词表、"触发真实声音 vs 仅影响演绎"分类、位置规则、phoneme 三语言语法、官方完整
+> 生成参数表（含新发现：`latency` 实际3档/WebSocket `FlushEvent`/`chunk_length`默认值文档内部不一致）、
+> 已知限制清单。来源覆盖 docs.fish.audio 官方文档站 + fish.audio/blog 技术博客 + GitHub README 交叉验证。
+> 详见 `docs/HANDOFF.md`「本轮已完成」。
 
-## P8 ·【次优先，待上方文档研究完成后拆解】TTS 情绪标签两阶段表达层架构
+## P8 · TTS 情绪标签两阶段表达层架构
 
 > **根因**：一次 LLM 生成同时背 7 类认知任务（人格/状态/记忆/格式/BOXI_SIGNALS/Fish标签/长度），
 > 创作类与标注类抢注意力 → Fish 标签退化成只堆开头。**实测确认纯改 prompt 治不好。**
 >
-> **方向（详见 `docs/HANDOFF.md`「架构决策」节）**：内容/表达两阶段解耦——
+> **方案（详见 `docs/HANDOFF.md`「架构决策」节）**：内容/表达两阶段解耦——
 > - 决策层 = behavior engine（已有，纯代码）
 > - 执行层 = 主 LLM(Grok) 写纯文本+BOXI_SIGNALS，prompt 不含 Fish 标签规则
-> - 表达层 = 独立标签器调用（可用 DeepSeek/Gemini Flash），prompt 只有标签规则 → 释放 Fish 全部潜力
+> - 表达层 = 独立标签器调用（DeepSeek），prompt 只有标签规则 → 释放 Fish 全部潜力（完整词表+规则见 `docs/FISH_AUDIO_REFERENCE.md`）
 >
 > **关键边界**：代码只能强制标签「格式/位置合法性」，「情绪恰当性」永远靠 LLM。
-> **多 LLM = 专长匹配+省钱，非消除延迟**（标签器必须等内容，串行无法消除）。
-> **延迟三杠杆**：A 标签器用快模型 / B 句子级流水线(真正杀手) / C 条件触发(校验不合格才补调)。
-> **分路径**：文字聊天先做(串行两阶段)；语音 Pipecat 后做(杠杆 B 或 C)。标签器故障必须降级到纯文本。
->
-> **第二十九轮真机验证新增证据**：①标签像抄 mood 持续快照非逐句判断；②音效类标签（真实触发声音）
-> 比语气类标签对位置精度要求更高。表达层标签器 prompt 需分别处理，详见 `docs/HANDOFF.md`「架构决策」。
->
-> **下一步**：先完成上方「P8 前置」文档研究，再用 `/architect` 拆成最小任务，从文字聊天起步。
-> 要读：`companion_brain.py`(生成主流程) + `main.py`(`/chat/*`) + `context_builder.py`(TEXT_CHAT_TAG_INSTRUCTION) + `providers/router.py`(多 provider 调度) + 新产出的 `docs/FISH_AUDIO_REFERENCE.md`。
+
+### ~~P8-A · 表达层标签器模块~~ ✅ 已完成（2026-06-20，第三十一轮）
+- 新建 `backend/app/tts/expression_tagger.py`：`apply_expression_tags(text, mood, *, router, provider_name="deepseek")`
+- prompt 只含标签规则（全量6类词表+A/B类位置精度区分+逐句判断要求，去掉旧版硬性数量配额）
+- 失败/空结果硬性降级返回原文；14 个单测全绿
+
+### ~~P8-B · 接入 /chat/complete + /chat/stream~~ ✅ 已完成并真机验证 PASS（2026-06-20，第三十一轮）
+- `context_builder.py` 删除 `TEXT_CHAT_TAG_INSTRUCTION` + `append_text_chat_tag_instruction()`
+- `main.py` 两处路由在 `apply_signals_to_kernel` 之后调用标签器替换最终 content
+- 493 pytest 全绿，真机验证 2 轮对话 PASS（标签分布+逐句判断两症状未再出现，`[sarcastic]`精确位置验证 A/B 类区分生效）
+- 本轮未 commit。详见 HANDOFF「本轮新发现」——验证中观察到 persona 在庆祝语境下输出比预期更显性，
+  与本次架构改动无关（未碰 persona 文件），记录供「活人感/审核」话题参考
+
+### P8-C · 语音 Pipecat 路径（待做，不急）
+- 同样的两阶段拆分应用到 `companion_brain.py` 的 `VOICE_MODE_INSTRUCTION`，但语音延迟敏感，
+  串行两次调用不能直接照搬文字聊天的做法
+- 启动前要选定延迟杠杆：B 句子级流水线重叠（真正杀手）/ C 条件触发补调 / D Fish API 层手段
+  （`latency="low"`、WebSocket `FlushEvent`、连接预热，见 `docs/FISH_AUDIO_REFERENCE.md` §7.2/7.7）
+- 要读：`backend/app/tts/expression_tagger.py`（可直接复用）+ `backend/realtime/companion_brain.py`
 
 ## ~~P7 · Pipecat 前端入口~~ ✅ 已完成并实机验证 PASS（2026-06-17，commits `9a7a278`→`dc4ce4e`）
 - `backend/realtime/pipeline_router.py` 新建：`POST /realtime/start` / `POST /realtime/stop` / `GET /realtime/status`
