@@ -17,6 +17,7 @@ stay sharp underneath — felt and shown diverge honestly.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Literal
 
@@ -65,22 +66,18 @@ _EMOTION_INTENSE_BY_REGISTER: dict[ToneRegister, str] = {
 
 STRONG_THRESHOLD = 0.75
 
-# Official Fish Audio S2 "Tone Marker" tags — these are the ones that explicitly
-# control delivery pace/volume. When the LLM has already written one of these
-# into the reply, the mood-driven numeric speech_rate fallback should stay out
-# of its way rather than fight the content-authored pacing.
-TONE_MARKER_TAGS: tuple[str, ...] = (
-    "[in a hurry tone]",
-    "[shouting]",
-    "[screaming]",
-    "[whispering]",
-    "[soft tone]",
-)
+# Any [bracket] tag is content-authored delivery control (the expression-tagger's whole
+# job, see backend/app/tts/expression_tagger.py). When the reply already carries one,
+# the mood-driven numeric speech_rate fallback should stay out of its way rather than
+# fight it. This used to match a fixed 5-word seed list, which silently stopped working
+# once the tagger vocabulary grew beyond those 5 words — match any tag instead so this
+# stays correct regardless of how the tagger's vocabulary evolves.
+_BRACKET_TAG_PATTERN = re.compile(r"\[[^\[\]]+\]")
 
 
 def contains_tone_marker_tag(text: str) -> bool:
-    """True if text already carries an LLM-authored pacing/volume tag."""
-    return any(tag in text for tag in TONE_MARKER_TAGS)
+    """True if text already carries an LLM-authored delivery tag of any kind."""
+    return bool(_BRACKET_TAG_PATTERN.search(text))
 
 
 @dataclass(frozen=True)

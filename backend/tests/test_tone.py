@@ -5,6 +5,7 @@ from backend.app.behavior.tone import (
     POSITIVE_STREAK_KEY,
     STRONG_THRESHOLD,
     _EMOTION_INTENSE_BY_REGISTER,
+    contains_tone_marker_tag,
     in_positive_zone,
     next_positive_streak,
     performative_active_from_metadata,
@@ -226,3 +227,14 @@ def test_intense_phrases_avoid_forbidden_exaggeration_wording() -> None:
     for phrase in _EMOTION_INTENSE_BY_REGISTER.values():
         for marker in forbidden:
             assert marker not in phrase
+
+
+def test_contains_tone_marker_tag_matches_any_bracket_tag() -> None:
+    # Regression: this used to match a fixed 5-word English seed list and silently
+    # stopped suppressing the mood-driven speech_rate once the tagger's vocabulary
+    # (backend/app/tts/expression_tagger.py) grew beyond those 5 words.
+    assert contains_tone_marker_tag("[whispering] 别出声。")
+    assert contains_tone_marker_tag("[break] 那你笑得这么大声是干嘛。")
+    assert contains_tone_marker_tag("[teasing tone] 哦？")
+    assert contains_tone_marker_tag("[叹气] 行吧。")
+    assert not contains_tone_marker_tag("没有任何标签的纯文本。")
