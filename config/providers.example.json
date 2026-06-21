@@ -35,6 +35,18 @@
       "base_url": "https://api.anthropic.com/v1",
       "model": "claude-sonnet-4-6",
       "api_key_env": "ANTHROPIC_API_KEY"
+    },
+    "openrouter": {
+      "enabled": false,
+      "base_url": "https://openrouter.ai/api/v1",
+      "model": "x-ai/grok-4.20",
+      "api_key_env": "OPENROUTER_API_KEY"
+    },
+    "gemini": {
+      "enabled": false,
+      "base_url": "https://openrouter.ai/api/v1",
+      "model": "google/gemini-2.5-flash-lite",
+      "api_key_env": "OPENROUTER_GEMINI_API_KEY"
     }
   }
 }

@@ -100,15 +100,15 @@ def test_apply_expression_tags_uses_default_provider_name() -> None:
 
     apply_expression_tags("原文", _mood(), router=router)  # type: ignore[arg-type]
 
-    assert router.captured_provider_name == DEFAULT_TAGGER_PROVIDER == "deepseek"
+    assert router.captured_provider_name == DEFAULT_TAGGER_PROVIDER == "gemini"
 
 
 def test_apply_expression_tags_allows_provider_override() -> None:
     router = _FakeRouter(content="带标签的文本")
 
-    apply_expression_tags("原文", _mood(), router=router, provider_name="gemini")  # type: ignore[arg-type]
+    apply_expression_tags("原文", _mood(), router=router, provider_name="deepseek")  # type: ignore[arg-type]
 
-    assert router.captured_provider_name == "gemini"
+    assert router.captured_provider_name == "deepseek"
 
 
 def test_apply_expression_tags_passes_mood_and_text_into_prompt() -> None:
@@ -145,8 +145,24 @@ def test_tagger_instruction_has_no_hard_tag_count_quota() -> None:
     assert "硬性要求" not in TAGGER_INSTRUCTION_TEMPLATE
 
 
-def test_tagger_instruction_forbids_freeform_invention_and_intensity_modifiers() -> None:
-    assert "只能从下面词表中逐字选用标签" in TAGGER_INSTRUCTION_TEMPLATE
-    assert "不允许自创新词" in TAGGER_INSTRUCTION_TEMPLATE
-    assert "不允许在词后加程度修饰" in TAGGER_INSTRUCTION_TEMPLATE
-    assert "可在语义合理范围内自行扩展" not in TAGGER_INSTRUCTION_TEMPLATE
+def test_tagger_instruction_allows_freeform_fallback_when_no_exact_vocab_match() -> None:
+    # Round-trip regression: a strict-vocab-only version caused near-total under-tagging
+    # on emotionally loaded but vocab-mismatched content (teasing/commanding tone has no
+    # exact word in the fixed list) — reopened controlled freeform fallback to fix it.
+    assert "可在语义合理范围内自行扩展" in TAGGER_INSTRUCTION_TEMPLATE
+    assert "不要因为没有完美对应词就放弃" in TAGGER_INSTRUCTION_TEMPLATE
+
+
+def test_tagger_instruction_does_not_force_english_only_tags() -> None:
+    # Regression: an earlier "tags must be English" rule contradicted
+    # docs/FISH_AUDIO_REFERENCE.md §2, which documents that S2-Pro tags can match the
+    # script language (Chinese tags are officially supported, not just an English seed list).
+    assert "必须用英文方括号写" not in TAGGER_INSTRUCTION_TEMPLATE
+    assert "跟正文语言保持一致" in TAGGER_INSTRUCTION_TEMPLATE
+
+
+def test_tagger_instruction_keeps_official_physio_emotion_combo_example() -> None:
+    # docs/FISH_AUDIO_REFERENCE.md §4.3 explicitly recommends pairing a physio tag with an
+    # emotion tag back-to-back (e.g. [panting][tired]) — this was dropped during an earlier
+    # rewrite of rule 5 and is restored here as an exception to the no-stacking rule.
+    assert "[panting] [tired]" in TAGGER_INSTRUCTION_TEMPLATE

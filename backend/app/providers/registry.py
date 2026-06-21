@@ -59,6 +59,16 @@ def build_provider(entry: ProviderConfigEntry) -> ChatProvider:
             enabled=entry.enabled,
         )
 
+    if entry.name == "gemini":
+        # Routed through OpenRouter (same API, different model) — separate config key so
+        # it doesn't collide with the "openrouter" entry that powers the main chat LLM.
+        return OpenRouterProvider(
+            model=entry.model,
+            base_url=entry.base_url or "https://openrouter.ai/api/v1",
+            api_key_env=entry.api_key_env or "OPENROUTER_GEMINI_API_KEY",
+            enabled=entry.enabled,
+        )
+
     return MockProvider(model=entry.model)
 
 
