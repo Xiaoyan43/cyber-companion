@@ -1,8 +1,14 @@
-# TASK_QUEUE — 按优先级（2026-06-20）
+# TASK_QUEUE — 按优先级（2026-06-21）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
 > **🎯 当前最高优先：P8 · TTS 情绪标签两阶段表达层架构** —— **文字聊天路径（P8-A+P8-B）已完成并真机验证 PASS**，
 > 语音 Pipecat 路径待做（不急，可先观察文字聊天路径稳定性）。
+> **2026-06-21（第三十二轮）**：真机使用驱动的修复轮，详见 HANDOFF。标签器 DeepSeek→Gemini + prompt
+> 规则矛盾修复；`tone.py` 语速抑制 bug 修复（硬编码词表→通用标签检测）；persona 新增"不旁白"硬规则；
+> 新发现并临时止血了 idle-tick mutter 刷屏 bug（**P9**，待重新设计，已禁用未删除）；记录 **P10**
+> （标签器模型+Fish Audio 潜力，用户后续可能继续探索）。本轮还做了几次数据库清空（messages/
+> conversation_summaries/memories/mood_state/relationship_state，已备份到 `data/backups/`），
+> 不在 git 历史里，详见 HANDOFF「数据库状态变更」。
 > P0（VM-6）/ P1（VE-2）/ R9 / R10 / P2（VE-1）/ R12（反编造）/ 信笺 UI P0 + P1 + P1-B + P1-C / **P5-A-1** / **P6（全部子任务）** / **P7（Pipecat 前端入口）** 均已完成。
 > P5-A（Venice）已取消（溢价太高）。
 > **2026-06-20（第三十一轮）**：**P8-A（表达层标签器模块）+ P8-B（接入文字聊天路径）已完成**——
