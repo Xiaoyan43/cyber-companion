@@ -131,14 +131,18 @@ def test_proactive_check_uses_stale_job_memory(store: MemoryStore) -> None:
     assert decision.local_response is not None
 
 
-def test_idle_tick_eventually_mutters_when_bored(store: MemoryStore) -> None:
+def test_idle_tick_low_energy_observe_when_bored(store: MemoryStore) -> None:
+    # The "mutter" branch this used to exercise is temporarily disabled (see
+    # backend/app/behavior/engine.py `_IDLE_MUTTER_ENABLED`, docs/TASK_QUEUE.md "P9") —
+    # it fired the same hardcoded line on a loop with no variation. Falls through to the
+    # low-energy observe branch instead until the idle-behavior redesign replaces it.
     store.update_mood_state(boredom=0.52, loneliness=0.52)
 
     decision = evaluate_behavior(store, BehaviorEvent(event_type="idle_tick"))
 
-    assert decision.decision == "mutter"
-    assert decision.avatar_state == "annoyed"
-    assert decision.local_response is not None
+    assert decision.decision == "observe"
+    assert decision.avatar_state == "sleepy"
+    assert decision.reason == "idle_low_energy"
 
 
 def test_idle_tick_observe_when_calm(store: MemoryStore) -> None:

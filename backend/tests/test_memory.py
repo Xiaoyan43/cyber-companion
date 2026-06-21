@@ -165,7 +165,11 @@ def _age_memory(store: MemoryStore, memory_id: int, updated_at: str) -> None:
         )
 
 
-def test_behavior_evaluate_persists_idle_tick_mutter(client: TestClient) -> None:
+def test_behavior_evaluate_idle_tick_mutter_disabled_does_not_persist(client: TestClient) -> None:
+    # The idle-tick "mutter" branch is temporarily disabled (see
+    # backend/app/behavior/engine.py `_IDLE_MUTTER_ENABLED`, docs/TASK_QUEUE.md "P9") —
+    # it fired the same hardcoded line on a loop with no variation. No decision/message
+    # to persist until the idle-behavior redesign replaces it.
     from backend.app.memory.store import get_memory_store
 
     store = get_memory_store()
@@ -175,16 +179,11 @@ def test_behavior_evaluate_persists_idle_tick_mutter(client: TestClient) -> None
     assert response.status_code == 200
 
     payload = response.json()
-    assert payload["decision"] == "mutter"
-    assert payload["saved_message_id"] is not None
+    assert payload["decision"] == "observe"
+    assert payload["saved_message_id"] is None
 
     messages = client.get("/memory/messages").json()["messages"]
-    assert len(messages) == 1
-    assert messages[0]["id"] == payload["saved_message_id"]
-    assert messages[0]["role"] == "assistant"
-    assert messages[0]["source"] == "behavior_tick"
-    assert messages[0]["metadata"]["decision"] == "mutter"
-    assert messages[0]["metadata"]["behavior_event"] == "idle_tick"
+    assert len(messages) == 0
 
 
 def test_behavior_evaluate_persists_proactive_check(client: TestClient, monkeypatch) -> None:

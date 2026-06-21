@@ -267,6 +267,14 @@ def _evaluate_proactive_check(
     )
 
 
+# Temporarily disabled (2026-06-21, see docs/TASK_QUEUE.md "P9"): this fired the same
+# hardcoded line every 3-min cooldown window once boredom/loneliness crossed 0.55, with
+# no variation — produced 200 identical persisted messages over one idle session. Off
+# until the proactive/idle-behavior redesign (P9) replaces it; flip back to True only as
+# a stopgap, not a fix.
+_IDLE_MUTTER_ENABLED = False
+
+
 def _evaluate_idle_tick(store: MemoryStore) -> BehaviorDecision:
     mood = store.get_mood_state()
     relationship = store.get_relationship_state()
@@ -287,7 +295,7 @@ def _evaluate_idle_tick(store: MemoryStore) -> BehaviorDecision:
             reason="local_line_cooldown",
         )
 
-    if updated_mood.boredom >= 0.55 or updated_mood.loneliness >= 0.55:
+    if _IDLE_MUTTER_ENABLED and (updated_mood.boredom >= 0.55 or updated_mood.loneliness >= 0.55):
         store.update_mood_state(metadata=mark_local_line_spoken(updated_mood.metadata))
         return BehaviorDecision(
             decision="mutter",
