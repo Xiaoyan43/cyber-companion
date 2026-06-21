@@ -14,9 +14,9 @@ FISH_AUDIO_TTS_URL = "https://api.fish.audio/v1/tts"
 DEFAULT_VOICE_ID = "fbe02f8306fc4d3d915e9871722a39d5"
 DEFAULT_MODEL = "s2-pro"
 DEFAULT_FORMAT = "opus"
-# Nudged above the API default (0.7) for more expressive delivery — listening-test value,
-# revisit if it trades too much stability for variety.
-DEFAULT_TEMPERATURE = 0.85
+# Back to the Fish Audio API defaults (range 0-1).
+DEFAULT_TEMPERATURE = 0.7
+DEFAULT_TOP_P = 0.7
 
 ENV_API_KEY = "FISH_AUDIO_API_KEY"
 ENV_VOICE_ID = "FISH_AUDIO_VOICE_ID"
@@ -62,6 +62,7 @@ class FishAudioTTSProvider(TextToSpeechProvider):
         audio_format: str = DEFAULT_FORMAT,
         model: str = DEFAULT_MODEL,
         temperature: float = DEFAULT_TEMPERATURE,
+        top_p: float = DEFAULT_TOP_P,
         timeout_s: float = 30.0,
         http_client: httpx.Client | None = None,
     ) -> None:
@@ -71,6 +72,7 @@ class FishAudioTTSProvider(TextToSpeechProvider):
         self._audio_format = audio_format
         self._model = model
         self._temperature = temperature
+        self._top_p = top_p
         self._timeout_s = timeout_s
         self._http_client = http_client
 
@@ -134,6 +136,7 @@ class FishAudioTTSProvider(TextToSpeechProvider):
             "format": self._audio_format,
             "latency": "balanced",
             "temperature": self._temperature,
+            "top_p": self._top_p,
         }
         # normalize_loudness defaults to true server-side, which flattens the volume
         # swing that [whispering]/[shouting]-style tags rely on to be audible.
