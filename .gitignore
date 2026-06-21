@@ -37,6 +37,7 @@ data/*.db
 data/*.sqlite
 data/*.sqlite3
 data/runtime/
+data/backups/
 logs/
 
 # Generated media

@@ -359,6 +359,33 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - **延迟旋钮**：`ThinkingType=disabled`/`Prefill`/`AIVAD`/`SilenceTime` 调优（仅混合编排/模块化路径）。要读 `reference/13.md`、`reference/14.md`。
 - **O2.0 persona 收尾**：新 Boxi 音色设备 A/B、`speaking_style` 去规则化、`dialog_id`/`external_rag`。要读 `docs/TODO.md`(O2.0 条)。
 
+## P10 ·（待用户决定时机）标签器模型 + Fish Audio 潜力探索
+
+> **2026-06-21 记录**：用户明确表示这两件事不是终态，后续可能继续动：
+> - **标签器模型可能还会换**：本轮已 DeepSeek → Gemini（`google/gemini-2.5-flash-lite` via OpenRouter，
+>   `backend/app/tts/expression_tagger.py` `DEFAULT_TAGGER_PROVIDER`），原因是 DeepSeek 标签覆盖率/
+>   位置准确度不稳定。Gemini 效果待更多真机使用验证，如果还不够好可能继续换。
+> - **Fish Audio 最大潜力/上限还没系统探完**：本轮调过 `temperature`/`top_p`（试过1.0/0.85/0.75，
+>   最后定在官方默认0.7）、`normalize_loudness`（已强制false）、换过多个 `voice`/`reference_id`，
+>   都是真机听感试验，不是系统性扫描。用户想之后回来继续探 S2-Pro 的表现力天花板。
+> 不算正式任务，只是记录意图——用户提起时直接接续当前状态（标签器=Gemini，TTS参数=官方默认），
+> 不用重新从头讨论要不要探索。
+
+## P9 ·（待重新设计）主动找你 / 空闲行为
+> **触发**（2026-06-21）：`backend/app/behavior/engine.py:288` 的 `_evaluate_idle_tick` 在
+> `boredom>=0.55` 或 `loneliness>=0.55` 时，每隔 180 秒（`tick_policy.py` 冷却时间）触发一次
+> `decision="mutter"`，固定吐出 [local_responses.py:13](backend/app/behavior/local_responses.py:13)
+> 硬编码的同一句"嗯。你到底要不要说正事。"——本轮发现这条线整整攒了 200 条完全相同的
+> `behavior_tick` 消息（跨度约22小时，是这次会话全程 mood_state 卡在 boredom=1.0 没被重置导致的），
+> 已清空（备份在 `data/backups/`）并把 mood_state/relationship_state 重置成默认值止血。
+> **根因不是这次状态卡住，是设计本身**——固定一句话、没有变化、没有"防止单调重复"的机制，
+> 跟「活人感工程」讨论里"她有自己的生活"那个方向（见本文件「活人感工程」章节第1点）应该是同一件事，
+> 用户决定重新设计这整块（"主动找你"功能），不是这次小修。
+> **用户要求**：本轮不做，留给后续单独的任务/讨论。下一次启动时建议先读
+> `backend/app/behavior/engine.py`（`_evaluate_idle_tick` + `_evaluate_proactive` 附近）、
+> `backend/app/behavior/local_responses.py`、`backend/app/behavior/tick_policy.py`，
+> 以及本文件「活人感工程」章节，一起设计而不是单独补丁。
+
 ## 暂缓（不要碰）
 - UI / 视觉材质（用户未定画面；低 GPU 否决实时 shader）。
 - `experiments/`（废弃 spike）。
