@@ -10,6 +10,7 @@ MEMORY_TYPES = (
     "relationship_state",
     "behavior_preference",
     "conversation_summary",
+    "idle_experience",
 )
 
 # Concrete, user-fact memory types eligible for cross-type linking (SD-5) and for

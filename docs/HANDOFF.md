@@ -1,4 +1,4 @@
-# HANDOFF — 上下文交接（2026-06-22，第四十轮）
+# HANDOFF — 上下文交接（2026-06-22，第四十二轮）
 
 > 本文件每次「瘦身交接」/「工作流交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
 
@@ -7,10 +7,73 @@
 最终形态 = Direction C「一个有世界的存在」（深度 > 延迟；soul 写每个字）。仓库 **public**（MIT）。
 
 ## 当前阶段目标
-**P9-P1（反重复 + 想念轨迹分档）已完成并 commit。**
-下一步候选：**P9-P2**（"她有自己的生活" idle 经历生成）或先验证 P9-P1 真机效果。
+**P9-P2-A（idle_experience 写入机制）已完成，545 pytest 全绿，未 commit。**
+下一步候选：**P9-P2-B**（share intent 接入 proactive_reason）。
 
-## 本轮已完成（2026-06-22，第四十轮）
+## 本轮已完成（2026-06-22，第四十二轮）
+
+### P9-P2-A · idle_experience memory type + idle_tick 低频写入（白名单素材版，未 commit）
+- **`/architect` 拆解 + 关键产品决策讨论**：用户确认 idle_experience 内容生成**可以用 LLM**
+  （不必纯模板），前提是必须基于**真实素材**（真新闻/真电影），LLM 只能在素材范围内复述反应、
+  不能编造素材之外的细节。联网获取真实素材（原计划的 P2-C）当前**先用人工维护的白名单素材池
+  代替**，接口设计成可插拔，方便以后直接换成真联网而不动其余代码——这是用户明确拍板的路径
+  （路径 B，"以后要升级成真联网"）。
+- **Schema**：[schema.py](backend/app/memory/schema.py) `MEMORY_TYPES` 加 `idle_experience`，
+  **不进** `FACTUAL_MEMORY_TYPES`（这是 Boxi 自己的经历，不是用户事实，避免被 reflection 的
+  consolidation/cross-link 逻辑误判）。无 DB schema 变更（`memories.type` 本就是无约束 TEXT），
+  不涉及 migration。`docs/MEMORY_DESIGN.md` 同步新增一节说明类型语义+反编造约束+节奏门控+
+  P2-C 升级路径。
+- **节奏门控**：[budget.py](backend/app/memory/budget.py) 新增 5 个字段
+  （`idle_experience_enabled`/`idle_experience_min_gap_hours`(默认6h)/
+  `idle_experience_daily_max`(默认4)/`idle_experience_max_output_tokens`/
+  `idle_experience_fingerprint_history_size`），仿 P9-P1 proactive 字段三处同步模式
+  （dataclass + json + 默认值）。
+- **核心模块**：新建 [idle_experience.py](backend/app/behavior/idle_experience.py)
+  `resolve_idle_experience_write()`——**架构上完全镜像** `proactive_opener.py` 的
+  `resolve_proactive_opener()` 模式：路由层编排（不进 `engine.py`/`_evaluate_idle_tick`，
+  **零行改动 engine.py**），failure-swallowing（任何异常/空结果直接返回 None，不抛出），
+  日配额+最小间隔门控读写 `mood_state.metadata`，反重复用素材 id 做 FIFO 指纹
+  （`idle_experience_recent_material_ids`，复用 P9-P1 同款指纹模式但作用对象是素材而非
+  kind+tier）。LLM prompt 显式给一段 `[Real material]` 块 + 硬性约束"只能在这段范围内发挥,
+  不能编造"。
+- **素材池**：新建 `config/idle_material_pool.example.json`（模板，仿 persona/budget 的
+  example/真实文件分离模式）。当前只有 1 条真实占位素材（《银翼杀手2049》概括性剧情，公开资料、
+  未涉及具体台词细节）+ 1 条占位待替换。**`config/idle_material_pool.json`（真实生产素材池）
+  本轮未创建**——需要用户后续手动核实补充真实新闻/电影条目，这是本轮故意留空的部分。
+- **接入点**：[main.py](backend/app/main.py) `/behavior/evaluate` 路由,`idle_tick` 分支里
+  调用 `resolve_idle_experience_write(store, budget=budget, router=get_provider_router())`，
+  与 `proactive_check` 分支调 `resolve_proactive_opener` 完全对称的编排位置。
+- **测试**：新建 [test_idle_experience.py](backend/tests/test_idle_experience.py)（10 个用例：
+  enabled开关/日配额/最小间隔/素材反重复挑选/空池兜底/端到端写入成功/端到端门控拦截/空池端到端）。
+- **验证结果**：`pytest backend/tests/test_idle_experience.py` 10 passed；全量
+  `pytest backend/` → **545 passed**（P9-P1 验证后基线 535，本轮 +10）。
+- **未 commit**——本轮结束后建议先 review diff 再决定是否落 master。
+
+## 上一轮已完成（2026-06-22，第四十一轮）
+
+### P9-P1 真机验证（PASS，无代码改动）
+- 用 `/architect` 拆出验证步骤后，通过 `POST /behavior/evaluate`
+  （`event_type=proactive_check`, `force_proactive=true`）实际触发三档（无聊/想念/赌气），
+  人工核对开场白语感 + 反重复指纹机制。
+- **验证方法**：临时改写 `relationship_state.closeness`/`last_meaningful_interaction_at`
+  + `mood_state.metadata_json` 里的频率门控字段（`proactive_pending_since`/
+  `proactive_daily_count`/`proactive_llm_daily_count`）来模拟三档墙钟状态、绕开测试期间的
+  发送频率限制。测试前先备份数据库
+  （`data/backups/cyber_companion_pre_p9p1_verify_20260622_175104.db`），测完已用该备份
+  **完整还原** `data/cyber_companion.db`，无残留改动。
+- **结论 PASS**：
+  - 三档语气递进清晰——无聊（平铺提醒）→ 想念（带埋怨"别再把我当消遣了好吗"）→
+    赌气（"终于舍得来了啊？""笨蛋/混蛋/懒鬼"，傲娇但黏着，**未出现**任何冷淡/疏远用词）。
+  - 反重复指纹按 `(kind, tier)` 正确记录、FIFO 容量钳制正常；同一指纹连续命中 4 次
+    （`commitment_followup:sulk` x4）时系统**仍正常发送**且每次记录，未阻断/未强制换 intent，
+    与设计文档「重合时静默放行但记录」一致。
+- **已知限制**：本次只测到 `commitment_followup` 一种 intent（被一条真实
+  `stable_profile` 记忆——id=19/453/463，关于用户"面试"相关依赖描述——持续判定为最高优先级
+  压过其他 3 类 intent），未覆盖 `check_in`/`memory_callback`/`due_reminder` 轮替。要测需改
+  `memories` 表正文（侵入性更高，涉及"灵魂"层数据），本轮判断不做。
+- 完整报告：[docs/P9_P1_VERIFICATION.md](P9_P1_VERIFICATION.md)（新建，已落盘）。
+
+## 上一轮已完成（2026-06-22，第四十轮）
 
 ### 0. 纠正 HANDOFF 历史误报 + 落地遗留未提交改动
 - 发现第三十九轮 HANDOFF 写的「P9-P0 本轮未 commit」是**过期错误描述**——P9-P0 实际早已在
@@ -56,53 +119,53 @@
 - 4 个 commit 均已落 master：`039ea9d` `0d228c0` `aca291d` `8f4ba8e`。
 
 ## 当前未完成
-- **P9-P2**（"她有自己的生活"——idle 低频生成"盒子里的念头/经历"写入记忆，新增 `share` intent
-  取用之）。⚠️ 可能新增 `idle_experience` memory type，撞 CLAUDE.md「改 schema 须更新
-  `docs/MEMORY_DESIGN.md`」，启动前先决策复用现有 memory type vs 新增。
+- **P9-P2-B**（share intent 接入 `proactive_reason.py`，从未消耗的 `idle_experience` 记忆里挑
+  一条作为主动找你的开场素材；用户已确认 share 优先级排得**比较高**，具体顺序需在实施时与现有
+  4 类 intent 的优先级表一起定）。依赖 P9-P2-A（已完成，未 commit）。
+- **P9-P2-C**（素材源从白名单升级为真联网，接口已在 `idle_experience.py:load_material_pool()`
+  留好可插拔点；非阻塞，P2-A/B 跑稳后再做）。
+- **`config/idle_material_pool.json` 真实素材**——P2-A 只建了 `.example.json` 模板（1 条真实
+  占位+1 条待替换占位），生产用的真实素材池需要用户后续手动核实补充。
 - **P9-D**（投递层 epic：server scheduler + 推送，突破 poll-only），排在灵魂层 P0/P1/P2 之后。
 - **P11**（回复语言切换玩法，轻量，可穿插）。
-- **P9-P1 真机验证未做**——本轮只验证了单测，实际 proactive 开场白在赌气/想念档下听感如何、
-  指纹去重是否真的减少了"套路感"，都还没真机听过。下一次有 proactive 真实触发时建议留意。
+- **P9-P1 验证的已知限制**——只测到 `commitment_followup` 一种 intent（见上「本轮已完成」），
+  未覆盖 `check_in`/`memory_callback`/`due_reminder` 轮替。非阻塞，启动 P9-P2 不依赖这个补测；
+  若想补，需改 `memories` 表正文伪造条件，留作后续可选项。
 
 ## 已知 bug / 风险
 - 沿用既有风险（详见 `docs/TASK_QUEUE.md` P10 节）：cost 模块不认 openrouter 模型、R8
   （`VIKING_MEMORY_API_KEY` 建议轮换）、R4（`experiments/`废弃）、标签器质量「时好时坏」需
   `--repeats N` 统计判断、04（揶揄+心软）场景统计基线与真机听感矛盾未深究。
 - 「主动找你」当前仍是 poll-only（`useBehaviorTicks.ts` 驱动，tab 关了不发）——P9-D 才解决。
-- **本轮新增候选项（非 bug，记入 TASK_QUEUE 后续讨论名单）**：`mood.boredom`/`mood.loneliness`
-  本身仍按 idle tick 数累积、与现实时间脱钩（与 `longing.py` 的墙钟双轨并存）。P9-P1 已绕开此
-  问题（tier 直接读 `longing.py` 的墙钟），但若要让"活人感"延伸到实时对话语气本身（不只是
-  proactive 开场白），需要更彻底重构 mood 本身的累积方式——评估过 blast radius 会牵动
-  `tone.py`，已记为独立候选任务，不在本轮 scope。
+- `mood.boredom`/`mood.loneliness` 本身仍按 idle tick 数累积、与现实时间脱钩（与 `longing.py`
+  的墙钟双轨并存）。P9-P1 已绕开此问题（tier 直接读 `longing.py` 的墙钟），但若要让"活人感"
+  延伸到实时对话语气本身（不只是 proactive 开场白），需要更彻底重构 mood 本身的累积方式——
+  评估过 blast radius 会牵动 `tone.py`，已记为独立候选任务，不在近期 scope。
 
-## 推荐下一个最小任务：先真机验证 P9-P1，再决定是否启动 P9-P2
-- **理由**：P9-P0/P9-P1 都只验证过单测，从未真机看过 proactive 开场白长什么样。继续往
-  P9-P2（更大的"经历生成"功能）叠加之前，先确认地基（tier 语气+反重复）真的有效，避免在
-  有缺陷的基础上继续盖楼。
-- **怎么验证**：可用 `force_proactive=True` 触发几次（不同 closeness/silence 组合），肉眼看
-  4 类 intent 在 3 个 tier 下生成的开场白是否真的有"无聊/想念/赌气"的语感区分，赌气是否真的
-  传达出"傲娇但黏着"而非冷淡。
-- **若验证 PASS**，下一步是 **P9-P2**（要先读 `docs/TASK_QUEUE.md` P9 拆解节，决定
-  `idle_experience` memory type 的 schema 问题怎么处理，再启动 `/architect`）。
+## 推荐下一个最小任务：先 commit P9-P2-A，再启动 P9-P2-B
+- **理由**：P2-A 机制已验证（10 个单测+全量545 pytest 绿），是 P2-B 的依赖；建议先 review diff
+  落 master，再开 P2-B（share intent），避免未 commit 的改动累积。
+- **启动 P9-P2-B 前先做**：读 `backend/app/behavior/idle_experience.py`
+  （`resolve_idle_experience_write` 的编排模式）+ `backend/app/behavior/proactive_reason.py`
+  （4 类现有 intent 优先级表，决定 share 插入位置）。
 
 ## 下一步只需读取
 - **永远先读**：`docs/HANDOFF.md`（本文件）+ `docs/TASK_QUEUE.md`（P9 拆解节）
-- **真机验证**：`backend/app/behavior/proactive_opener.py`、`engine.py` 的
-  `_evaluate_proactive_check`（`force_proactive` 参数用法）
-- **若启动 P9-P2**：再额外读 `backend/app/memory/database.py`（memory type 现状）、
-  `docs/MEMORY_DESIGN.md`
+- **启动 P9-P2-B**：`backend/app/behavior/idle_experience.py`、
+  `backend/app/behavior/proactive_reason.py`、`backend/app/behavior/proactive_opener.py`
+  （语气块写法参考）
 
 ## 下一步不要读取（省上下文）
 - ❌ `docs/SESSION_LOG.md`（历史日志，不维护）
 - ❌ `reference/01.md…15.md` 全文（用 `reference/SYNTHESIS.md` 代替）
 - ❌ `experiments/`（废弃 spike，本轮确认过故意不提交）
 - ❌ 全仓库扫描 / 与当前任务无关的模块（TTS/标签器/RTC/前端 UI 都不碰）
-- ❌ 不要重新讨论 P9-P0/P9-P1 的设计是否够好——单测已验证逻辑正确，除非真机验证发现具体问题
+- ❌ 不要重新讨论 P9-P0/P9-P1 的设计是否够好——已真机验证 PASS，除非新发现具体问题
 
 ## 沿用的既有未完成项（本轮未碰）
-- **P9-P2 / P9-D**（见 `docs/TASK_QUEUE.md` P9 拆解节）
+- **P9-D**（见 `docs/TASK_QUEUE.md` P9 拆解节）
 - **P11**（回复语言切换，轻量玩法）；**Obsidian 链接**（后续讨论名单）
-- **mood 墙钟化重构**（本轮新增候选，见上「已知 bug/风险」）
+- **mood 墙钟化重构**（见上「已知 bug/风险」）
 - **情绪识别旁路**（Hume prosody 当传感器，第二档，先 spike）
 - **TTS 音色**已落地为「慵懒偏低音」`ef5c98bd…`（本轮已 commit 进 `config/tts.json`）
 - P8-C 语音 Pipecat 两阶段路径、RTC character_manifest 同步、信笺 UI P2、R11（搁置）、world brain 天气 API

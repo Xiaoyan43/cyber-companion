@@ -49,6 +49,12 @@ class BudgetConfig:
     proactive_llm: bool = True
     proactive_max_output_tokens: int = 80
     proactive_llm_daily_max: int = 5
+    # Idle experience writes (P9-P2-A): low-frequency, no message sent, just memory.
+    idle_experience_enabled: bool = True
+    idle_experience_min_gap_hours: float = 6.0
+    idle_experience_daily_max: int = 4
+    idle_experience_max_output_tokens: int = 160
+    idle_experience_fingerprint_history_size: int = 4
 
 
 def _config_dir() -> Path:
@@ -107,6 +113,13 @@ def load_budget_config(config_dir: Path | None = None) -> BudgetConfig:
         proactive_llm=bool(payload.get("proactive_llm", True)),
         proactive_max_output_tokens=int(payload.get("proactive_max_output_tokens", 80)),
         proactive_llm_daily_max=int(payload.get("proactive_llm_daily_max", 5)),
+        idle_experience_enabled=bool(payload.get("idle_experience_enabled", True)),
+        idle_experience_min_gap_hours=float(payload.get("idle_experience_min_gap_hours", 6.0)),
+        idle_experience_daily_max=int(payload.get("idle_experience_daily_max", 4)),
+        idle_experience_max_output_tokens=int(payload.get("idle_experience_max_output_tokens", 160)),
+        idle_experience_fingerprint_history_size=int(
+            payload.get("idle_experience_fingerprint_history_size", 4)
+        ),
     )
 
 

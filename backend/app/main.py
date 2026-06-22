@@ -11,6 +11,7 @@ from starlette.responses import Response
 
 from backend.app.behavior.completion import build_budget_block_completion, build_local_completion
 from backend.app.behavior.engine import evaluate_behavior
+from backend.app.behavior.idle_experience import resolve_idle_experience_write
 from backend.app.behavior.proactive_opener import resolve_proactive_opener
 from backend.app.behavior.kernel import apply_signals_to_kernel
 from backend.app.behavior.parser import SignalStreamFilter, parse_structured_assistant_response
@@ -702,6 +703,8 @@ def evaluate_behavior_route(request: BehaviorEvaluateRequest) -> BehaviorDecisio
             budget=budget,
             router=get_provider_router(),
         )
+    if request.event_type == "idle_tick":
+        resolve_idle_experience_write(store, budget=budget, router=get_provider_router())
     saved_message_id: int | None = None
     if request.event_type in {"idle_tick", "proactive_check"} and should_persist_local_behavior_line(
         decision,

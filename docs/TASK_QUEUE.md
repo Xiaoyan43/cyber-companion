@@ -1,6 +1,17 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-22（第四十二轮）**：**P9-P2-A（idle_experience 写入机制）已完成，未 commit**——
+> 新增 `idle_experience` memory type（不进 `FACTUAL_MEMORY_TYPES`）；`resolve_idle_experience_write()`
+> 镜像 `resolve_proactive_opener()` 的路由层编排模式，零行改动 `engine.py`；节奏门控（日配额+最小
+> 间隔）+ 素材反重复指纹；LLM 生成严格约束在白名单素材池范围内（防编造），素材源接口可插拔，
+> 为后续升级真联网（P2-C）留好替换点。当前只有 `idle_material_pool.example.json` 模板，生产真实
+> 素材池待用户后续补充。545 pytest 全绿（535+10）。**下一步：先 review/commit 本轮 diff，再启动
+> P9-P2-B**（share intent）。详见 HANDOFF。
+> **2026-06-22（第四十一轮）**：**P9-P1 真机验证已完成，结论 PASS**——三档语气递进清晰，赌气档
+> 傲娇但黏着、无冷淡用词；反重复指纹按 `(kind,tier)` 记录、同指纹连续命中不阻断发送，与设计一致。
+> 已知限制：只测到 `commitment_followup` 一种 intent，未覆盖另外 3 类轮替（非阻塞）。完整报告见
+> `docs/P9_P1_VERIFICATION.md`。**下一步：启动 P9-P2**（"她有自己的生活"）。详见 HANDOFF。
 > **2026-06-22（第四十轮）**：**P9-P1（反重复 + 想念轨迹分档）已完成并 commit**——
 > commit `aca291d`（想念轨迹三档：无聊/想念/赌气，赌气门槛要求 closeness 够高，档位正交于
 > intent 上色全部 4 类 ProactiveReason）+ `8f4ba8e`（反重复指纹：`(kind,tier)` 组合 FIFO 存
@@ -512,12 +523,19 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 > - ~~**P9-P1**（small–medium）~~ ✅ **已完成（2026-06-22，第四十轮）**：反重复（`mood_state.metadata`
 >   存最近 K=4 条 `(kind,tier)` 指纹避重，commit `8f4ba8e`）+ 想念轨迹（`compute_longing_tier()`
 >   独立纯函数读墙钟 silence_hours，无聊→想念→赌气，赌气需 closeness≥0.6，**无淡漠**，正交于
->   intent 上色全部 4 类 ProactiveReason，commit `aca291d`）。535 pytest 全绿。**真机验证未做**，
->   下一步建议先验证再启动 P9-P2。详见 HANDOFF。
-> - **P9-P2**（medium，**真正动手再拆 P2-A/B/C**）：原则1「她有自己的生活」——idle_tick 低频生成"盒子里
->   的念头/经历"写入记忆（不说话）+ 新增 `share` intent 取用之。⚠️ 可能新增 `idle_experience` memory type
->   →撞 CLAUDE.md「改 schema 须更新 `docs/MEMORY_DESIGN.md`」，启动前先决策复用 vs 新增。**联网素材源
->   = P2-C 可插拔 adapter**（合并洞见：她 idle 刷到的东西经 share intent 冒出来），不进 P2 第一刀。
+>   intent 上色全部 4 类 ProactiveReason，commit `aca291d`）。535 pytest 全绿。
+> - ~~**P9-P1 真机验证**~~ ✅ **已完成（2026-06-22，第四十一轮），结论 PASS**：三档语气递进清晰
+>   （无聊→想念→赌气，赌气傲娇但黏着、无冷淡用词）；反重复指纹记录+不阻断行为符合设计。已知
+>   限制：只测到 `commitment_followup` 一种 intent。完整报告 `docs/P9_P1_VERIFICATION.md`。
+>   验证过程临时改写过 DB 数据，已用备份完整还原，无残留改动。详见 HANDOFF。
+> - ~~**P9-P2-A**（idle_experience 写入机制）~~ ✅ **已完成（2026-06-22，第四十二轮），未 commit**：
+>   新增 `idle_experience` memory type（不进 `FACTUAL_MEMORY_TYPES`）+ 节奏门控（日配额+最小间隔）
+>   + 白名单素材池防编造 + `resolve_idle_experience_write()` 镜像 `resolve_proactive_opener` 编排
+>   模式（零行改动 `engine.py`）。素材源接口可插拔，留给 P2-C 升级真联网。545 pytest 全绿。详见
+>   HANDOFF。
+> - **P9-P2-B**（small–medium）：新增 `share` intent 取用 `idle_experience` 记忆，接入
+>   `proactive_reason.py` 优先级表（用户已确认排序靠前，具体顺序实施时定）。
+> - **P9-P2-C**（待时机，非阻塞）：素材源从白名单升级为真联网，`load_material_pool()` 接口已留好。
 > - **P9-D（投递层 epic，灵魂层之后）**：D1 server 端 scheduler（后端自己的时钟，脱离前端 tab）→
 >   D2 持久消息线 + 内联回复 UX（messages 表已半成品）→ D3 推送（Web Push 可行；iOS PWA 弱，见
 >   「移动迁移」节，可能需薄原生壳）。这是"突破 poll-only"+微信通知式的实现载体。

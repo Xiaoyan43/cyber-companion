@@ -1,0 +1,19 @@
+{
+  "_comment": "Whitelist of real, verifiable material Boxi may reference when generating an idle_experience memory. Each entry must be fact-checked by a human before being added — the generator is instructed to stay within the given summary and never invent details beyond it. Copy this file to idle_material_pool.json and curate real entries; do not rely on the placeholders below for production content.",
+  "items": [
+    {
+      "id": "movie-blade-runner-2049",
+      "kind": "movie",
+      "title": "银翼杀手2049",
+      "summary": "2017年上映的科幻电影，《银翼杀手》续作。男主角K是一名银翼杀手，奉命追捕旧型号仿生人，调查中发现可能存在仿生人产下后代的线索，引出关于身份与人性的疑问。",
+      "source_note": "公开影视资料，概括性剧情简介，未涉及具体台词或细节情节"
+    },
+    {
+      "id": "news-example-placeholder",
+      "kind": "news",
+      "title": "(占位示例，需替换为真实新闻)",
+      "summary": "(占位示例：请替换为某条已核实真实新闻的摘要，不要保留此占位内容用于生产)",
+      "source_note": "占位"
+    }
+  ]
+}
