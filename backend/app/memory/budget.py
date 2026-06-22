@@ -55,6 +55,8 @@ class BudgetConfig:
     idle_experience_daily_max: int = 4
     idle_experience_max_output_tokens: int = 160
     idle_experience_fingerprint_history_size: int = 4
+    # Share intent (P9-P2-B): recent idle_experience memories used as proactive openers.
+    share_fingerprint_history_size: int = 4
 
 
 def _config_dir() -> Path:
@@ -120,6 +122,7 @@ def load_budget_config(config_dir: Path | None = None) -> BudgetConfig:
         idle_experience_fingerprint_history_size=int(
             payload.get("idle_experience_fingerprint_history_size", 4)
         ),
+        share_fingerprint_history_size=int(payload.get("share_fingerprint_history_size", 4)),
     )
 
 

@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 ProactiveReasonKind = Literal[
     "due_reminder",
     "commitment_followup",
+    "share",
     "memory_callback",
     "check_in",
 ]
@@ -32,6 +33,32 @@ _CALLBACK_MEMORY_TYPES = (
 _RECENT_DAYS = 14
 _CALLBACK_IMPORTANCE_MIN = 0.65
 _COMMITMENT_IMPORTANCE_MIN = 0.4
+
+_SHARE_MEMORY_TYPE = "idle_experience"
+_SHARE_FINGERPRINT_KEY = "share_recent_memory_ids"
+
+
+def is_share_repeated(metadata: dict[str, object], memory_id: int) -> bool:
+    """True if this idle_experience memory was used as a share opener recently."""
+    history = metadata.get(_SHARE_FINGERPRINT_KEY)
+    if not isinstance(history, list):
+        return False
+    return memory_id in history
+
+
+def record_share_fingerprint(
+    metadata: dict[str, object],
+    memory_id: int,
+    *,
+    max_size: int,
+) -> dict[str, object]:
+    updated = dict(metadata)
+    history = updated.get(_SHARE_FINGERPRINT_KEY)
+    history_list = list(history) if isinstance(history, list) else []
+    history_list.append(memory_id)
+    cap = max(1, max_size)
+    updated[_SHARE_FINGERPRINT_KEY] = history_list[-cap:]
+    return updated
 
 
 LongingTier = Literal["bored", "longing", "sulk"]
@@ -128,6 +155,26 @@ def _pick_commitment_followup(store: MemoryStore, *, now: datetime) -> Proactive
     )
 
 
+def _pick_share(store: MemoryStore, *, now: datetime) -> ProactiveReason | None:
+    metadata = store.get_mood_state().metadata
+    candidates = [
+        memory
+        for memory in store.list_memories(type=_SHARE_MEMORY_TYPE, limit=50)
+        if not is_share_repeated(metadata, memory.id)
+    ]
+    if not candidates:
+        return None
+
+    chosen = candidates[0]  # already ordered newest-first by list_memories
+    return ProactiveReason(
+        kind="share",
+        avatar_state="happy",
+        summary="想分享的小事",
+        detail=chosen.content,
+        memory_id=chosen.id,
+    )
+
+
 def _pick_memory_callback(store: MemoryStore, *, now: datetime) -> ProactiveReason | None:
     now_iso = now.astimezone(timezone.utc).isoformat()
     candidates = [
@@ -168,6 +215,10 @@ def pick_proactive_reason(
     if commitment is not None:
         return replace(commitment, longing_tier=longing_tier)
 
+    share = _pick_share(store, now=aware)
+    if share is not None:
+        return replace(share, longing_tier=longing_tier)
+
     callback = _pick_memory_callback(store, now=aware)
     if callback is not None:
         return replace(callback, longing_tier=longing_tier)
@@ -192,6 +243,8 @@ def fallback_line_for_reason(reason: ProactiveReason) -> str:
         return "你说过的那件事呢？别又拖没了。"
     if reason.kind == "memory_callback":
         return "突然想到你之前说的那档子事。还在吗？"
+    if reason.kind == "share":
+        return "刚刚自己瞎想了点事，想跟你说说。"
     return proactive_checkin_line()
 
 
@@ -207,6 +260,14 @@ def format_reason_block(reason: ProactiveReason) -> str:
         block = (
             "[Proactive reason: commitment / follow-up]\n"
             f"context={reason.detail}"
+        )
+    elif reason.kind == "share":
+        block = (
+            "[Proactive reason: share — something she noticed on her own]\n"
+            f"her_experience={reason.detail}\n"
+            "This is HER own idle moment, not a fact about the user. Bring it up like "
+            "she genuinely wants to tell the user about it — not a report, not asking "
+            "for permission."
         )
     elif reason.kind == "memory_callback":
         block = (

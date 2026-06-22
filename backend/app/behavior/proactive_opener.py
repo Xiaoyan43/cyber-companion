@@ -7,6 +7,7 @@ from backend.app.behavior.proactive_reason import (
     ProactiveReason,
     fallback_line_for_reason,
     format_reason_block,
+    record_share_fingerprint,
 )
 from backend.app.behavior.types import BehaviorDecision
 from backend.app.memory.budget import BudgetConfig
@@ -225,6 +226,12 @@ def resolve_proactive_opener(
         reason,
         max_size=budget.proactive_fingerprint_history_size,
     )
+    if reason.kind == "share" and reason.memory_id is not None:
+        updated_metadata = record_share_fingerprint(
+            updated_metadata,
+            reason.memory_id,
+            max_size=budget.share_fingerprint_history_size,
+        )
     store.update_mood_state(metadata=updated_metadata)
     return replace(
         decision,

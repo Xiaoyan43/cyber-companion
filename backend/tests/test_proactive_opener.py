@@ -113,7 +113,7 @@ def test_reason_picker_default_tier_is_bored(store: MemoryStore) -> None:
 @pytest.mark.parametrize("tier", ["bored", "longing", "sulk"])
 @pytest.mark.parametrize(
     "kind",
-    ["due_reminder", "commitment_followup", "memory_callback", "check_in"],
+    ["due_reminder", "commitment_followup", "share", "memory_callback", "check_in"],
 )
 def test_format_reason_block_includes_tier_voice_for_every_kind(kind: str, tier: str) -> None:
     reason = ProactiveReason(
@@ -134,6 +134,7 @@ def test_format_reason_block_includes_tier_voice_for_every_kind(kind: str, tier:
     [
         ("due_reminder", "due reminder"),
         ("commitment_followup", "commitment"),
+        ("share", "share"),
         ("memory_callback", "memory callback"),
         ("check_in", "check-in"),
     ],
