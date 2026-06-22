@@ -28,7 +28,7 @@
     "fish_audio": {
       "enabled": true,
       "model": "s2-pro",
-      "voice": "77f90d99141e4f9ba022c723555cc351",
+      "voice": "ef5c98bdc88845b7a4a4c7382179e5ea",
       "api_key_env": "FISH_AUDIO_API_KEY",
       "cloud": true
     }
