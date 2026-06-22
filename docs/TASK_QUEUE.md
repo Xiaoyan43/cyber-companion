@@ -434,9 +434,10 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - **下一步 = Phase 3 批量测试**（见下，已带 Phase 2 给的三项测试输入）。
 
 ### Phase 3 · 批量测试（优先级按用户真机反馈重排，详见 `docs/PIPECAT_AUDIT.md` 末节）
-- **🔴 最优先：判停过早（用户"每次还没说完就抢答"）**。**前置（零真机）= 读 `doubao_streaming_stt_service.py`
-  定位 Silero VAD(`stop_secs=0.4`) 还是 Doubao STT 自身断句先 finalize**；再真机调静音窗口 env
-  （`CYBER_COMPANION_VOICE_VAD_STOP_SECS` / `..._ASR_END_WINDOW_MS`，纯 env 零代码）验证。
+- **✅ 已修：判停过早（用户"每次还没说完就抢答"）**。根因 = Doubao STT `end_window_size=300ms` 太短
+  （非 Silero VAD）→ `DEFAULT_ASR_END_WINDOW_MS` 改 **800**，真机验证通过（详见 `PIPECAT_AUDIT.md` §C）。
+  **残留**：纯静音窗口有天花板（长停顿仍被切），根治 = **语义判停**（火山 AIVAD 在 RTC-AIGC 产品、非我们 BigASR
+  流式）→ **归未来 ASR 选型头号标准**（用户已表示后面换最合适的 ASR）。
 - ② 抢话（bot 被打断，审计 D）：测 bot 逻辑停说→实际播完间隔，定 `resume_guard_ms`。**注意 C/D 是两回事**。
 - ③ Fish 调参（temperature/prosody，审计 B-2）；④ 复用 `_LatencySpikeLogger` + `enable_metrics`。
 - **做真机测试前必读**「Pipecat 真机测试隔离规范」（改 `.env`，不能用命令行环境变量，否则污染生产库）。

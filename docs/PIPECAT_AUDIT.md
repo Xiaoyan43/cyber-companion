@@ -74,12 +74,15 @@ transport.input()
 - **⚠️ 设计耦合（同一个旋钮管两件事）**：`CYBER_COMPANION_VOICE_ASR_END_WINDOW_MS` **同时**接进
   ① Doubao STT `end_window_size`（`stt_service.py:80`）和 ② half-duplex `resume_guard_ms`（`run_voice.py:282`）。
   调大它会**同时**影响抢答(C) 和 抢话(D) 的窗口——方向一致（都想要更长）但理想值未必相同。
-- **改动建议**：
-  1. **便宜旋钮（Phase 3 真机，纯 env 零代码）**：把 `CYBER_COMPANION_VOICE_ASR_END_WINDOW_MS` 从 300ms 调大
-     （试 700–1200ms），真机听抢答是否消失、响应延迟是否可接受。
-  2. **小重构（视真机结果）**：若 C/D 理想值冲突，把这个 env 拆成两个（Doubao endpointing 一个、resume_guard 一个），
-     解开耦合后各自调。
-  3. **稳健（大改，暂不做）**：接 Smart Turn 语义判停，需引入 aggregator，与"无 Pipecat context"设计冲突。
+- **✅ 已落地（2026-06-23 真机验证 + 锁默认值）**：`DEFAULT_ASR_END_WINDOW_MS` 300→**800**
+  （`voice_config.py`，test 同步更新）。用户真机确认"正常说话不再被打断、延迟可接受"。
+- **⚠️ 残留 + 根治方向（用户已认可，归未来 ASR 选型）**：800 是纯静音窗口，**有天花板**——用户确认
+  "停顿稍久仍会被切"。根治 = **语义判停**。火山生态里**有** `ASRConfig.VADConfig.AIVAD`（LLM 判语义完整性 +
+  静音双重判断，限时免费公测，见 `reference/14.md:1111`），但它在 **RTC-AIGC/Dialog 产品线**上，**不是**我们
+  Pipecat 现用的 BigASR 流式端点（`sauc/bigmodel_async` 只有 `end_window_size` 纯静音窗口）。
+  → **「支持语义判停」应作为后续 ASR 选型的头号标准**（用户已表示后面会换最合适的 ASR）。
+- **其它选项（暂不做）**：① 若 C/D 理想值冲突再把耦合 env 拆两个；② 接 Pipecat Smart Turn（大改，与"无 Pipecat
+  context"设计冲突，且不如直接选支持 AIVAD 的 ASR 划算）。
 
 ## D. half-duplex 静麦（综述 §5/§7/§12-4）
 - **现状**（`half_duplex_mute_processor.py`）：**复用 Pipecat 官方 `AlwaysUserMuteStrategy`
@@ -123,7 +126,7 @@ transport.input()
 | 拓扑 | ✅ | 符合官方 cascaded，brain 占 LLM slot，无 context aggregator 是有意设计 |
 | A PipelineParams | ✅ | 干净，无失效字段，metrics 开，采样率一致 |
 | B Fish Settings | 🟡+🔴 | latency 默认 balanced 安全；`low` 选项是透传风险（Phase 5）；prosody/temp 可调（Phase 3） |
-| C VAD/turn | ✅+🔴 | **用户真机确认"还没说完就抢答"=判停过早，已提级 Phase 3 优先**；先查 Silero VAD vs Doubao STT 谁先 finalize |
+| C VAD/turn | ✅ 已修 | 抢答根因=Doubao `end_window=300ms` 太短→**默认改 800，真机验证通过**；残留长停顿天花板=语义判停，归未来 ASR 选型 |
 | D half-duplex | ✅+🟡 | 复用官方 strategy（修正综述 §7）；resume_guard 基于逻辑停说=抢话根因 |
 | E 文本聚合 | ✅ | 默认 SENTENCE 即最优基线，Phase 4 双 LLM 沿用 |
 | F P13 | — | 根因已定位，Phase 5 修 |

@@ -10,7 +10,7 @@ def test_voice_config_defaults(monkeypatch) -> None:
     monkeypatch.delenv(voice_config.ENV_HALF_DUPLEX, raising=False)
 
     assert voice_config.load_vad_stop_secs() == 0.4
-    assert voice_config.load_asr_end_window_ms() == 300
+    assert voice_config.load_asr_end_window_ms() == 800
     assert voice_config.load_voice_max_tokens() == 200
     assert voice_config.load_half_duplex_enabled() is True
 

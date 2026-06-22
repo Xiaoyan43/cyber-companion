@@ -21,7 +21,13 @@ def _env_int(name: str, default: int) -> int:
 
 # Turn-finalize (conservative defaults — dial back via env if endpointing clips).
 DEFAULT_VAD_STOP_SECS = 0.4
-DEFAULT_ASR_END_WINDOW_MS = 300
+# Doubao BigASR server-side endpointing silence window (also reused as half-duplex
+# resume_guard via run_voice). 300ms cut users off mid-sentence on a normal breath
+# (P14 Phase 3, user-confirmed); 800ms validated real-machine 2026-06-23. Note: pure
+# silence window has a ceiling — a long thinking pause still trips it; semantic
+# endpointing (Doubao AIVAD, on the RTC-AIGC product, not BigASR) is the real fix,
+# deferred to a future ASR-selection decision.
+DEFAULT_ASR_END_WINDOW_MS = 800
 
 # Spoken reply cap (room for ~1–2 sentences + signals trailer).
 DEFAULT_VOICE_MAX_TOKENS = 200

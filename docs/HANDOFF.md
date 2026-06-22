@@ -41,8 +41,13 @@ P1（写 `docs/PIPECAT_REFERENCE.md` 综述）**，详见 `docs/TASK_QUEUE.md` P
   Phase 3 最优先**。**根因已查清（本轮零真机代码核实，写进审计 §C）**：brain 触发于 STT 最终 `TranscriptionFrame`，
   它由 **Doubao STT 服务端 endpointing** 发出（`has_definite`），窗口 = `end_window_size` =
   **`CYBER_COMPANION_VOICE_ASR_END_WINDOW_MS`，默认仅 300ms**——一次换气就超 300ms 被判说完。
-  **Silero VAD `stop_secs=0.4` 不是主因**。**便宜解（纯 env 零代码）= 把该 env 调到 700–1200ms 真机试**。
-  ⚠️ **耦合**：这个 env 同时管 Doubao endpointing 和 half-duplex resume_guard（同一旋钮影响 C 和 D），必要时拆成两个。
+  **Silero VAD `stop_secs=0.4` 不是主因**。
+  - **✅ 已修复并真机验证**：`DEFAULT_ASR_END_WINDOW_MS` 300→**800**（`voice_config.py` + test 同步，4 passed）。
+    用户真机确认"正常说话不再被打断、延迟可接受"。`.env` 实验配置已清理还原（DATA_DIR 改回 `./data`）。
+  - **⚠️ 残留（用户认可，归未来 ASR 选型）**：800 是纯静音窗口有天花板——"停顿稍久仍会被切"。根治=**语义判停**。
+    查清：火山 **有** `ASRConfig.VADConfig.AIVAD`（LLM 判语义完整性+静音双重判断，限免公测，`reference/14.md:1111`），
+    但绑在 **RTC-AIGC/Dialog 产品**上，**不是**我们 BigASR 流式端点（`sauc` 只有纯静音窗口）。
+    → **「支持语义判停」= 后续 ASR 选型头号标准**（用户已表示后面换最合适的 ASR）。
 - **症状 2：「latency 最高音质档用不了」** = **P13**（`normal` 第二轮起失声）。用户确认最高音质暂不可用，
   必须停 `balanced`，等 Phase 5 修。
 - ⚠️ **别混淆 C 与 D**：C = **用户说话**被过早判停打断（抢答）；D = **bot 说话**被过早解除静麦（抢话）。两个不同问题。
@@ -196,8 +201,12 @@ P1（写 `docs/PIPECAT_REFERENCE.md` 综述）**，详见 `docs/TASK_QUEUE.md` P
   `reference-server.pipecat.ai/`（104 页）、`fish.audio/`（2 页）、`_MANIFEST.md`、`_maps/`（map JSON + 下载日志）。
 - **[docs/PIPECAT_REFERENCE.md](PIPECAT_REFERENCE.md)（新增，进 git，未 commit）**：P1 综述，13 节；本轮 §7 回填了 Phase 2 的修正。
 - **[docs/PIPECAT_AUDIT.md](PIPECAT_AUDIT.md)（新增，进 git，未 commit）**：Phase 2 审计报告，A–F 六项 + 结论汇总。
-- [docs/TASK_QUEUE.md](TASK_QUEUE.md)：Phase 1（P0+P1）+ Phase 2 均标 ✅ 完成，指向 Phase 3。
-- [docs/HANDOFF.md](HANDOFF.md)：滚到第四十八轮，Phase 1+2 完成，指向 P14 Phase 3。
+- [docs/TASK_QUEUE.md](TASK_QUEUE.md)：Phase 1（P0+P1）+ Phase 2 均标 ✅ 完成；Phase 3 抢答项 ✅ 已修。
+- [docs/HANDOFF.md](HANDOFF.md)：滚到第四十八轮，Phase 1+2 完成 + Phase 3 抢答修复。
+- **（已 commit `29d46a2`：上述 4 份 doc 的 Phase 1+2 版本）**
+- **本轮 commit 之后的新改动（未 commit）**：`backend/realtime/voice_config.py`（`DEFAULT_ASR_END_WINDOW_MS`
+  300→800，抢答修复）+ `backend/tests/test_voice_config.py`（断言 300→800，4 passed）+ 本批 doc 再更新
+  （audit/handoff/taskqueue 记录 Phase 3 抢答结论）。`.env` 实验配置已还原（不进 git）。
 - **本轮零 `backend/` 代码改动**（纯落盘 + 文档）。working tree 里 `companion_brain_tag_eval.py` 等第四十五/
   四十六轮的改动仍未 commit（沿用既有"未 commit"状态，等用户决定何时一起提交）。
 
