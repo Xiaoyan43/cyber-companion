@@ -199,53 +199,58 @@ P1（写 `docs/PIPECAT_REFERENCE.md` 综述）**，详见 `docs/TASK_QUEUE.md` P
 ## 已修改文件（本轮，第四十八轮）
 - **`reference/pipecat/`（全部 gitignored，不进 git）**：新增 `docs.pipecat.ai/`（llms-full.txt + llms.txt）、
   `reference-server.pipecat.ai/`（104 页）、`fish.audio/`（2 页）、`_MANIFEST.md`、`_maps/`（map JSON + 下载日志）。
-- **[docs/PIPECAT_REFERENCE.md](PIPECAT_REFERENCE.md)（新增，进 git，未 commit）**：P1 综述，13 节；本轮 §7 回填了 Phase 2 的修正。
-- **[docs/PIPECAT_AUDIT.md](PIPECAT_AUDIT.md)（新增，进 git，未 commit）**：Phase 2 审计报告，A–F 六项 + 结论汇总。
-- [docs/TASK_QUEUE.md](TASK_QUEUE.md)：Phase 1（P0+P1）+ Phase 2 均标 ✅ 完成；Phase 3 抢答项 ✅ 已修。
-- [docs/HANDOFF.md](HANDOFF.md)：滚到第四十八轮，Phase 1+2 完成 + Phase 3 抢答修复。
-- **（已 commit `29d46a2`：上述 4 份 doc 的 Phase 1+2 版本）**
-- **本轮 commit 之后的新改动（未 commit）**：`backend/realtime/voice_config.py`（`DEFAULT_ASR_END_WINDOW_MS`
-  300→800，抢答修复）+ `backend/tests/test_voice_config.py`（断言 300→800，4 passed）+ 本批 doc 再更新
-  （audit/handoff/taskqueue 记录 Phase 3 抢答结论）。`.env` 实验配置已还原（不进 git）。
-- **本轮零 `backend/` 代码改动**（纯落盘 + 文档）。working tree 里 `companion_brain_tag_eval.py` 等第四十五/
-  四十六轮的改动仍未 commit（沿用既有"未 commit"状态，等用户决定何时一起提交）。
+- **[docs/PIPECAT_REFERENCE.md](PIPECAT_REFERENCE.md)（新增）**：P1 综述，13 节；§7 回填了 Phase 2 修正。
+- **[docs/PIPECAT_AUDIT.md](PIPECAT_AUDIT.md)（新增）**：Phase 2 审计，A–F 六项 + Phase 3 抢答结论。
+- `backend/realtime/voice_config.py`：`DEFAULT_ASR_END_WINDOW_MS` 300→800（抢答修复）+ `test_voice_config.py` 断言同步（4 passed）。
+- [docs/TASK_QUEUE.md](TASK_QUEUE.md) + [docs/HANDOFF.md](HANDOFF.md)：滚到第四十八轮，Phase 1+2 完成 + Phase 3 抢答修复。
+- **本轮两个 commit，P14 改动已全部落 git**：
+  - `29d46a2` docs(pipecat): Phase 1+2 综述 + 审计
+  - `8b576c1` fix(voice): 抢答修复 ASR end_window 300→800（真机验证）
+- **未 commit 残留（非本轮产物，沿用既有状态）**：`.gitignore`、`backend/app/tts/fish_audio.py`、
+  `backend/realtime/run_voice.py`、`backend/tests/test_tts.py`、`companion_brain_tag_eval.py` 等第四十五/四十六轮
+  遗留改动——**本轮提交时已刻意排除**，等用户决定何时一起提交。`.env` 实验配置已还原（gitignored，不进 git）。
 
-## 当前未完成
-- **P14 整个 epic 未开工**——只立项 + 拆 phase。下一步 = Phase 1 文档落盘。
-- **P13 修复**（排进 P14 Phase 5）：根因已较清晰（库级 audio-context 竞态，见 P14「关键事实 #3」），
-  待 Phase 1/2 把 Pipecat 库吃透后再定是改调用方式还是 subclass/上报上游。
-- **双 LLM 两阶段拆分**（原 P8-C，吸收进 P14 Phase 4）——形态待 Phase 2 审计后定。
-- **`run_voice.py:103` 允许 `low` 但官方 service 不支持**（P14「关键事实 #2」）——Phase 5 一起处理。
-- **"抢话"问题未修复**——只诊断了根因，用户要求暂不改代码。
+## 当前未完成（P14 进度：5 phase 中 Phase 1+2 完成、Phase 3 部分完成）
+- **P14 Phase 3 剩余（都需真机 + 用户在场）**：① 抢话（bot 被打断，审计 D）量化 `resume_guard`；
+  ② Fish 调参（temperature/prosody，审计 B-2）。**抢答（C）已修并 commit**。
+- **P14 Phase 4 · 双 LLM 两阶段标签（未开工，epic 最大块）**：用综述 §2/§3 的原生路线
+  （`LLMTextProcessor`+`PatternPairAggregator` 插 brain↔tts），先讨论形态再 `/architect`。
+- **P14 Phase 5 · 修 P13 + `low`（未开工）**：P13 根因已定位（基类双游标竞态，综述 §5）；
+  `run_voice.py:103` 允许 `low` 但 Fish service 是未定义透传（综述 §4）——一起处理。**纯代码、无需真机。**
+- **"长停顿仍被切"残留**：纯静音窗口天花板，根治=语义判停（火山 AIVAD 在 RTC-AIGC 非 BigASR）→ 归未来 ASR 选型。
+- **沿用未完成项（非 P14）**：P11（回复语言+译文，scope 待 `/architect`）、P12（Hume prosody，仅立项）、
+  P9-P2-C（素材源真联网）、P9-D（投递层，用户暂缓）。
 - **P11 新需求未实施**——scope 待 `/architect`。
 - **P12（Hume prosody）未开工**——仅完成立项。
 - 沿用未完成项：**P9-P2-C**（素材源真联网）、**P9-D**（投递层 epic，用户已确认暂缓）。
 
 ## 已知 bug / 风险
-- **🐛 P13（新增，高优先级）**：见上方第3点，Pipecat TTS latency=normal 时多轮对话失声。
-- **⚠️ `run_voice.py` 的 `load_dotenv(override=True)` 是个隔离测试的坑**——任何脚本/命令行环境变量
-  覆盖 `CYBER_COMPANION_DATA_DIR` 都会被悄悄吃掉，必须直接改 `.env` 文件本身（见上方第4点的强制规范）。
-  下次做任何 Pipecat 真机测试前**必须**先确认这一点，否则会再次污染生产库。
-- **"抢话"架构性根因未修**（见上方第2点），不是阻断性 bug，但已确认是设计层面的问题，不是偶发。
+- **🐛 P13（高优先级，Phase 5）**：Pipecat TTS latency=normal 时多轮对话失声（用户已确认"最高音质用不了"）。
+  根因 = 基类双游标 audio-context 竞态，见综述 §5 / `PIPECAT_AUDIT.md` F。
+- **⚠️ `run_voice.py` 的 `load_dotenv(override=True)` 是个隔离测试的坑**——命令行环境变量覆盖
+  `CYBER_COMPANION_DATA_DIR` 会被悄悄吃掉，**必须直接改 `.env` 文件本身**（见 `docs/TASK_QUEUE.md`「Pipecat
+  真机测试隔离规范」）。做任何 Pipecat 真机测试前必须先确认，否则再次污染生产库。本轮抢答实验已正确隔离 + 还原。
+- **"抢话"（bot 被打断，审计 D）架构性根因未修**：half-duplex resume_guard 基于"逻辑停说"非"实际播完"，
+  非阻断性 bug 但是设计层面问题。注意与已修的"抢答"（C，用户被打断）是两回事。
 - 沿用既有风险（详见 `docs/TASK_QUEUE.md` P10 节）：cost 模块不认 openrouter 模型、R8、R4、标签器
   质量基线矛盾等。
 
 ## 推荐下一个最小任务
-- **P14 Phase 3 · 批量测试**（新 session 第一件事）：跑 `docs/PIPECAT_AUDIT.md`「给后续 phase 的交接」列的三项——
-  ① 真机量化"抢话"（测 bot 逻辑停说→实际播完间隔，定 `resume_guard_ms` 该多大）；② 对照
-  `FISH_AUDIO_REFERENCE.md` §7 试 `temperature`/`prosody`；③ 复用 `_LatencySpikeLogger` + `enable_metrics`。
-  **做真机测试前必读** `docs/TASK_QUEUE.md`「Pipecat 真机测试隔离规范」（**改 `.env` 文件，不能用命令行环境变量**，
-  否则污染生产库）。详见 `docs/TASK_QUEUE.md` P14 Phase 3 节。
-  **Phase 1（落盘+综述）+ Phase 2（审计）已全部完成。**
+- **首选 = P14 Phase 5 · 修 P13（normal 失声 + `low` 选项）**：用户痛感明确（"最高音质档用不了"），
+  且**纯代码、无需真机、无需用户在场**——最适合新 session 啃。根因已定位（综述 §5 双游标竞态）。
+  先读 `.venv/.../pipecat/services/tts_service.py`（`InterruptibleTTSService` 的 audio-context 生命周期）+
+  `pipecat/services/fish/tts.py` + `backend/realtime/run_voice.py`，定改调用 / subclass / 上报上游，顺带清理 `low` 选项。
+- **次选 = P14 Phase 4 · 双 LLM**（epic 最大块，但要先讨论形态，是设计任务不是 small diff）。
+- **需用户在场才做 = Phase 3 剩余**（抢话量化 + Fish 调参，真机）。先读「Pipecat 真机测试隔离规范」（改 `.env`，别用命令行环境变量）。
 
 ## 下一步只需读取
-- **永远先读**：`docs/HANDOFF.md`（本文件）+ `docs/TASK_QUEUE.md`（**P14 节**，尤其「关键事实」5 条）
-- **做 P14 Phase 3（批量测试）**：先读 `docs/PIPECAT_AUDIT.md`「给后续 phase 的交接」+ `docs/TASK_QUEUE.md`
-  「Pipecat 真机测试隔离规范」。Phase 1/2 已就绪，**不要重抓文档、不要重写综述/审计**；回溯原文去 `reference/pipecat/`。
-- **后续 Phase 5 修 P13 时再读**：`.venv/lib/python3.11/site-packages/pipecat/services/fish/tts.py` +
-  `pipecat/services/tts_service.py`（`InterruptibleTTSService` 的 context 生命周期）+ `backend/realtime/run_voice.py`
-- **若做真机测试**：先读 `docs/TASK_QUEUE.md` 「Pipecat 真机测试隔离规范」节，确认改 `.env` 而非
-  命令行环境变量
+- **永远先读**：`docs/HANDOFF.md`（本文件）+ `docs/TASK_QUEUE.md`（**P14 节**）+ `docs/PIPECAT_REFERENCE.md`
+  + `docs/PIPECAT_AUDIT.md`（Phase 2/3 结论）。回溯落盘原文去 `reference/pipecat/`（先读 `_MANIFEST.md`）。
+  **P14 文档已全部就绪，不要重抓、不要重写综述/审计。**
+- **做 Phase 5 修 P13（首选）**：读 `.venv/lib/python3.11/site-packages/pipecat/services/tts_service.py`
+  （`InterruptibleTTSService` 的 audio-context 生命周期）+ `pipecat/services/fish/tts.py` + `backend/realtime/run_voice.py`。
+- **做 Phase 4 双 LLM**：综述 §2/§3（`LLMTextProcessor`/`PatternPairAggregator`）+ `companion_brain.py` + `companion_brain_processor.py`。
+- **若做 Phase 3 真机**：先读 `docs/TASK_QUEUE.md`「Pipecat 真机测试隔离规范」，确认改 `.env` 而非命令行环境变量。
 
 ## 下一步不要读取（省上下文）
 - ❌ `docs/SESSION_LOG.md`（历史日志，不维护）
