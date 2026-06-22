@@ -10,6 +10,7 @@ from backend.app.behavior.engine import evaluate_behavior
 from backend.app.behavior.longing import (
     check_proactive_availability,
     compute_longing_intensity,
+    compute_longing_tier,
     poisson_fire_probability,
     should_fire_longing,
     snapshot_longing,
@@ -251,3 +252,69 @@ def test_proactive_check_misses_when_lambda_zero(store: MemoryStore) -> None:
     )
     assert decision.decision == "observe"
     assert decision.reason == "longing_poisson_miss"
+
+
+def _tier_budget(**overrides: object) -> BudgetConfig:
+    base = {
+        "longing_tier_bored_hours": 24.0,
+        "longing_tier_longing_hours": 48.0,
+        "longing_tier_sulk_hours": 72.0,
+        "longing_tier_sulk_closeness_min": 0.6,
+    }
+    base.update(overrides)
+    return BudgetConfig(**base)
+
+
+def test_longing_tier_no_interaction_history_is_bored() -> None:
+    tier = compute_longing_tier(
+        last_meaningful_interaction_at=None,
+        closeness=0.9,
+        budget=_tier_budget(),
+        now=datetime(2026, 6, 13, 12, 0, tzinfo=timezone.utc),
+    )
+    assert tier == "bored"
+
+
+def test_longing_tier_fresh_interaction_is_bored() -> None:
+    now = datetime(2026, 6, 13, 12, 0, tzinfo=timezone.utc)
+    tier = compute_longing_tier(
+        last_meaningful_interaction_at=(now - timedelta(hours=2)).isoformat(),
+        closeness=0.9,
+        budget=_tier_budget(),
+        now=now,
+    )
+    assert tier == "bored"
+
+
+def test_longing_tier_moderate_silence_is_longing() -> None:
+    now = datetime(2026, 6, 13, 12, 0, tzinfo=timezone.utc)
+    tier = compute_longing_tier(
+        last_meaningful_interaction_at=(now - timedelta(hours=50)).isoformat(),
+        closeness=0.9,
+        budget=_tier_budget(),
+        now=now,
+    )
+    assert tier == "longing"
+
+
+def test_longing_tier_high_silence_high_closeness_is_sulk() -> None:
+    now = datetime(2026, 6, 13, 12, 0, tzinfo=timezone.utc)
+    tier = compute_longing_tier(
+        last_meaningful_interaction_at=(now - timedelta(hours=100)).isoformat(),
+        closeness=0.9,
+        budget=_tier_budget(),
+        now=now,
+    )
+    assert tier == "sulk"
+
+
+def test_longing_tier_high_silence_low_closeness_caps_at_longing() -> None:
+    """Sulking requires closeness — distant relationships never reach 'sulk', no matter how long the silence."""
+    now = datetime(2026, 6, 13, 12, 0, tzinfo=timezone.utc)
+    tier = compute_longing_tier(
+        last_meaningful_interaction_at=(now - timedelta(hours=100)).isoformat(),
+        closeness=0.2,
+        budget=_tier_budget(),
+        now=now,
+    )
+    assert tier == "longing"

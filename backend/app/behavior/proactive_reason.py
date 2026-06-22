@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Literal
 
@@ -34,6 +34,25 @@ _CALLBACK_IMPORTANCE_MIN = 0.65
 _COMMITMENT_IMPORTANCE_MIN = 0.4
 
 
+LongingTier = Literal["bored", "longing", "sulk"]
+
+_TIER_VOICE_BLOCKS: dict[LongingTier, str] = {
+    "bored": (
+        "[Longing tier: bored]\nMild boredom — casual, low-stakes tone. Not urgent, not needy."
+    ),
+    "longing": (
+        "[Longing tier: longing]\nShe's been missing the user — warmer, a little wistful, "
+        "but still light. Not desperate, not accusatory."
+    ),
+    "sulk": (
+        "[Longing tier: sulk]\nShe's sulking — sharp, a bit prickly, classic 傲娇 (won't admit "
+        "she waited, but obviously did). The line should land on relief that the user is "
+        "finally here — NOT coldness, NOT indifference, NOT withdrawal. Sulking is still "
+        "wanting them close."
+    ),
+}
+
+
 @dataclass(frozen=True)
 class ProactiveReason:
     kind: ProactiveReasonKind
@@ -43,6 +62,7 @@ class ProactiveReason:
     reminder_id: int | None = None
     memory_id: int | None = None
     longing_intensity: float = 0.0
+    longing_tier: LongingTier = "bored"
 
 
 def _aware_now(now: datetime | None) -> datetime:
@@ -135,21 +155,22 @@ def pick_proactive_reason(
     store: MemoryStore,
     *,
     longing_intensity: float = 0.0,
+    longing_tier: LongingTier = "bored",
     now: datetime | None = None,
 ) -> ProactiveReason:
     aware = _aware_now(now)
 
     due = _pick_due_reminder(store, now=aware)
     if due is not None:
-        return due
+        return replace(due, longing_tier=longing_tier)
 
     commitment = _pick_commitment_followup(store, now=aware)
     if commitment is not None:
-        return commitment
+        return replace(commitment, longing_tier=longing_tier)
 
     callback = _pick_memory_callback(store, now=aware)
     if callback is not None:
-        return callback
+        return replace(callback, longing_tier=longing_tier)
 
     return ProactiveReason(
         kind="check_in",
@@ -157,6 +178,7 @@ def pick_proactive_reason(
         summary="想念/check-in",
         detail=f"longing={longing_intensity:.2f}",
         longing_intensity=longing_intensity,
+        longing_tier=longing_tier,
     )
 
 
@@ -174,24 +196,27 @@ def fallback_line_for_reason(reason: ProactiveReason) -> str:
 
 
 def format_reason_block(reason: ProactiveReason) -> str:
+    tier_block = _TIER_VOICE_BLOCKS[reason.longing_tier]
     if reason.kind == "due_reminder":
-        return (
+        block = (
             "[Proactive reason: due reminder]\n"
             f"title={reason.summary}\n"
             f"details={reason.detail}"
         )
-    if reason.kind == "commitment_followup":
-        return (
+    elif reason.kind == "commitment_followup":
+        block = (
             "[Proactive reason: commitment / follow-up]\n"
             f"context={reason.detail}"
         )
-    if reason.kind == "memory_callback":
-        return (
+    elif reason.kind == "memory_callback":
+        block = (
             "[Proactive reason: memory callback]\n"
             f"memory={reason.detail}"
         )
-    return (
-        "[Proactive reason: check-in]\n"
-        f"longing_intensity={reason.longing_intensity:.2f}\n"
-        "Nothing specific — she misses the user."
-    )
+    else:
+        block = (
+            "[Proactive reason: check-in]\n"
+            f"longing_intensity={reason.longing_intensity:.2f}\n"
+            "Nothing specific — she misses the user."
+        )
+    return f"{block}\n\n{tier_block}"

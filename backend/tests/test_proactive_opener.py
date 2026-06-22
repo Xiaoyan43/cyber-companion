@@ -14,6 +14,7 @@ from backend.app.behavior.proactive_opener import (
 from backend.app.behavior.proactive_reason import (
     ProactiveReason,
     fallback_line_for_reason,
+    format_reason_block,
     pick_proactive_reason,
 )
 from backend.app.behavior.types import BehaviorDecision
@@ -88,6 +89,42 @@ def test_reason_picker_memory_callback(store: MemoryStore) -> None:
 def test_reason_picker_check_in_fallback(store: MemoryStore) -> None:
     reason = pick_proactive_reason(store, longing_intensity=0.72, now=_now())
     assert reason.kind == "check_in"
+
+
+def test_reason_picker_propagates_longing_tier_to_due_reminder(store: MemoryStore) -> None:
+    """Longing tier is orthogonal to intent — even a due-reminder reason carries it."""
+    store.create_reminder(
+        title="周四面试",
+        details="别迟到",
+        due_at=(_now() - timedelta(hours=1)).isoformat(),
+    )
+    reason = pick_proactive_reason(store, longing_tier="sulk", now=_now())
+    assert reason.kind == "due_reminder"
+    assert reason.longing_tier == "sulk"
+
+
+def test_reason_picker_default_tier_is_bored(store: MemoryStore) -> None:
+    reason = pick_proactive_reason(store, longing_intensity=0.1, now=_now())
+    assert reason.longing_tier == "bored"
+
+
+@pytest.mark.parametrize("tier", ["bored", "longing", "sulk"])
+@pytest.mark.parametrize(
+    "kind",
+    ["due_reminder", "commitment_followup", "memory_callback", "check_in"],
+)
+def test_format_reason_block_includes_tier_voice_for_every_kind(kind: str, tier: str) -> None:
+    reason = ProactiveReason(
+        kind=kind,  # type: ignore[arg-type]
+        avatar_state="worried",
+        summary="test",
+        detail="detail line",
+        longing_tier=tier,  # type: ignore[arg-type]
+    )
+    block = format_reason_block(reason)
+    assert f"Longing tier: {tier}" in block
+    if tier == "sulk":
+        assert "indifference" in block.lower() or "withdrawal" in block.lower()
 
 
 @pytest.mark.parametrize(

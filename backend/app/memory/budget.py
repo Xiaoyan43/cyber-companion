@@ -39,6 +39,11 @@ class BudgetConfig:
     longing_loneliness_weight: float = 0.45
     longing_lambda_base_per_hour: float = 0.004
     longing_lambda_longing_gain: float = 2.5
+    # Longing trajectory tiers (bored -> longing -> sulk; never "cold").
+    longing_tier_bored_hours: float = 24.0
+    longing_tier_longing_hours: float = 48.0
+    longing_tier_sulk_hours: float = 72.0
+    longing_tier_sulk_closeness_min: float = 0.6
     proactive_max_delta_seconds: int = 600
     proactive_llm: bool = True
     proactive_max_output_tokens: int = 80
@@ -92,6 +97,10 @@ def load_budget_config(config_dir: Path | None = None) -> BudgetConfig:
         longing_loneliness_weight=float(payload.get("longing_loneliness_weight", 0.45)),
         longing_lambda_base_per_hour=float(payload.get("longing_lambda_base_per_hour", 0.004)),
         longing_lambda_longing_gain=float(payload.get("longing_lambda_longing_gain", 2.5)),
+        longing_tier_bored_hours=float(payload.get("longing_tier_bored_hours", 24.0)),
+        longing_tier_longing_hours=float(payload.get("longing_tier_longing_hours", 48.0)),
+        longing_tier_sulk_hours=float(payload.get("longing_tier_sulk_hours", 72.0)),
+        longing_tier_sulk_closeness_min=float(payload.get("longing_tier_sulk_closeness_min", 0.6)),
         proactive_max_delta_seconds=int(payload.get("proactive_max_delta_seconds", 600)),
         proactive_llm=bool(payload.get("proactive_llm", True)),
         proactive_max_output_tokens=int(payload.get("proactive_max_output_tokens", 80)),

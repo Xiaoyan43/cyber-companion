@@ -529,6 +529,13 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
   正确方向是**收窄**——只读、单个指定 vault 路径、**单向 ingest** 进现有 memory/retrieval（不是实时任意 FS）。
   真正成本不在代码，在**隐私**（大量个人笔记进 prompt/embedding = 大面积 vendor 暴露）+ 同步/索引/staleness
   维护（中高）。**不是小玩法**，要做先把 scope 钉死。下次专门讨论实现可能性 + 具体功能方向。
+- **mood.boredom/loneliness 墙钟化**（2026-06-22 第四十轮讨论中提出）：现状两者按 idle tick 数累积
+  （`mood.py` `apply_idle_tick_mood_delta`），与现实时间脱钩、tab 关了不涨；而 `longing.py` 的
+  `silence_hours` 已经是按真实时钟算的，**系统里存在双轨**。用户直觉"现实连续 N 天没找才开始攒孤独/
+  无聊"是对的，但 `mood.boredom/loneliness` 同时喂 `tone.py`（决定实时对话语气），重写会牵动对话路径，
+  blast radius 远超 P9-P1。**P9-P1 已绕开此问题**——想念轨迹三档直接读 `longing.py` 的墙钟 `silence_hours`，
+  不碰 mood 本身。此项是**更彻底的重构**：让 mood.boredom/loneliness 本身也按真实时间分阶段累积，
+  让"活人感"延伸到实时对话语气而不只是 proactive 开场白。要做先评估对 `tone.py`/`engine.py` 的影响面。
 
 
 

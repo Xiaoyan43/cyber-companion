@@ -7,6 +7,7 @@ from backend.app.behavior.local_responses import local_response_for_decision
 from backend.app.behavior.longing import (
     check_proactive_availability,
     clear_proactive_pending,
+    compute_longing_tier,
     mark_proactive_check,
     mark_proactive_fired,
     should_fire_longing,
@@ -251,9 +252,16 @@ def _evaluate_proactive_check(
     fired_metadata = mark_local_line_spoken(fired_metadata)
     store.update_mood_state(metadata=fired_metadata)
 
+    longing_tier = compute_longing_tier(
+        last_meaningful_interaction_at=relationship.last_meaningful_interaction_at,
+        closeness=relationship.closeness,
+        budget=config,
+        now=aware_now,
+    )
     proactive_reason = pick_proactive_reason(
         store,
         longing_intensity=longing.intensity,
+        longing_tier=longing_tier,
         now=aware_now,
     )
     return BehaviorDecision(

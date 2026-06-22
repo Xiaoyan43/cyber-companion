@@ -80,6 +80,34 @@ def compute_longing_intensity(
     return round(_clamp01(blended), 4)
 
 
+def compute_longing_tier(
+    *,
+    last_meaningful_interaction_at: str | None,
+    closeness: float,
+    budget: BudgetConfig,
+    now: datetime | None = None,
+) -> str:
+    """Longing trajectory tier: "bored" -> "longing" -> "sulk".
+
+    Floor is "bored", ceiling is "sulk" — never "cold/withdrawn" (no such tier
+    exists by construction). "sulk" additionally requires high closeness: you
+    only sulk at someone you're actually close to, not at mere silence.
+    """
+    aware = _aware_now(now)
+    silence_hours = _hours_since(last_meaningful_interaction_at, now=aware)
+    if silence_hours is None:
+        return "bored"
+
+    if (
+        silence_hours >= budget.longing_tier_sulk_hours
+        and _clamp01(closeness) >= budget.longing_tier_sulk_closeness_min
+    ):
+        return "sulk"
+    if silence_hours >= budget.longing_tier_longing_hours:
+        return "longing"
+    return "bored"
+
+
 def compute_lambda_rate(*, longing: float, budget: BudgetConfig) -> float:
     """Poisson rate λ (per second); rises with longing intensity."""
     base_per_hour = max(0.0, budget.longing_lambda_base_per_hour)
