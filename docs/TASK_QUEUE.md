@@ -1,6 +1,13 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-22（第四十轮）**：**P9-P1（反重复 + 想念轨迹分档）已完成并 commit**——
+> commit `aca291d`（想念轨迹三档：无聊/想念/赌气，赌气门槛要求 closeness 够高，档位正交于
+> intent 上色全部 4 类 ProactiveReason）+ `8f4ba8e`（反重复指纹：`(kind,tier)` 组合 FIFO 存
+> `mood_state.metadata`，本轮只落地写入/读取机制，未改选择逻辑）。535 pytest 全绿。同时纠正了
+> 第三十九轮 HANDOFF 误报「P9-P0 未 commit」的过期描述，并补提交了第三十六轮遗留的 P10-P0
+> 工具（`039ea9d`）+ TTS 音色配置（`0d228c0`）。**P9-P1 真机验证未做**——下一步建议先验证
+> 真机听感再启动 P9-P2。详见 HANDOFF。
 > **2026-06-22（第三十九轮）**：**P9-P0（idle_tick mutter 死分支删除）已完成**——`/architect`
 > 读代码后发现实际改动比第三十八轮设想更小：只需删 `_evaluate_idle_tick` 里那一个被
 > `_IDLE_MUTTER_ENABLED=False` 短路的死分支，其余 3 条路径本就恒为 `decision="observe"`。
@@ -501,10 +508,12 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 >   （更新过期注释）。**不动** `_evaluate_proactive_check`/`longing.py`/`proactive_reason.py`/`tone.py`/
 >   kernel 写入/前端/记忆 schema（验证零行变化）。验收：①idle_tick 任何 mood 下不再产持久化
 >   behavior_tick ✅；②proactive_check 行为不变测试全绿 ✅；③全后端 pytest 绿（512 passed）✅。
->   本轮未 commit。
-> - **P9-P1**（small–medium）：反重复（metadata 存最近 K 条 proactive 指纹避重）+ 想念轨迹（longing.intensity
->   分档 无聊→想念→赌气，**无淡漠**，作为 ProactiveReason 字段下发 prompt）。Scope：`proactive_reason.py`
->   + `longing.py`/新建小模块 + `mood_state.metadata`（复用，不动 schema）+ 单测。
+>   已 commit `e41db56`（第三十九轮 HANDOFF「本轮未 commit」是过期描述，第四十轮已纠正）。
+> - ~~**P9-P1**（small–medium）~~ ✅ **已完成（2026-06-22，第四十轮）**：反重复（`mood_state.metadata`
+>   存最近 K=4 条 `(kind,tier)` 指纹避重，commit `8f4ba8e`）+ 想念轨迹（`compute_longing_tier()`
+>   独立纯函数读墙钟 silence_hours，无聊→想念→赌气，赌气需 closeness≥0.6，**无淡漠**，正交于
+>   intent 上色全部 4 类 ProactiveReason，commit `aca291d`）。535 pytest 全绿。**真机验证未做**，
+>   下一步建议先验证再启动 P9-P2。详见 HANDOFF。
 > - **P9-P2**（medium，**真正动手再拆 P2-A/B/C**）：原则1「她有自己的生活」——idle_tick 低频生成"盒子里
 >   的念头/经历"写入记忆（不说话）+ 新增 `share` intent 取用之。⚠️ 可能新增 `idle_experience` memory type
 >   →撞 CLAUDE.md「改 schema 须更新 `docs/MEMORY_DESIGN.md`」，启动前先决策复用 vs 新增。**联网素材源
