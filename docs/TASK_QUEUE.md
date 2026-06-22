@@ -1,6 +1,36 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-23（第四十七轮）**：用户决定开一个大 epic **P14 · Pipecat 链路最大化**（全量读 Pipecat +
+> Fish Audio Pipecat 文档 → 审计现有链路配置是否最优/正确 → 批量测试 → 双 LLM 决策讨论 → 修 P13）。
+> 本轮只做了 epic 拆解 + 落 TASK_QUEUE，**未开工**。已确认这是多 session epic，每个 phase 一个干净
+> session。下一步 = `/clear` 后新 session 做 **P14 Phase 1（文档全量落盘）**。本轮联网研究已经预先拿到
+> 几个关键事实（写进下方 P14 节，避免新 session 重复 derive）。详见 HANDOFF。
+> **2026-06-22（第四十六轮）**：**P8-C spike round 2（扩大样本量）已完成，结论反转——确认推进两阶段
+> 拆分**。第四十五轮的 spike（N=8，只测 4 个孤立单轮 fixture）得出"标签退化率初步不比文字路径差"，
+> 本轮在 `companion_brain_tag_eval.py` 新增 3 个场景 fixture（真实多轮历史/长篇展开/单轮情绪转折）+
+> 把样本量提到 N=25（单轮）/N=10（长篇）/N=15（多轮），结果推翻了原结论：①原 4 个 fixture 在 N=25
+> 下 opening_only 退化率 16%–24%，比 N=8 测出的 12.5% 高近一倍，也明显高于文字路径基线（4%–12%）；
+> ②**长篇展开场景退化严重**——60%（6/10）样本出现同标签重复堆叠，整篇平均仅 16% 句子带标签
+> （短回复场景普遍 65%–80%）；③真实多轮历史场景 opening_only 退化率 33%，比孤立单轮还高。**结论：
+> 语音路径标签退化明显比文字路径差，长篇/多轮场景下更严重，确认推进 P8-C 两阶段拆分**，下一步
+> 先选延迟杠杆（B/C/D，见 P8-C 节）。详见 HANDOFF。
+> **2026-06-22（第四十五轮）**：**P8-C 前置 spike 已完成（延迟基线+标签退化率统计），结论喜忧参半**——
+> 延迟换 provider 后基本没变（~2.2s vs 旧基线 2.3s）；标签退化率（N=8）初步不比文字路径差，削弱了
+> "必须现在做两阶段拆分"的紧迫性，但样本小，优先级待用户决定。过程中**发现一个新真实 bug（P13，
+> 高优先级未修）**：Pipecat latency=normal 时多轮对话会失声；**还发生了一次生产数据库污染事故**
+> （两次"隔离"测试因 `load_dotenv(override=True)` 失效都写进了生产库）——**已完整清理还原**，并建立
+> 了强制隔离测试规范（必须改 `.env` 文件，不能用命令行环境变量）。另外正式立项 **P12**（情绪识别
+> 旁路 Hume prosody）+ 收紧 **P11** 范围（仅文字路径，新增需同时显示中文译文的需求）。详见 HANDOFF。
+> **2026-06-22（第四十四轮）**：**生产素材池已建好 + P9-P2-B 真机验证完成，结论 PASS**——
+> 用户授权 Claude 直接建 `config/idle_material_pool.json`（8条真实可核实素材：5电影+3历史科学
+> 新闻）。随后做了 P9-P2-B 真机验证（方法同 P9-P1，临时改 DB 状态测完还原）：idle_experience
+> 用真实素材生成的内容贴合人设、未编造细节；share intent 端到端验证通过，两次触发正确轮换了
+> 两条不同 idle_experience 记忆，反重复指纹按设计工作。发现两个非阻塞观察项：①commitment_followup
+> 优先级链上持续压过 share，生产环境实际触发频率可能偏低；②LLM 产出偏"复述"原文，可后续微调
+> prompt。完整报告见 `docs/P9_P2B_VERIFICATION.md`。**P9-P2-A/B 全部完成（设计+实现+测试+
+> 真机验证）。下一步：讨论是否启动 P9-D（投递层 epic）**，或先做 P9-P2-C（真联网素材源）。详见
+> HANDOFF。
 > **2026-06-22（第四十三轮）**：**P9-P2-A 已 review + commit（`be2a81d`）+ P9-P2-B（share intent）
 > 已完成并 commit（`9890ca4`）**——`/architect` 拆出 P0（决策：share 插在
 > `commitment_followup → share → memory_callback`；消费语义=FIFO 反重复指纹，非一次性永久消费）+
@@ -278,12 +308,147 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - 本轮未 commit。详见 HANDOFF「本轮新发现」——验证中观察到 persona 在庆祝语境下输出比预期更显性，
   与本次架构改动无关（未碰 persona 文件），记录供「活人感/审核」话题参考
 
-### P8-C · 语音 Pipecat 路径（待做，不急）
+### P8-C · 语音 Pipecat 路径（✅ 已确认推进，第四十六轮决定，下一步选延迟杠杆）
 - 同样的两阶段拆分应用到 `companion_brain.py` 的 `VOICE_MODE_INSTRUCTION`，但语音延迟敏感，
   串行两次调用不能直接照搬文字聊天的做法
-- 启动前要选定延迟杠杆：B 句子级流水线重叠（真正杀手）/ C 条件触发补调 / D Fish API 层手段
-  （`latency="low"`、WebSocket `FlushEvent`、连接预热，见 `docs/FISH_AUDIO_REFERENCE.md` §7.2/7.7）
+- **下一步**：先选定延迟杠杆：B 句子级流水线重叠（真正杀手）/ C 条件触发补调 / D Fish API 层手段
+  （`latency="low"`、WebSocket `FlushEvent`、连接预热，见 `docs/FISH_AUDIO_REFERENCE.md` §7.2/7.7）。
+  **长篇展开场景退化最严重**（见 round 2 spike），选杠杆时优先确保长回复路径也能稳定走两阶段。
 - 要读：`backend/app/tts/expression_tagger.py`（可直接复用）+ `backend/realtime/companion_brain.py`
+
+#### P8-C 前置 spike（2026-06-22，本轮新增，启动 P8-C 实施前必须先做）
+> **触发**：读代码确认了 `companion_brain.py` 的 `VOICE_MODE_INSTRUCTION`（`backend/realtime/companion_brain.py:34`）
+> 仍是单阶段——主 LLM 自己在同一次输出里写正文+Fish 标签，**没有接入** `expression_tagger.py` 两阶段
+> 架构。这正是文字路径在 P8-A/B 之前已实测证明"纯 prompt 治不好标签堆开头"的旧架构，但 Pipecat
+> 这条路径**从未跑过 `tag_stats.py`/`tagger_eval.py` 那套统计**，所以"语音侧标签退化到底多严重"
+> 目前是未知，不能假设。同时发现现有 latency 基线已过期：P6-C（2026-06-17）测的 ~2.3s 端到端延迟，
+> 当时 LLM 还是 DeepSeek、TTS 还是 Doubao streaming，之后 LLM 换成了 grok-4.20（OpenRouter，第二
+> 十八轮）、TTS 换成了 Fish Audio WebSocket（P5-B-2，第二十七轮），两个变量都变了但没有重新测过。
+- **Scope**：① 用真实 Pipecat 语音对话重新跑一次端到端延迟基线（用户停说→首个音频），拿到对得上
+  当前 LLM/TTS 配置的数字；② 把 `tag_stats.py` 的退化指标用到 Pipecat 真实输出上（同样的真机
+  多轮对话场景，--repeats N 统计），看标签堆开头/逐句判断不稳是否在语音侧重现。
+- **不做**：不在 spike 阶段动 `companion_brain.py` 代码、不提前实施两阶段拆分——先拿到两个数据
+  （延迟基线、退化率）再决定怎么拆、选哪个延迟杠杆。
+- **验收标准**：输出两份数字（最新端到端延迟 ms 级基线 + Pipecat 标签退化率），供后续选延迟杠杆和
+  决定拆分方式时引用，不要求本 spike 阶段就有结论性方案。
+
+#### P8-C spike round 2 · 扩大样本量（2026-06-22，第四十六轮）✅ 已完成，结论已采纳
+> **触发**：round 1 spike（N=8）只测了 4 个孤立单轮 fixture，样本小+场景窄，"不比文字路径差"的
+> 结论置信度不够。本轮设计 3 个新场景补盲点：真实多轮历史（`multi_turn_softening`，3轮对话只统计
+> 最后一轮）、长篇展开（`long_narrative`，诱导讲故事得到长回复）、单轮情绪转折（`emotional_turn`，
+> 委屈→讽刺的语气转折）。脚本改动：`backend/scripts/companion_brain_tag_eval.py` 新增
+> `EXTENDED_SINGLE_TURN_FIXTURES`/`EXTENDED_LONG_NARRATIVE_FIXTURE`/`EXTENDED_MULTI_TURN_FIXTURE`，
+> `--extended` 开关 + 独立的 `--repeats-long-narrative`（默认10，长篇生成成本明显更高）/
+> `--repeats-multi-turn`（默认15，每轮3次LLM调用）。
+- **结果**（真实计费 API 调用，临时 store，不碰生产库）：
+  | fixture | N | repeat 堆叠退化 | opening_only 退化 | tagged_sentence_ratio |
+  |---|---|---|---|---|
+  | 原 4 个孤立单轮 | 25 | 0/25 | 16%–24% | 0.70–0.80 |
+  | emotional_turn | 25 | 0/25 | 0/25 | 0.65 |
+  | **long_narrative** | 10 | **60%（6/10）** | 0/10 | **0.16** |
+  | **multi_turn_softening** | 15 | 0/15 | **33%（5/15）** | 0.61 |
+- **结论（推翻 round 1）**：①原 4 个 fixture 在 N=25 下 opening_only 退化率（16%–24%）比 N=8 测出的
+  12.5% 高近一倍，也明显高于文字路径基线（4%–12%）——小样本低估了退化率；②**长篇展开是新发现的
+  严重盲点**：60% 样本同标签重复堆叠，整篇平均仅 16% 句子带标签；③真实多轮历史场景 opening_only
+  退化率（33%）比孤立单轮还高。**语音路径标签退化明显比文字路径差，长篇/多轮场景下更严重。**
+- **用户已确认采纳**：推进 P8-C 两阶段拆分（见上方 P8-C 主任务节的更新）。
+
+## 🎯 P14 · Pipecat 链路最大化（Epic，2026-06-23 第四十七轮立项，多 session）
+
+> **目标**：用户想把 Pipecat 这条链路的潜力全榨出来——不确定现在整条链路配置是否最优/正确。做法：
+> 先**全量**读 Pipecat 官方文档 + Fish Audio 的 Pipecat 相关文档并落盘，再据此审计现有链路每一项配置，
+> 然后批量测试，再讨论是否上双 LLM（两阶段标签）及其全部影响，最后修 P13。
+> **P8-C（语音两阶段拆分）已被吸收进本 epic 的 Phase 4**——不再单独推进，先把链路审计清楚再决定双 LLM 形态。
+
+### ⚠️ 本轮联网研究已预先确认的关键事实（新 session 不必重新 derive，但要在文档落盘后复核）
+1. **两阶段 = Pipecat 原生的 FrameProcessor**：插在 `brain_processor` 和 `tts` 之间（[run_voice.py:293](../backend/realtime/run_voice.py:293)），
+   不是在 `companion_brain.py` 里串行调两次 LLM。TTS 默认就把流式 token 按**整句**聚合再合成
+   （`TextAggregationMode.SENTENCE`），可插 `LLMTextProcessor`/自定义聚合器做"自定义标签"处理。
+   来源：docs.pipecat.ai/guides/learn/text-to-speech。
+2. **Pipecat 官方 `FishAudioTTSService` 的 latency 枚举只有 `normal`/`balanced`，没有 `low`**！
+   但我们 [run_voice.py:103](../backend/realtime/run_voice.py:103) 却允许传 `low`——传进官方 service 会被拒/忽略。
+   `docs/FISH_AUDIO_REFERENCE.md` 里"`low` 档"只存在于 Fish 自己的 OpenAPI，不在 Pipecat 封装里。
+   来源：reference-server.pipecat.ai/en/latest/_modules/pipecat/services/fish/tts.html。
+3. **P13 根因更清晰**：Fish service 用 `get_active_audio_context_id()` + `append_to_audio_context()`，
+   audio-context 由父类 `InterruptibleTTSService` 按 turn 创建/销毁；"no context ID provided" =
+   音频到达时 context 已被销毁。`normal` 档生成节奏放大了这个竞态。WebSocket 跨 turn 持久，仅 settings
+   变化时重连。**疑似 Pipecat 库级竞态,非我们调用代码的 bug**——Phase 5 要确认是改调用方式还是 subclass/上报上游。
+4. **非对称分工洞见**（来自 round 2 spike）：单阶段主 LLM 在**开头**打标好、**正文**烂。所以双 LLM 可设计成
+   "第一句放行主 LLM 自带标签（零延迟）+ 正文逐句调标签器（与前句播放重叠藏延迟）"，但**句间情绪连贯**
+   是流式方案无法根治、只能靠滚动上下文缓解的取舍——需真人听感验证，`tag_stats.py` 测不出。
+5. **落盘位置**：`reference/` 是 **gitignored**（沿用既有 vendor 文档规范），全量文档抓进 `reference/pipecat/`，
+   **不进公开仓库**。
+
+### Phase 1 · 文档全量落盘 + 综述（`/architect` 已拆成 P0 落盘 + P1 综述两个 session）
+
+#### ~~Phase 1 · P0 · 文档全量落盘~~ ✅ 已完成（2026-06-23，第四十八轮）
+- **产出**（全部 gitignored 在 `reference/pipecat/`，未进 git，7.4MB）：
+  - `docs.pipecat.ai/llms-full.txt`（2.9MB，**全站 433 页正文**，每段带 `Source:` URL）+ `llms.txt`（TOC 索引）
+    ——免 firecrawl 额度，curl 直取 Mintlify 的 llms 导出；比逐页抓更干净。
+  - `reference-server.pipecat.ai/`（Sphinx API autodoc **全量 104 页**，firecrawl download，每页 `index.md`）。
+  - `fish.audio/integration-pipecat.md` + `blog-ai-companion-with-pipecat.md`（从既有 `.firecrawl/` 缓存复制，
+    抓于 06-19/06-20，⚠️时效见 manifest）。
+  - `reference/pipecat/_MANIFEST.md`：URL↔文件导航 + KEY 页清单 + 给 P1 的复核指引。
+- **过程坑**：docs.pipecat.ai 整站 firecrawl download **因额度不足失败**（需 435 credits 仅剩 355），
+  改用 `llms-full.txt` 免额度方案解决，反而更优。
+- **验收**：✅ `git status reference/` 为空（gitignored 生效）；三来源落盘齐全；manifest 成形。
+
+#### ~~Phase 1 · P1 · 写 `docs/PIPECAT_REFERENCE.md` 综述~~ ✅ 已完成（2026-06-23，第四十八轮）
+- **产出**：`docs/PIPECAT_REFERENCE.md`（13 节 + 复核表 + Phase 2 待查清单，192 行；进 git，未 commit）。
+- **复核 P14「关键事实」结论**（详见综述 §10）：
+  - #1 ✅ **成立且更完整**：TTS 默认 `TextAggregationMode.SENTENCE`；自定义标签原生路线 =
+    `LLMTextProcessor`+`PatternPairAggregator`+`skip_aggregator_types`（双 LLM 用这个，非串行二次调用）。
+  - #2 ✅ **成立但措辞修正**：Fish `latency` 是 `str` 非枚举，只 normal/balanced 被文档/默认祝福；
+    传 `low` **原样透传给 Fish**（未定义行为，非"被拒/忽略"）。`run_voice.py:103` 的 low 选项 Phase 5 处理。
+  - #3 ✅ **成立并定位**：基类双游标 `_turn_context_id`(轮结束清) vs `_playing_context_id`(播完清)，
+    normal 节奏下音频晚于 turn context 清理 → "no context ID" 失声。
+- **额外关键发现**：**本机 `pipecat-ai 1.3.0`，`run_voice.py` 已用 1.0 API（PipelineWorker/PipelineParams），
+  与 docs 同代、无迁移断层**（HANDOFF/SNAPSHOT 里 "PipelineTask/PipelineRunner" 说法已过期）。
+  1.x `PipelineParams` 已无 `allow_interruptions`；官方 mute strategies ≠ 我们的 half-duplex（综述 §7/§9）。
+- **验收 ✅**：综述成形、三条关键事实逐条复核标来源、列出 Phase 2 六项待查清单。
+- **下一步 = Phase 2 链路配置审计**（见下）。
+
+##### Phase 1 · P1 旧版描述（保留备查）
+- **目标**：把 Pipecat 官方文档全站 + Fish Audio 的 Pipecat 相关页面抓成本地 markdown 落盘，再综述。
+- **Scope**：新建 `reference/pipecat/*.md`（原始落盘，gitignored）+ `docs/PIPECAT_REFERENCE.md`（综述，
+  仿 `docs/FISH_AUDIO_REFERENCE.md` 结构）。
+- **不动**：任何 `backend/` 代码、任何现有 config。本 phase 纯文档，零代码改动。
+- **实施要点**：① 用 firecrawl crawl/download 抓 `docs.pipecat.ai` + `reference-server.pipecat.ai`（API ref）
+  + Fish Audio Pipecat 页面；② "记下来"=落盘到文件，**不要**一次性读进对话上下文（会爆 context）；
+  ③ 综述时重点覆盖我们用到的：Pipeline/PipelineParams、frames、FrameProcessor、TTS 文本聚合模式、
+  Fish service、transports(LocalAudioTransport)、VAD/turn-taking/endpointing、interruption/barge-in、
+  metrics；④ 其余 vendor service 页面（别家 STT/TTS）可只索引不精读。
+- **验收标准**：`reference/pipecat/` 有完整落盘 + `docs/PIPECAT_REFERENCE.md` 综述成形，能支撑 Phase 2 审计。
+- **预计 diff 规模**：medium（大量新文件，但都是 gitignored 落盘 + 一份综述）。
+
+### ~~Phase 2 · 链路配置审计~~ ✅ 已完成（2026-06-23，第四十八轮）
+- **产出**：`docs/PIPECAT_AUDIT.md`（拓扑评估 + A–F 六项逐项审计 + 结论汇总 + 给后续 phase 交接；进 git，未 commit）。
+- **结论**：**无 🔴 阻断性错误**。判定汇总——
+  - ✅ 拓扑符合官方 cascaded；PipelineParams 干净（无失效 `allow_interruptions`，metrics 开，采样率一致）；
+    VAD `stop_secs=0.4` 有意正确；文本聚合默认 SENTENCE 即最优基线。
+  - 🔴 **唯一明确要改**：`run_voice.py:103` 的 `latency` 允许集合含 `low`，但 Fish service 对 low 是未定义透传 → Phase 5。
+  - 🟡 次优/取舍：Fish 未设 prosody/temperature（Phase 3 调参）；无 Smart Turn（取舍，改动大不轻动）；
+    half-duplex `resume_guard` 基于"逻辑停说"非"实际播完"=抢话根因（与 P13 同源，Phase 3 真机量化）。
+- **修正项**：审计 D 核实 half-duplex **复用了官方 `AlwaysUserMuteStrategy`**（官方策略+自定义装配，非另起炉灶）——
+  已回填修正 `docs/PIPECAT_REFERENCE.md` §7。
+- **下一步 = Phase 3 批量测试**（见下，已带 Phase 2 给的三项测试输入）。
+
+### Phase 3 · 批量测试（优先级按用户真机反馈重排，详见 `docs/PIPECAT_AUDIT.md` 末节）
+- **🔴 最优先：判停过早（用户"每次还没说完就抢答"）**。**前置（零真机）= 读 `doubao_streaming_stt_service.py`
+  定位 Silero VAD(`stop_secs=0.4`) 还是 Doubao STT 自身断句先 finalize**；再真机调静音窗口 env
+  （`CYBER_COMPANION_VOICE_VAD_STOP_SECS` / `..._ASR_END_WINDOW_MS`，纯 env 零代码）验证。
+- ② 抢话（bot 被打断，审计 D）：测 bot 逻辑停说→实际播完间隔，定 `resume_guard_ms`。**注意 C/D 是两回事**。
+- ③ Fish 调参（temperature/prosody，审计 B-2）；④ 复用 `_LatencySpikeLogger` + `enable_metrics`。
+- **做真机测试前必读**「Pipecat 真机测试隔离规范」（改 `.env`，不能用命令行环境变量，否则污染生产库）。
+
+### Phase 4 · 双 LLM 决策讨论（吸收原 P8-C）
+- 基于 Phase 2 审计 + Phase 3 测试 + round 2 spike 数据，讨论 Pipecat 上双 LLM 的形态、收益、全部问题
+  （见上方"关键事实 #4"的非对称分工方案 + 句间延迟/情绪连贯两个待验证点）。决定后再 `/architect` 拆实现。
+
+### Phase 5 · 修 P13（latency=normal 失声，放最后）
+- 根因见"关键事实 #3"。先确认是改调用方式还是 subclass/上报上游；同时处理"关键事实 #2"（run_voice.py
+  允许 `low` 但官方 service 不支持）。要读：`.venv/.../pipecat/services/fish/tts.py` +
+  `pipecat/services/tts_service.py`（`InterruptibleTTSService` 的 context 生命周期）+ run_voice.py。
 
 ## ~~P7 · Pipecat 前端入口~~ ✅ 已完成并实机验证 PASS（2026-06-17，commits `9a7a278`→`dc4ce4e`）
 - `backend/realtime/pipeline_router.py` 新建：`POST /realtime/start` / `POST /realtime/stop` / `GET /realtime/status`
@@ -543,12 +708,17 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 > - ~~**P9-P2-B**（share intent）~~ ✅ **已完成（2026-06-22，第四十三轮），commit `9890ca4`**：
 >   新增 `share` intent，接入 `proactive_reason.py` 优先级链
 >   `commitment_followup → share → memory_callback`；FIFO 反重复指纹（key=memory id），只在
->   LLM 生成成功后才消费。557 pytest 全绿（+12）。**生产素材池仍是空的**（见下方"当前未完成"），
->   share 会自动降级到下一优先级，不报错但暂时不会真的触发。真机验证待素材池补好后再做。
+>   LLM 生成成功后才消费。557 pytest 全绿（+12）。**第四十四轮已补生产素材池 + 真机验证 PASS**
+>   （见上方第四十四轮记录 + `docs/P9_P2B_VERIFICATION.md`），不再是空转状态。
 > - **P9-P2-C**（待时机，非阻塞）：素材源从白名单升级为真联网，`load_material_pool()` 接口已留好。
 > - **P9-D（投递层 epic，灵魂层之后）**：D1 server 端 scheduler（后端自己的时钟，脱离前端 tab）→
 >   D2 持久消息线 + 内联回复 UX（messages 表已半成品）→ D3 推送（Web Push 可行；iOS PWA 弱，见
 >   「移动迁移」节，可能需薄原生壳）。这是"突破 poll-only"+微信通知式的实现载体。
+>   **2026-06-22（第四十四轮，讨论）暂缓启动**：用户决定先观察几天真机使用，等 share 实际触发
+>   频率和 LLM 语感（"复述感"问题）稳定下来再启动，而不是现在就开工——理由是用户自己定的前提
+>   "推送会放大内容质量"，P9-P2-B 验证刚发现的两个观察项（commitment_followup 压过 share/LLM
+>   复述原文）一旦上推送会被放大，值得先看真实使用数据再决定。**不要在下个 session 重新发起
+>   这个讨论**，除非用户主动提起或观察期已过。
 
 ## P11 ·（轻量玩法，可穿插）回复永远用特定语言（如日语 / 英语）
 > **2026-06-22（第三十八轮）新增**。三个小玩法里唯一"真·小"的一个（不沾人设/不沾隐私）。
@@ -560,6 +730,11 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - **验收**：开关打开后，中文输入也得到目标语言的文字 + 该语言听感 OK 的语音；关掉恢复中文。
 - **要读**：`config/tts.json`、persona 注入相关（`context_builder.py` / `companion_brain.py` 的语言/语气指令）、
   `docs/FISH_AUDIO_REFERENCE.md`（语言质量分层）。
+- **2026-06-22 范围收紧（用户拍板）**：**仅限文字路径**，语音路径不做。**新增需求**：不是单纯把
+  回复换成目标语言——每次回复要**同时展示中文译文**（即目标语言原文 + 中文翻译并排/上下展示），
+  不是"切换语言、看不到中文"。这意味着实施时需要多一步翻译（目标语言→中文）或反过来（先生成
+  中文再翻译成目标语言展示），UI 也需要同时呈现两段文本，比单纯"prompt 指定输出语言"复杂一些，
+  scope 待后续 `/architect` 时重新评估。
 
 ## 后续讨论名单（未拆解，仅记录方向，待用户发起详细讨论）
 - **Obsidian / 电脑链接（让 Boxi 更了解我）**：⚠️ 撞 CLAUDE.md「不加宽泛文件系统访问」限制。
@@ -575,6 +750,63 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
   让"活人感"延伸到实时对话语气而不只是 proactive 开场白。要做先评估对 `tone.py`/`engine.py` 的影响面。
 
 
+
+## 🐛 P13 ·（高优先级，新发现真实 bug）Pipecat Fish Audio TTS：latency=normal 时多轮对话会失声
+
+> **2026-06-23 用户真机复核确认**：用户反馈"latency 最高音质档用不了"——即 `normal` 实际不可用，
+> 与本 bug 一致。**最高音质暂时拿不到，必须停 `balanced`，等 P14 Phase 5 修。** 根因见 `docs/PIPECAT_REFERENCE.md` §5
+> （基类双游标 `_turn_context_id`/`_playing_context_id` 竞态）。
+> **来源**：2026-06-22，P8-C 前置 spike 真机测试时发现。换 `latency="balanced"`→`"normal"` 后，
+> 第一轮对话音频正常，**从第二轮开始 TTS 完全不出声**（文字侧 STT→LLM 全程正常，`called_llm=True`
+> 一直在跳，但音频帧完全不产生）。
+- **根因（DEBUG 日志确认）**：Pipecat 库内部反复打印
+  `FishAudioTTSService#0 unable to append audio to context: no context ID provided`。
+  `TTFB` 日志显示 Fish Audio 确实把音频字节传回来了，但 Pipecat 本地维护的 audio-context 已经在
+  上一轮 `TTSStoppedFrame` 触发时被清理，新音频对不上 context id，被静默丢弃。`latency="balanced"`
+  下同一套代码连续跑 10 轮全部正常出声，没有这个问题——目前怀疑是 `normal`（更高音质/更慢生成）
+  节奏下，context 清理时机和音频到达时机的竞态被放大触发，但具体是 Pipecat 库 bug 还是我们这边
+  调用方式缺了什么（比如没有显式管理 audio context 生命周期）还没确认。
+- **当前状态**：已把 Pipecat 侧 latency 改回 `"balanced"`（默认值，确认稳定），**未继续测 `low`**——
+  先把这个 bug 搞清楚更划算，否则会在还没搞懂根因前继续浪费真实计费 LLM/TTS 调用。
+- **Scope（下次要做的）**：① 确认这是 Pipecat 库版本的已知问题还是我们调用方式的问题（查
+  `pipecat.services.tts_service` 的 `create_audio_context`/`append_to_audio_context` 相关源码 +
+  GitHub issue）；② 如果是调用方式问题，看是否需要在 `companion_brain_processor.py` 或
+  `run_voice.py` 里显式管理 audio context 生命周期；③ 确认问题范围是否只影响 `normal`，要不要也
+  测一下 `low`（在确认根因或至少有止损方案之前不要再测,会重复触发同样的失声)。
+- **要读**：`backend/realtime/run_voice.py`（`_build_tts`）、Pipecat 已安装库
+  `pipecat/services/fish/tts.py` + `pipecat/services/tts_service.py`（`append_to_audio_context`/
+  `create_audio_context` 相关代码）。
+- **不动**：在搞清楚根因前不要随意改 `companion_brain_processor.py` 去"绕过"这个问题。
+
+## Pipecat 真机测试隔离规范（2026-06-22 新增，强制遵守）
+> **触发**：P8-C 前置 spike 真机测试时，本想用 `CYBER_COMPANION_DATA_DIR` 环境变量隔离测试数据，
+> 结果**两次都失败**，测试对话被真实写进了生产库（`data/cyber_companion.db`）——根因是
+> `run_voice.py:32` 的 `load_dotenv(override=True)` 会用 `.env` 文件里的值覆盖掉命令行传的环境
+> 变量。已发现并清理（备份在 `data/backups/cyber_companion_pre_p8c_cleanup_20260622_220247.db`，
+> 删除了污染的 messages/memories，mood_state/relationship_state 还原到当天 08:28 的值）。
+- **唯一可靠的隔离方法**：**临时直接改 `.env` 文件里的 `CYBER_COMPANION_DATA_DIR` 这一行**指向隔离
+  目录（比如 `./data/pipecat_spike`），跑完测试**立刻改回 `./data`**，不要依赖命令行 `VAR=value`
+  覆盖（会被 `load_dotenv(override=True)` 吃掉，不生效）。
+- **`backend/scripts/companion_brain_tag_eval.py` 不受影响**——它直接构造
+  `MemoryStore(db_path=tempfile...)`，绕开了 `get_memory_store()`/env var 解析,天生隔离,可以放心用。
+- **项目收尾时清理**：用户已确认——项目彻底完工后，所有这类隔离测试产生的数据/目录要整体删除，
+  从零开始，不需要现在就保留长期归档计划。
+
+## P12 ·（第二档，先 spike）情绪识别旁路 —— Hume prosody 声学情绪传感器
+> **来源**：2026-06-18（第三十八轮）讨论。语音路径里说话的语调/起伏（声学情绪）是文字 LLM
+> 拿不到的信号，文字记忆里此前一直缺这条线。
+- **结论（已拍板，不要重新讨论方向）**：只取 Hume 的**测量 API** 当传感器用，**不**引入
+  EVI/Inworld 那种整套对话方案去替换现有 soul（会冲淡 Boxi 人格）。
+- **接入方式**：走 **off-path 旁路**喂 kernel，类似现有 `reflection/analyze_turn` 的后台分析
+  模式——不挂在主对话链路上，不影响实时响应延迟。
+- **优先级**：第二档（中等，非紧急）。**先做 spike**，验证信号是否真的有用 + 延迟是否可接受，
+  再决定要不要正式接入，不要跳过 spike 直接做正式集成。
+- **Scope（spike 阶段）**：小范围验证 Hume 测量 API 的声学情绪输出对 Boxi 语音路径（纯 E2E 或
+  Pipecat 任一）是否有可用信号、延迟量级如何。不动 `behavior/`、`memory/`、`tone.py` 等现有灵魂层
+  代码，先离线/旁路验证可行性。
+- **验收标准（spike）**：明确回答"这条信号有没有价值、接入代价多大"，输出结论（继续做正式集成 /
+  搁置 / 否决），不要求 spike 阶段就有生产代码落地。
+- **状态**：未开工，连 spike 都没做。
 
 ## 暂缓（不要碰）
 - UI / 视觉材质（用户未定画面；低 GPU 否决实时 shader）。
