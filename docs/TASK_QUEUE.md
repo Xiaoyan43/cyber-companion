@@ -1,6 +1,13 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-22（第四十三轮）**：**P9-P2-A 已 review + commit（`be2a81d`）+ P9-P2-B（share intent）
+> 已完成并 commit（`9890ca4`）**——`/architect` 拆出 P0（决策：share 插在
+> `commitment_followup → share → memory_callback`；消费语义=FIFO 反重复指纹，非一次性永久消费）+
+> P1（实施）。`proactive_reason.py` 新增 `_pick_share()`/指纹工具函数，`proactive_opener.py` 在
+> LLM 生成成功后才消费指纹（失败/禁用不消费，与 fallback 文案不泄露具体素材内容一致）。
+> 557 pytest 全绿（545+12）。**下一步：`config/idle_material_pool.json` 真实素材池待用户手动
+> 补充**——补好之前 share intent 长期空转（池空自动降级，不报错但也不会真的触发）。详见 HANDOFF。
 > **2026-06-22（第四十二轮）**：**P9-P2-A（idle_experience 写入机制）已完成，未 commit**——
 > 新增 `idle_experience` memory type（不进 `FACTUAL_MEMORY_TYPES`）；`resolve_idle_experience_write()`
 > 镜像 `resolve_proactive_opener()` 的路由层编排模式，零行改动 `engine.py`；节奏门控（日配额+最小
@@ -528,13 +535,16 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 >   （无聊→想念→赌气，赌气傲娇但黏着、无冷淡用词）；反重复指纹记录+不阻断行为符合设计。已知
 >   限制：只测到 `commitment_followup` 一种 intent。完整报告 `docs/P9_P1_VERIFICATION.md`。
 >   验证过程临时改写过 DB 数据，已用备份完整还原，无残留改动。详见 HANDOFF。
-> - ~~**P9-P2-A**（idle_experience 写入机制）~~ ✅ **已完成（2026-06-22，第四十二轮），未 commit**：
->   新增 `idle_experience` memory type（不进 `FACTUAL_MEMORY_TYPES`）+ 节奏门控（日配额+最小间隔）
->   + 白名单素材池防编造 + `resolve_idle_experience_write()` 镜像 `resolve_proactive_opener` 编排
->   模式（零行改动 `engine.py`）。素材源接口可插拔，留给 P2-C 升级真联网。545 pytest 全绿。详见
->   HANDOFF。
-> - **P9-P2-B**（small–medium）：新增 `share` intent 取用 `idle_experience` 记忆，接入
->   `proactive_reason.py` 优先级表（用户已确认排序靠前，具体顺序实施时定）。
+> - ~~**P9-P2-A**（idle_experience 写入机制）~~ ✅ **已完成（2026-06-22，第四十二轮），
+>   commit `be2a81d`（第四十三轮 review 后落地）**：新增 `idle_experience` memory type（不进
+>   `FACTUAL_MEMORY_TYPES`）+ 节奏门控（日配额+最小间隔）+ 白名单素材池防编造 +
+>   `resolve_idle_experience_write()` 镜像 `resolve_proactive_opener` 编排模式（零行改动
+>   `engine.py`）。素材源接口可插拔，留给 P2-C 升级真联网。545 pytest 全绿。详见 HANDOFF。
+> - ~~**P9-P2-B**（share intent）~~ ✅ **已完成（2026-06-22，第四十三轮），commit `9890ca4`**：
+>   新增 `share` intent，接入 `proactive_reason.py` 优先级链
+>   `commitment_followup → share → memory_callback`；FIFO 反重复指纹（key=memory id），只在
+>   LLM 生成成功后才消费。557 pytest 全绿（+12）。**生产素材池仍是空的**（见下方"当前未完成"），
+>   share 会自动降级到下一优先级，不报错但暂时不会真的触发。真机验证待素材池补好后再做。
 > - **P9-P2-C**（待时机，非阻塞）：素材源从白名单升级为真联网，`load_material_pool()` 接口已留好。
 > - **P9-D（投递层 epic，灵魂层之后）**：D1 server 端 scheduler（后端自己的时钟，脱离前端 tab）→
 >   D2 持久消息线 + 内联回复 UX（messages 表已半成品）→ D3 推送（Web Push 可行；iOS PWA 弱，见
