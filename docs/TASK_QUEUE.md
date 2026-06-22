@@ -1,8 +1,41 @@
-# TASK_QUEUE — 按优先级（2026-06-21）
+# TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-22（第三十九轮）**：**P9-P0（idle_tick mutter 死分支删除）已完成**——`/architect`
+> 读代码后发现实际改动比第三十八轮设想更小：只需删 `_evaluate_idle_tick` 里那一个被
+> `_IDLE_MUTTER_ENABLED=False` 短路的死分支，其余 3 条路径本就恒为 `decision="observe"`。
+> `local_responses.py` 的 mutter 文案**未删**（被 user_message 低价值输入路径复用，删了会破坏
+> 正常对话反馈）。512 pytest 全绿，`_evaluate_proactive_check` 零行变化。本轮未 commit。
+> 下一步 = **P9-P1**（反重复 + 想念轨迹分档）。详见 HANDOFF。
+> **2026-06-22（第三十八轮·讨论）**：讨论 P9 方向 + 情绪识别旁路 + 三个小玩法。决定：①新增 **P11**
+> （回复语言切换）；②**Obsidian/电脑链接**进「后续讨论名单」待详细讨论；③**联网功能合并进 P9**
+> ——不挂回复链路，做成 idle-tick 的「想分享」intent 的素材来源（见 P9 节末「联网合并洞见」）；
+> ④**情绪识别（Hume prosody）**结论：只取测量 API 当传感器（绝不用 EVI/Inworld 整套替换 soul），
+> 价值集中在语音路径的声学情绪，走 off-path 旁路喂 kernel，列第二档先 spike 验证再接。本轮对 P9
+> 跑了 `/architect`（见下）。
+> **2026-06-22（第三十七轮）**：**P10-P1（`--repeats N` 统计基线）已完成**——N=25 正式基线，
+> 4 个 fixture 退化率 4%–12%，结论"暂不支持标签器结构改造"。**TTS 音色 config 已落地**
+> （`fish_audio.voice` = 慵懒偏低音 `ef5c98bd…`，用户表态会经常换）。新增两个候选音色盲听：
+> 「夜晚02」`b6681a52…` 入备选，`be404a1e…` 淘汰。**⚠️ 未解决矛盾**：04（揶揄+心软）场景真机
+> 盲听确认过"欠标"，但 N=25 统计上反而最干净——下次真机再撞到要当场记录完整输入。详见
+> HANDOFF「本轮已完成」。
+> **2026-06-21（第三十六轮）**：**P10-P0（离线评估夹具 `tag_stats.py` + `tagger_eval.py`）已
+> 完成**——把"重复贴同一标签/堆开头/欠标"从主观听感变成可重复指标+夹具。真机发现：清洁基线下
+> 退化"时好时坏"不是稳定发生，需 `--repeats N` 统计而非单跑判断（下一步建议）。顺带完成 Fish
+> Audio 音色盲听 A/B 定稿（主选3+备选5，详见 HANDOFF）。详见 HANDOFF「本轮已完成」。
 > **🎯 当前最高优先：P8 · TTS 情绪标签两阶段表达层架构** —— **文字聊天路径（P8-A+P8-B）已完成并真机验证 PASS**，
 > 语音 Pipecat 路径待做（不急，可先观察文字聊天路径稳定性）。
+> **2026-06-21（第三十五轮）**：**P1（标签器喂入 tone_intent 自然语言字段）真机验证完成 — 结论：
+> 无明显改善，已回退**。同样用隔离 A/B 跑 4 个场景，没有一个明显支持"带 tone_intent 更好"，
+> 且部分场景复现了 P0 那种"标签退化成重复贴同一个标签"的失败模式。代码已完全回退到 P8-B 基线。
+> **关键判断**：P0（数值）、P1（自然语言）两种不同输入方案都失败、且都出现同一种退化模式——
+> 指向根因可能不在"喂什么输入"，而在标签器（当前 Gemini）执行"逐句判断"这条规则的稳定性。
+> 下一步建议讨论是否换标签器模型或重新设计标签器执行结构（并入 P10），不建议再试第三种
+> "喂更多意图信息"的变体。详见 HANDOFF。
+> **2026-06-21（第三十四轮）**：P0（标签器喂入同轮 BOXI_SIGNALS）真机验证完成 — 结论：改动有害，
+> 已回退（详见上方第三十五轮记录的延续判断）。
+> **2026-06-21（第三十三轮）**：讨论确认 TTS engine 选型收敛——用户实测 Western 可控 TTS/端到端
+> 路线均不行，继续走 Fish Audio + Pipecat 级联（不要再建议换 engine，见 HANDOFF）。
 > **2026-06-21（第三十二轮）**：真机使用驱动的修复轮，详见 HANDOFF。标签器 DeepSeek→Gemini + prompt
 > 规则矛盾修复；`tone.py` 语速抑制 bug 修复（硬编码词表→通用标签检测）；persona 新增"不旁白"硬规则；
 > 新发现并临时止血了 idle-tick mutter 刷屏 bug（**P9**，待重新设计，已禁用未删除）；记录 **P10**
@@ -376,6 +409,39 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 >   都是真机听感试验，不是系统性扫描。用户想之后回来继续探 S2-Pro 的表现力天花板。
 > 不算正式任务，只是记录意图——用户提起时直接接续当前状态（标签器=Gemini，TTS参数=官方默认），
 > 不用重新从头讨论要不要探索。
+> **2026-06-21（第三十三轮）补充**：用户已实测并否决了"换成 Western 可控 TTS / 端到端"这条路，
+> TTS engine 本身确定留在 Fish Audio——上面两条（标签器模型继续换、Fish 参数系统性探索）仍然
+> 有效未变，但"是否整体换 engine"这个更大的问题已经关闭，不要再提。
+> **2026-06-21（第三十五轮）补充——给"标签器模型可能还会换"一条更具体的理由**：P0、P1 两轮
+> 真机验证（给标签器喂数值/自然语言两种"本轮意图"输入）都没有改善，且都复现同一种"重复贴同一
+> 标签"的退化模式。这指向当前标签器（Gemini）在"逐句判断不偷懒"这条规则上执行不稳，不是输入
+> 信息量不够。换模型时这应该是核心验收点之一；也可以考虑不换模型、改造标签器的执行结构
+> （如强制分句处理）。详见 HANDOFF 第三十五轮记录。
+>
+> **2026-06-21（第三十六轮）— P10-P0 已完成**：新建 `backend/app/tts/tag_stats.py`（确定性
+> 退化指标）+ `backend/tests/test_tag_stats.py`（12 passed）+ `backend/scripts/tagger_eval.py`
+> （手动 dev 脚本，不进 CI，支持 `--audio`/`--voice` 多音色 A/B）。真机用真实 Gemini 调用发现：
+> 退化模式"时好时坏"，同一 fixture 连续跑结果不稳定，**后续任何改动验证都需要 `--repeats N`
+> 统计而非单跑判断**——这是 P1（标签器结构改造）开工前的必要前置，本轮未做。用户确认"找不出
+> 比 Gemini 更合适的模型"，故 P2（换模型）降级为"有了统计基线后顺手加一列对比"，非独立任务。
+> 顺带完成的 Fish Audio 音色盲听 A/B 定稿见下方新增小节。详见 HANDOFF。
+>
+> **2026-06-21（第三十六轮）— Fish Audio 音色盲听 A/B 定稿**：用约 20 个候选 `reference_id`
+> 跑了盲听（复用 `tagger_eval.py --voice` 多音色对比能力）。**主选**：`fbe02f83…`（嘉岚）/
+> `ef5c98bd…`（慵懒偏低音）/ `7f92f8af…`（AD）。**备选**：`5671e9d4…`（偏福建声）/
+> `6d3b9742…`（故事声）/ `ae083c60…`（动漫）/ `ba8677df…`（夜晚）/ `c7e86b26…`（凯尔希）。
+> 淘汰：`4ca68a29…`（不顺耳）。完整 id 见长期记忆 `fish-audio-preferred-voices` 或 HANDOFF。
+>
+> **2026-06-22（第三十七轮）— P10-P1 已完成 + TTS config 已落地**：`tagger_eval.py` 加
+> `--repeats N`（与 `--audio` 互斥），跑出 N=25 正式统计基线——4 个 fixture 退化率仅
+> 4%–12%，`opening_only` 几乎不发生。**结论：当前基线不支持标签器结构改造**，暂缓，除非真机
+> 听感继续频繁踩到退化。**`config/tts.json` 的 `fish_audio.voice` 已设为「慵懒偏低音」
+> `ef5c98bdc88845b7a4a4c7382179e5ea`**（用户表态非终态，会经常换着听）。新增两个候选盲听：
+> 「夜晚02」`b6681a5267b54110a7d0202f4f359313` 入备选，`be404a1ef6704fdb86d02ea05ad0bcc2` 淘汰。
+> **⚠️ 未解决矛盾**：04（揶揄+心软）场景上一轮被真机盲听确认"心软那句经常欠标"，但这次 N=25
+> 统计上反而是 4 个场景里最干净的（退化率 4%，密度最高）。可能是样本仍小、或真机完整上下文
+> 比孤立 fixture 更复杂、或 Gemini 近期确实更稳定——未深究，下次真机再撞到时直接记录完整
+> 输入，不要只信这份基线。详见 HANDOFF「本轮已完成」。
 
 ## P9 ·（待重新设计）主动找你 / 空闲行为
 > **触发**（2026-06-21）：`backend/app/behavior/engine.py:288` 的 `_evaluate_idle_tick` 在
@@ -391,6 +457,80 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 > `backend/app/behavior/engine.py`（`_evaluate_idle_tick` + `_evaluate_proactive` 附近）、
 > `backend/app/behavior/local_responses.py`、`backend/app/behavior/tick_policy.py`，
 > 以及本文件「活人感工程」章节，一起设计而不是单独补丁。
+>
+> **2026-06-22（第三十八轮）讨论结论 —— P9 设计四原则**（最大化活人感的核心不是"换更多句子"，
+> 而是补结构缺陷：零变化/零记忆/零节奏）：
+> 1. **空闲活动要留"记忆痕迹"**：idle 时不直接吐话，先在内部生成/挑选轻量"经历事件"写进 memory，
+>    之后能被引用/callback——"她有自己的生活"靠**事后能引用**而非当场宣称。盒子设定天然限制编造面。
+> 2. **节奏=urge 模型，不是定时器**：把固定 180s 换成会涨会落的"想找你冲动值"（boredom/loneliness
+>    + 距上次互动时长 + 时段 + 配额上限防刷屏），到阈值才发、发完衰减。克制比多发更像人。
+> 3. **多 intent → 多消息类型**：decision 不止 `mutter`，typed intent（想分享/想你/延续话题/赌气不主动/
+>    单纯烦躁）；决策层=代码定 WHEN+WHAT，表达层=LLM 只在高价值时刻生成，低价值用带变化模板。
+> 4. **想念有轨迹**：离开越久语气漂移（无聊→想念→赌气→淡漠）+ 反重复记忆（记最近 N 条措辞/话题不重样）。
+> - **投递模态**：默认 **text-only**（push 到信笺/chat，不强制 TTS——idle 时突然发声是打扰，且你不在时
+>   语音投递不出去需推送）。"发声"是后续旋钮，不在第一刀。⚠️ 待确认：现有 `behavior_tick` 写进 DB 后
+>   前端怎么收到 push（轮询/SSE/下次加载）。
+> - **联网合并洞见**：联网功能**不挂回复链路**，合并进 P9——做成"想分享"intent 的**素材来源**（idle 时
+>   她"刷到"东西→存成她的经历记忆→以分享欲冒出来）。真实网页内容正好是 idle 生活的**非编造素材**。
+>   排在 P9 核心做完后插入，不进第一刀（避免 scope 膨胀）。残留约束：搜索 query 的 vendor 暴露 +
+>   内容过滤 + "她搜什么"需人格驱动的种子（兴趣/共同话题）。
+
+### P9 拆解（第三十八轮 `/architect` 定稿 + 用户拍板）
+> **关键现状发现**：proactive 其实有**两条路径**。`_evaluate_proactive_check`（前端 300s 轮询）**已成熟**——
+> 已有 longing Poisson urge 模型 + budget gate（quiet hours/日上限/fire gap/对话后冷却/待回复门）+ 4 类
+> typed intent（`pick_proactive_reason`）+ LLM 写开场白（`resolve_proactive_opener`）。坏的是
+> `_evaluate_idle_tick`（90s 轮询）的 mutter 分支（已禁用，200 条重复 bug 的源头）。**投递=纯 pull/poll**，
+> 前端 `useBehaviorTicks.ts` 驱动，tab 关了就不发；消息持久化进 messages 表 `source="behavior_tick"`
+> （retention=200），已是 text-only 无 TTS。
+>
+> **用户拍板（第三十八轮）**：
+> - ✅ **删掉坏的 idle_tick mutter 分支**（P0）。
+> - ✅ **语气轨迹做 无聊→想念→赌气，但绝不到「淡漠」**——见长期记忆 `persona-never-cold-always-present`。
+>   负向封顶在赌气（强联结），不许建模疏远/冷处理（断联结）。项目初衷=一直陪伴。
+> - ✅ **"主动找你"要突破"仅 app 打开且 idle 时"**——最终形态=微信通知式：她按自己时钟发消息→OS 推送→
+>   你想回时点开→看到积压消息→接着聊。**但这是投递层 epic（P9-D），排在灵魂层 P0/P1/P2 之后**
+>   （推送会放大内容质量，必须先让她说得好/不重样/有自己的生活，再上推送）。
+> - ✅ 认同 **一个 session 一个任务，P0 先行**。
+>
+> **执行顺序（灵魂层先，投递层后）**：
+> - ~~**P9-P0**（small，先做）~~ ✅ **已完成（2026-06-22，第三十九轮）**：实际改动比设想更小——
+>   `_evaluate_idle_tick` 本就只有一个非 observe 分支（mutter，已被 `_IDLE_MUTTER_ENABLED=False`
+>   短路），删掉该死分支即可，其余 3 条路径原本就恒 `decision="observe"`。**`local_responses.py`
+>   未删**——mutter 文案被 user_message 低价值输入路径复用，删了会破坏正常对话反馈，与原设想不同。
+>   Scope 实际：`engine.py`（删 `_IDLE_MUTTER_ENABLED` + 死分支）+ `test_behavior.py`/`test_memory.py`
+>   （更新过期注释）。**不动** `_evaluate_proactive_check`/`longing.py`/`proactive_reason.py`/`tone.py`/
+>   kernel 写入/前端/记忆 schema（验证零行变化）。验收：①idle_tick 任何 mood 下不再产持久化
+>   behavior_tick ✅；②proactive_check 行为不变测试全绿 ✅；③全后端 pytest 绿（512 passed）✅。
+>   本轮未 commit。
+> - **P9-P1**（small–medium）：反重复（metadata 存最近 K 条 proactive 指纹避重）+ 想念轨迹（longing.intensity
+>   分档 无聊→想念→赌气，**无淡漠**，作为 ProactiveReason 字段下发 prompt）。Scope：`proactive_reason.py`
+>   + `longing.py`/新建小模块 + `mood_state.metadata`（复用，不动 schema）+ 单测。
+> - **P9-P2**（medium，**真正动手再拆 P2-A/B/C**）：原则1「她有自己的生活」——idle_tick 低频生成"盒子里
+>   的念头/经历"写入记忆（不说话）+ 新增 `share` intent 取用之。⚠️ 可能新增 `idle_experience` memory type
+>   →撞 CLAUDE.md「改 schema 须更新 `docs/MEMORY_DESIGN.md`」，启动前先决策复用 vs 新增。**联网素材源
+>   = P2-C 可插拔 adapter**（合并洞见：她 idle 刷到的东西经 share intent 冒出来），不进 P2 第一刀。
+> - **P9-D（投递层 epic，灵魂层之后）**：D1 server 端 scheduler（后端自己的时钟，脱离前端 tab）→
+>   D2 持久消息线 + 内联回复 UX（messages 表已半成品）→ D3 推送（Web Push 可行；iOS PWA 弱，见
+>   「移动迁移」节，可能需薄原生壳）。这是"突破 poll-only"+微信通知式的实现载体。
+
+## P11 ·（轻量玩法，可穿插）回复永远用特定语言（如日语 / 英语）
+> **2026-06-22（第三十八轮）新增**。三个小玩法里唯一"真·小"的一个（不沾人设/不沾隐私）。
+- **Scope**：加一个开关，让 Boxi 无论你说什么，回复（文字 + 语音）都用指定语言（日 / 英 / …）。
+- **可行性**：基本是 prompt 指令（输出语言）+ 选一个该语言的 Fish 音色。LLM 原生处理生成/翻译；
+  情绪标签是英文方括号、**语言无关**，标签器照常工作。
+- **唯一坑**：音色——现有主选音色全是中文音色，Fish 各语言质量分层不同（见 `docs/FISH_AUDIO_REFERENCE.md`），
+  日/英要另挑该语言听感好的 `reference_id` 做盲听。
+- **验收**：开关打开后，中文输入也得到目标语言的文字 + 该语言听感 OK 的语音；关掉恢复中文。
+- **要读**：`config/tts.json`、persona 注入相关（`context_builder.py` / `companion_brain.py` 的语言/语气指令）、
+  `docs/FISH_AUDIO_REFERENCE.md`（语言质量分层）。
+
+## 后续讨论名单（未拆解，仅记录方向，待用户发起详细讨论）
+- **Obsidian / 电脑链接（让 Boxi 更了解我）**：⚠️ 撞 CLAUDE.md「不加宽泛文件系统访问」限制。
+  正确方向是**收窄**——只读、单个指定 vault 路径、**单向 ingest** 进现有 memory/retrieval（不是实时任意 FS）。
+  真正成本不在代码，在**隐私**（大量个人笔记进 prompt/embedding = 大面积 vendor 暴露）+ 同步/索引/staleness
+  维护（中高）。**不是小玩法**，要做先把 scope 钉死。下次专门讨论实现可能性 + 具体功能方向。
+
+
 
 ## 暂缓（不要碰）
 - UI / 视觉材质（用户未定画面；低 GPU 否决实时 shader）。

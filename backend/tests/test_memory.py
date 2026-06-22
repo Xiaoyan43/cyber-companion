@@ -165,11 +165,9 @@ def _age_memory(store: MemoryStore, memory_id: int, updated_at: str) -> None:
         )
 
 
-def test_behavior_evaluate_idle_tick_mutter_disabled_does_not_persist(client: TestClient) -> None:
-    # The idle-tick "mutter" branch is temporarily disabled (see
-    # backend/app/behavior/engine.py `_IDLE_MUTTER_ENABLED`, docs/TASK_QUEUE.md "P9") —
-    # it fired the same hardcoded line on a loop with no variation. No decision/message
-    # to persist until the idle-behavior redesign replaces it.
+def test_behavior_evaluate_idle_tick_never_persists(client: TestClient) -> None:
+    # idle_tick no longer has a "mutter" branch (removed in P9-P0, see
+    # docs/TASK_QUEUE.md "P9") — decision is always observe, so nothing persists.
     from backend.app.memory.store import get_memory_store
 
     store = get_memory_store()
