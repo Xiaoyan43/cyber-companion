@@ -44,6 +44,7 @@ class BudgetConfig:
     longing_tier_longing_hours: float = 48.0
     longing_tier_sulk_hours: float = 72.0
     longing_tier_sulk_closeness_min: float = 0.6
+    proactive_fingerprint_history_size: int = 4
     proactive_max_delta_seconds: int = 600
     proactive_llm: bool = True
     proactive_max_output_tokens: int = 80
@@ -101,6 +102,7 @@ def load_budget_config(config_dir: Path | None = None) -> BudgetConfig:
         longing_tier_longing_hours=float(payload.get("longing_tier_longing_hours", 48.0)),
         longing_tier_sulk_hours=float(payload.get("longing_tier_sulk_hours", 72.0)),
         longing_tier_sulk_closeness_min=float(payload.get("longing_tier_sulk_closeness_min", 0.6)),
+        proactive_fingerprint_history_size=int(payload.get("proactive_fingerprint_history_size", 4)),
         proactive_max_delta_seconds=int(payload.get("proactive_max_delta_seconds", 600)),
         proactive_llm=bool(payload.get("proactive_llm", True)),
         proactive_max_output_tokens=int(payload.get("proactive_max_output_tokens", 80)),

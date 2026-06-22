@@ -8,7 +8,9 @@ import pytest
 
 from backend.app.behavior.proactive_opener import (
     build_proactive_messages,
+    is_repeated_fingerprint,
     proactive_llm_allowed,
+    record_proactive_fingerprint,
     resolve_proactive_opener,
 )
 from backend.app.behavior.proactive_reason import (
@@ -168,6 +170,66 @@ def test_proactive_llm_gate_respects_daily_cap() -> None:
     )
     budget = BudgetConfig(proactive_llm=True, proactive_llm_daily_max=5)
     assert proactive_llm_allowed(budget, mood, now=_now()) is False
+
+
+def test_record_proactive_fingerprint_rolls_fifo_at_cap() -> None:
+    reasons = [
+        ProactiveReason(kind="check_in", avatar_state="worried", summary="s", detail="d", longing_tier=tier)
+        for tier in ["bored", "longing", "sulk", "bored", "longing"]
+    ]
+    metadata: dict[str, object] = {}
+    for reason in reasons:
+        metadata = record_proactive_fingerprint(metadata, reason, max_size=3)
+    assert metadata["proactive_recent_fingerprints"] == [
+        "check_in:sulk",
+        "check_in:bored",
+        "check_in:longing",
+    ]
+
+
+def test_is_repeated_fingerprint_detects_same_kind_and_tier() -> None:
+    first = ProactiveReason(
+        kind="memory_callback", avatar_state="idle", summary="s", detail="d", longing_tier="longing"
+    )
+    metadata = record_proactive_fingerprint({}, first, max_size=4)
+
+    same = ProactiveReason(
+        kind="memory_callback", avatar_state="idle", summary="s2", detail="d2", longing_tier="longing"
+    )
+    different_tier = ProactiveReason(
+        kind="memory_callback", avatar_state="idle", summary="s3", detail="d3", longing_tier="sulk"
+    )
+    assert is_repeated_fingerprint(metadata, same) is True
+    assert is_repeated_fingerprint(metadata, different_tier) is False
+
+
+def test_is_repeated_fingerprint_false_when_no_history() -> None:
+    reason = ProactiveReason(kind="check_in", avatar_state="worried", summary="s", detail="d")
+    assert is_repeated_fingerprint({}, reason) is False
+
+
+def test_resolve_proactive_opener_records_fingerprint_on_success(store: MemoryStore) -> None:
+    reason = ProactiveReason(
+        kind="check_in",
+        avatar_state="worried",
+        summary="check-in",
+        detail="longing=0.8",
+        longing_intensity=0.8,
+        longing_tier="sulk",
+    )
+    router = ProviderRouter.from_config()
+    budget = BudgetConfig(proactive_llm=True, proactive_llm_daily_max=5)
+
+    resolved = resolve_proactive_opener(
+        store,
+        _decision(reason),
+        budget=budget,
+        router=router,
+        now=_now(),
+    )
+    assert resolved.proactive_llm_used is True
+    mood = store.get_mood_state()
+    assert mood.metadata.get("proactive_recent_fingerprints") == ["check_in:sulk"]
 
 
 def test_resolve_proactive_opener_uses_mock_line(store: MemoryStore) -> None:

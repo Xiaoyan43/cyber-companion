@@ -60,6 +60,36 @@ def mark_proactive_llm_used(metadata: dict[str, object], *, now: datetime) -> di
     return updated
 
 
+_FINGERPRINT_KEY = "proactive_recent_fingerprints"
+
+
+def _fingerprint(reason: ProactiveReason) -> str:
+    return f"{reason.kind}:{reason.longing_tier}"
+
+
+def is_repeated_fingerprint(metadata: dict[str, object], reason: ProactiveReason) -> bool:
+    """True if the most recent opener used the same (kind, tier) combo."""
+    history = metadata.get(_FINGERPRINT_KEY)
+    if not isinstance(history, list) or not history:
+        return False
+    return history[-1] == _fingerprint(reason)
+
+
+def record_proactive_fingerprint(
+    metadata: dict[str, object],
+    reason: ProactiveReason,
+    *,
+    max_size: int,
+) -> dict[str, object]:
+    updated = dict(metadata)
+    history = updated.get(_FINGERPRINT_KEY)
+    history_list = list(history) if isinstance(history, list) else []
+    history_list.append(_fingerprint(reason))
+    cap = max(1, max_size)
+    updated[_FINGERPRINT_KEY] = history_list[-cap:]
+    return updated
+
+
 def proactive_llm_allowed(
     budget: BudgetConfig,
     mood: MoodStateRecord,
@@ -189,7 +219,13 @@ def resolve_proactive_opener(
     if completion is None:
         return replace(decision, local_response=fallback, proactive_llm_used=False)
 
-    store.update_mood_state(metadata=mark_proactive_llm_used(mood.metadata, now=aware))
+    updated_metadata = mark_proactive_llm_used(mood.metadata, now=aware)
+    updated_metadata = record_proactive_fingerprint(
+        updated_metadata,
+        reason,
+        max_size=budget.proactive_fingerprint_history_size,
+    )
+    store.update_mood_state(metadata=updated_metadata)
     return replace(
         decision,
         local_response=completion.content,
