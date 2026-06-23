@@ -1,4 +1,4 @@
-# HANDOFF — 上下文交接（2026-06-23，第四十八轮）
+# HANDOFF — 上下文交接（2026-06-23，第四十九轮）
 
 > 本文件每次「瘦身交接」/「工作流交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
 
@@ -19,7 +19,25 @@ P1（写 `docs/PIPECAT_REFERENCE.md` 综述）**，详见 `docs/TASK_QUEUE.md` P
 > 文字路径差（长篇 60% 退化、多轮 opening_only 33%），这是 P14 要做双 LLM 的数据依据。**P13（Pipecat
 > TTS latency=normal 多轮失声）仍待修，排在 P14 Phase 5。**
 
-## 本轮已完成（2026-06-23，第四十八轮）
+## 本轮已完成（2026-06-23，第四十九轮）
+
+### P14 Phase 5 · P0 · 删除 `low` latency 选项（审计唯一 🔴，已 commit）
+- **背景**：`/resume-lite` → `/architect` 把 Phase 5 拆成 **P0（删 `low`，small、纯代码、无需真机）**
+  + **P1（修 P13 normal 失声，medium、需真机、路线 A）**。本轮只做 P0，P1 留独立 session。
+- **改动**（small diff）：
+  - [run_voice.py:102](../backend/realtime/run_voice.py:102)：latency 允许集合 `{normal,balanced,low}` → `{normal,balanced}`，
+    错误文案同步，加注释说明为何删 `low`（官方 `FishAudioTTSService` 只承诺 normal/balanced，`low` 是原样透传
+    给 Fish 服务端的未定义行为）+ 为何保留 `normal`（待 P1 修）。
+  - `backend/tests/test_fish_audio_pipecat_tts.py`：新增 3 个回归测试（`balanced`/`normal` 参数化接受 + `low` 拒绝）。
+- **验证 ✅**：`pytest backend/tests/test_fish_audio_pipecat_tts.py` → 5 passed。`low` 启动现在被明确拒绝，
+  `normal/balanced` 不受影响（默认仍 `balanced`，用户确认可用）。
+- **commit 干净性**：run_voice.py 工作区夹带的 `_LatencySpikeLogger`（P8-C spike，用户要求保留）**用部分
+  patch 排除**，只把 latency 那一处 hunk 进了 P0 commit；spike 仍留在工作区未提交。
+- **审计状态更新**：`docs/PIPECAT_AUDIT.md` 的唯一 🔴（B-1 `low` 透传）**已清**。剩余 Phase 5 工作 = P1 修 P13。
+
+### P14 Phase 1+2（上一轮 = 第四十八轮，已 commit `29d46a2`）
+
+> 以下为第四十八轮内容，保留备查。
 
 ### P14 Phase 2 · 链路配置审计（紧接 Phase 1，同 session 完成）
 - **产出**：`docs/PIPECAT_AUDIT.md`（拓扑评估 + A–F 六项逐项审计：现状/文档建议/判定/改动建议 + 结论汇总；**进 git，未 commit**）。
@@ -210,13 +228,16 @@ P1（写 `docs/PIPECAT_REFERENCE.md` 综述）**，详见 `docs/TASK_QUEUE.md` P
   `backend/realtime/run_voice.py`、`backend/tests/test_tts.py`、`companion_brain_tag_eval.py` 等第四十五/四十六轮
   遗留改动——**本轮提交时已刻意排除**，等用户决定何时一起提交。`.env` 实验配置已还原（gitignored，不进 git）。
 
-## 当前未完成（P14 进度：5 phase 中 Phase 1+2 完成、Phase 3 部分完成）
+## 当前未完成（P14 进度：5 phase 中 Phase 1+2 完成、Phase 3 部分完成、Phase 5 P0 完成）
 - **P14 Phase 3 剩余（都需真机 + 用户在场）**：① 抢话（bot 被打断，审计 D）量化 `resume_guard`；
   ② Fish 调参（temperature/prosody，审计 B-2）。**抢答（C）已修并 commit**。
 - **P14 Phase 4 · 双 LLM 两阶段标签（未开工，epic 最大块）**：用综述 §2/§3 的原生路线
   （`LLMTextProcessor`+`PatternPairAggregator` 插 brain↔tts），先讨论形态再 `/architect`。
-- **P14 Phase 5 · 修 P13 + `low`（未开工）**：P13 根因已定位（基类双游标竞态，综述 §5）；
-  `run_voice.py:103` 允许 `low` 但 Fish service 是未定义透传（综述 §4）——一起处理。**纯代码、无需真机。**
+- **P14 Phase 5 · P1 · 修 P13 normal 失声（未开工，路线已定 = A）**：用户已选**路线 A = subclass
+  `FishAudioTTSService` 覆写最小必要方法**救回 `normal`（最高音质）。根因已定位（基类双游标
+  `_turn_context_id`/`_playing_context_id` 竞态，综述 §5）。**⚠️ 代码可纯写，但"normal 不再失声"必须真机
+  多轮验证**（单测只能覆盖 context 生命周期，测不出真实音频竞态）。建议新 session 先对路线 A `/architect`
+  二次拆分。**P0（删 `low`）本轮已完成。**
 - **"长停顿仍被切"残留**：纯静音窗口天花板，根治=语义判停（火山 AIVAD 在 RTC-AIGC 非 BigASR）→ 归未来 ASR 选型。
 - **沿用未完成项（非 P14）**：P11（回复语言+译文，scope 待 `/architect`）、P12（Hume prosody，仅立项）、
   P9-P2-C（素材源真联网）、P9-D（投递层，用户暂缓）。
@@ -236,10 +257,14 @@ P1（写 `docs/PIPECAT_REFERENCE.md` 综述）**，详见 `docs/TASK_QUEUE.md` P
   质量基线矛盾等。
 
 ## 推荐下一个最小任务
-- **首选 = P14 Phase 5 · 修 P13（normal 失声 + `low` 选项）**：用户痛感明确（"最高音质档用不了"），
-  且**纯代码、无需真机、无需用户在场**——最适合新 session 啃。根因已定位（综述 §5 双游标竞态）。
-  先读 `.venv/.../pipecat/services/tts_service.py`（`InterruptibleTTSService` 的 audio-context 生命周期）+
-  `pipecat/services/fish/tts.py` + `backend/realtime/run_voice.py`，定改调用 / subclass / 上报上游，顺带清理 `low` 选项。
+- **首选 = P14 Phase 5 · P1 · 修 P13 normal 失声（路线 A = subclass）**：用户痛感明确（"最高音质档用不了"），
+  路线已定（A）。**⚠️ 这是 medium diff + 需真机验证，建议新 session 单独做，先对路线 A `/architect` 二次拆分。**
+  根因已定位（综述 §5 双游标竞态）：Fish `_receive_messages` 用 `get_active_audio_context_id()`
+  （= `_playing_context_id or _turn_context_id`），normal 节奏下音频晚到时两游标皆 None →
+  `append_to_audio_context` 命中 "no context ID provided"（`tts_service.py:1297`）丢音频。**障碍**：透明重建分支
+  （`tts_service.py:1304`）只在 `context_id == _turn_context_id` 时触发，turn context 已清时救不回——所以需 subclass。
+  先读 `.venv/.../pipecat/services/tts_service.py`（`InterruptibleTTSService` audio-context 生命周期）+
+  `pipecat/services/fish/tts.py` + `backend/realtime/run_voice.py`。**绝不 patch `.venv` 库源码**，只 subclass。
 - **次选 = P14 Phase 4 · 双 LLM**（epic 最大块，但要先讨论形态，是设计任务不是 small diff）。
 - **需用户在场才做 = Phase 3 剩余**（抢话量化 + Fish 调参，真机）。先读「Pipecat 真机测试隔离规范」（改 `.env`，别用命令行环境变量）。
 

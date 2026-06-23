@@ -99,12 +99,19 @@ def _build_tts(tts_backend: str) -> tuple[object, int]:
             )
 
         FISH_SAMPLE_RATE = 44_100
+        latency = os.getenv("CYBER_COMPANION_VOICE_TTS_LATENCY", "balanced").strip().lower()
+        # `low` removed (P14 Phase 5): the official FishAudioTTSService only documents
+        # normal/balanced; passing `low` forwards it to the Fish server verbatim as undefined
+        # behavior. `normal` is kept but currently races to silence on multi-turn (P13) —
+        # pending the P1 subclass fix. Default stays `balanced` (verified working).
+        if latency not in {"normal", "balanced"}:
+            raise SystemExit("CYBER_COMPANION_VOICE_TTS_LATENCY must be one of: normal, balanced")
         svc = FishAudioTTSService(
             api_key=api_key,
             settings=FishAudioTTSService.Settings(
                 voice=reference_id,
                 model="s2-pro",
-                latency="balanced",
+                latency=latency,
             ),
             output_format="pcm",
             sample_rate=FISH_SAMPLE_RATE,
