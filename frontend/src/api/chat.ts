@@ -23,7 +23,10 @@ export type ChatCompleteResponse = {
   avatar_state: string;
   decision: string;
   should_call_llm: boolean;
+  translation?: string | null;
 };
+
+export type ChatTargetLanguage = "en" | "ja";
 
 export type ChatCompleteError = {
   error: string;
@@ -39,6 +42,7 @@ export type ChatStreamDoneMeta = {
   should_call_llm: boolean;
   usage: ChatUsage;
   cost: ChatCost;
+  translation?: string | null;
 };
 
 export type ChatStreamResult = {
@@ -113,7 +117,10 @@ function isChatStreamDoneMeta(value: unknown): value is ChatStreamDoneMeta {
   );
 }
 
-export async function requestChatComplete(userText: string): Promise<ChatCompleteResponse> {
+export async function requestChatComplete(
+  userText: string,
+  targetLanguage?: ChatTargetLanguage,
+): Promise<ChatCompleteResponse> {
   const response = await fetch(`${apiBaseUrl}/chat/complete`, {
     method: "POST",
     headers: {
@@ -121,6 +128,7 @@ export async function requestChatComplete(userText: string): Promise<ChatComplet
     },
     body: JSON.stringify({
       messages: [{ role: "user", content: userText }],
+      ...(targetLanguage ? { target_language: targetLanguage } : {}),
     }),
   });
 
@@ -141,6 +149,7 @@ export async function requestChatComplete(userText: string): Promise<ChatComplet
 export async function requestChatStream(
   userText: string,
   handlers: ChatStreamHandlers,
+  targetLanguage?: ChatTargetLanguage,
   signal?: AbortSignal,
 ): Promise<ChatStreamResult> {
   const response = await fetch(`${apiBaseUrl}/chat/stream`, {
@@ -150,6 +159,7 @@ export async function requestChatStream(
     },
     body: JSON.stringify({
       messages: [{ role: "user", content: userText }],
+      ...(targetLanguage ? { target_language: targetLanguage } : {}),
     }),
     signal,
   });

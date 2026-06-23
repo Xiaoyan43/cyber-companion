@@ -4,6 +4,7 @@ import {
   requestChatComplete,
   requestChatStream,
   type ChatCompleteResponse,
+  type ChatTargetLanguage,
 } from "./api/chat";
 import { fetchStoredMessages } from "./api/messages";
 import { avatarStates, stateLines, type AvatarState } from "./avatar/types";
@@ -60,6 +61,24 @@ const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 const showAvatarDebug =
   import.meta.env.DEV || import.meta.env.VITE_SHOW_AVATAR_DEBUG === "1";
 const CHAT_VIEW_CLEARED_KEY = "cyber-companion-chat-view-cleared";
+const TARGET_LANGUAGE_KEY = "cyber-companion-target-language";
+
+type TargetLanguageSetting = "off" | ChatTargetLanguage;
+
+function isTargetLanguageSetting(value: string | null): value is TargetLanguageSetting {
+  return value === "off" || value === "en" || value === "ja";
+}
+
+function nextTargetLanguage(current: TargetLanguageSetting): TargetLanguageSetting {
+  if (current === "off") return "en";
+  if (current === "en") return "ja";
+  return "off";
+}
+
+function targetLanguageLabel(setting: TargetLanguageSetting): string {
+  if (setting === "off") return "译文";
+  return setting === "en" ? "译文 EN" : "译文 JA";
+}
 
 const _LEADING_FISH_TAGS_RE = /^(\[[^\]]+\]\s*)+/;
 function stripLeadingFishTags(text: string): string {
@@ -83,6 +102,7 @@ function completionToFetchResult(completion: ChatCompleteResponse) {
     replyText: completion.content,
     avatarState: parseAvatarState(completion.avatar_state),
     meta: completionToMessageMeta(completion),
+    translation: completion.translation ?? undefined,
   };
 }
 
@@ -97,6 +117,20 @@ function parseAvatarState(value: string): AvatarState {
 function App() {
   const [uiMode, setUiMode] = useState<"classic" | "letter">("classic");
   const [letterMood, setLetterMood] = useState<LetterMood | undefined>(undefined);
+  const [targetLanguage, setTargetLanguage] = useState<TargetLanguageSetting>(() => {
+    const stored = localStorage.getItem(TARGET_LANGUAGE_KEY);
+    return isTargetLanguageSetting(stored) ? stored : "off";
+  });
+  const targetLanguageRef = useRef(targetLanguage);
+  targetLanguageRef.current = targetLanguage;
+
+  const cycleTargetLanguage = useCallback(() => {
+    setTargetLanguage((current) => {
+      const next = nextTargetLanguage(current);
+      localStorage.setItem(TARGET_LANGUAGE_KEY, next);
+      return next;
+    });
+  }, []);
   const [pipecatStatus, setPipecatStatus] = useState<"stopped" | "running" | "loading" | "error">("stopped");
   const pipecatStatusRef = useRef(pipecatStatus);
   pipecatStatusRef.current = pipecatStatus;
@@ -392,40 +426,48 @@ function App() {
 
             let sawFirstDelta = false;
 
-            const streamResult = await requestChatStream(userText, {
-              onDelta: (delta) => {
-                if (streamEpoch !== chatEpochRef.current) {
-                  return;
-                }
+            const streamRequestLanguage =
+              targetLanguageRef.current === "off" ? undefined : targetLanguageRef.current;
 
-                if (!sawFirstDelta) {
-                  sawFirstDelta = true;
-                  cancelScheduledReturn();
-                  setManualState("talking");
-                }
+            const streamResult = await requestChatStream(
+              userText,
+              {
+                onDelta: (delta) => {
+                  if (streamEpoch !== chatEpochRef.current) {
+                    return;
+                  }
 
-                setMessages((current) => appendChatStreamDelta(current, boxiMessageId, delta));
+                  if (!sawFirstDelta) {
+                    sawFirstDelta = true;
+                    cancelScheduledReturn();
+                    setManualState("talking");
+                  }
+
+                  setMessages((current) => appendChatStreamDelta(current, boxiMessageId, delta));
+                },
+                onDone: (meta) => {
+                  setLastTurn(streamMetaToTurnSummary(meta));
+                  const finalText =
+                    typeof meta.content === "string" && meta.content.length > 0
+                      ? meta.content
+                      : undefined;
+                  setMessages((current) =>
+                    current.map((message) =>
+                      message.id === boxiMessageId
+                        ? {
+                            ...message,
+                            text: finalText ?? message.text,
+                            meta: streamMetaToMessageMeta(meta),
+                            translation: meta.translation ?? undefined,
+                          }
+                        : message,
+                    ),
+                  );
+                },
+                onError: () => {},
               },
-              onDone: (meta) => {
-                setLastTurn(streamMetaToTurnSummary(meta));
-                const finalText =
-                  typeof meta.content === "string" && meta.content.length > 0
-                    ? meta.content
-                    : undefined;
-                setMessages((current) =>
-                  current.map((message) =>
-                    message.id === boxiMessageId
-                      ? {
-                          ...message,
-                          text: finalText ?? message.text,
-                          meta: streamMetaToMessageMeta(meta),
-                        }
-                      : message,
-                  ),
-                );
-              },
-              onError: () => {},
-            });
+              streamRequestLanguage,
+            );
 
             return {
               ...completionToFetchResult({
@@ -438,6 +480,7 @@ function App() {
                 avatar_state: streamResult.meta.avatar_state,
                 decision: streamResult.meta.decision,
                 should_call_llm: streamResult.meta.should_call_llm,
+                translation: streamResult.meta.translation,
               }),
               streamed: true,
             };
@@ -454,7 +497,9 @@ function App() {
               throw error;
             }
 
-            const completion = await requestChatComplete(userText);
+            const fallbackLanguage =
+              targetLanguageRef.current === "off" ? undefined : targetLanguageRef.current;
+            const completion = await requestChatComplete(userText, fallbackLanguage);
             setLastTurn(completionToTurnSummary(completion));
             return completionToFetchResult(completion);
           }
@@ -476,6 +521,7 @@ function App() {
                 speaker: "boxi",
                 text: result.replyText,
                 meta: result.meta as MessageMeta | undefined,
+                translation: result.translation,
               },
             ]);
           }
@@ -947,6 +993,14 @@ function App() {
             </button>
             <button
               type="button"
+              className={targetLanguage === "off" ? "letter-toggle-button" : "letter-toggle-button active"}
+              onClick={cycleTargetLanguage}
+              title="给 Boxi 的回复加英文/日文译文（只影响之后的新消息）"
+            >
+              {targetLanguageLabel(targetLanguage)}
+            </button>
+            <button
+              type="button"
               className="clear-chat-button"
               onClick={clearChatView}
               disabled={isSending || messages.length === 0}
@@ -1024,6 +1078,9 @@ function App() {
                   >
                     <span className="speaker">{message.speaker === "boxi" ? "Boxi" : "You"}</span>
                     <p>{message.text}</p>
+                    {message.translation ? (
+                      <p className="message-translation">{message.translation}</p>
+                    ) : null}
                     {metaLine ? <p className="message-meta">{metaLine}</p> : null}
                   </article>
                 );

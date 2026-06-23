@@ -1,6 +1,26 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-23（第五十二轮）**：**P11-P1（前端：双语开关 + 气泡展示）已完成并 commit（见 HANDOFF）**。
+> EN/JA 两档真机验证通过；用户拍板「历史译文消失暂可接受，后面补」+「toggle 只影响新消息」+
+> 「切换语言不重翻已显示内容」。**P11 全部完成（P0+P1）**。真机验证时新发现一个未排查小 bug
+> （JA 档下 Fish 偶发脏标签 `[ zufrieden]`），已记录，无优先级，留给以后排查。
+> **下一步候选**：① 提交第五十轮遗留的 `run_voice.py`（锁 balanced）diff；② P15（Pipecat 双方字幕，新立项）；
+> ③ P14 Phase 4（双 LLM，epic 最大块）。详见 HANDOFF。
+> **2026-06-23（第五十一轮）**：**P11-P0（后端：翻译模块 + 双语开关接入）已完成并 commit `2d79671`**。
+> `/architect` 把 P11 拆成 P0（后端）+ P1（前端），用户拍板「双语生成方式用第二个模型（Gemini）分担、
+> 不让主 LLM 背翻译任务」+「全局 toggle（开/关 + en/ja）」+「信笺模式先不动」+「toggle 状态 localStorage 持久化」。
+> 新建 `backend/app/tts/translator.py`（复用 `expression_tagger.py` 的解耦骨架，独立调 Gemini 把主回复
+> 翻译成中文，失败硬性降级为 `None`，不阻断主回复）；`context_builder.py` 的 `build_provider_context` 加
+> `target_language` 参数，开启时注入 `[Output language]` 指令；`/chat/complete` + `/chat/stream` 两条路由
+> 接入，response/SSE meta 新增 `translation` 字段；关闭时（默认）零行为变化。577 pytest 全绿（561+16）。
+> **下一步 = P11-P1（前端）**：开关 UI（en/ja + localStorage 持久化）+ 气泡双语展示，详见下方 P11 节。
+> **2026-06-23（第五十轮）**：**P14 Phase 5 P1 结案 = 放弃 normal，锁死 balanced（P13 won't fix）**。
+> route A（subclass 救 normal）真机验证仍失声 → 根因纠正（normal 是「服务端整段批量渲染」，首字节 ~3.5s
+> 超过 pipecat 3.0s 队列超时 `_stop_frame_timeout_s`）→ A/B 实测确认 normal 音质提升微小、不值每轮 ~3 秒死寂
+> → `run_voice.py` 只允许 `balanced`，拒绝 `normal`/`low`（未 commit，6 tests 绿）。**P14 epic Phase 1+2+3+5
+> 全部结清**，剩 Phase 4 双 LLM（其延迟杠杆设计要据「锁 balanced 流式」重估）。**用户新需求两条，已定优先级**：
+> ① **P11 文字双语回复 = 队首（下一步先 `/architect`）**；② **P15 Pipecat 双方字幕（新立项）**。详见 HANDOFF。
 > **2026-06-23（第四十九轮）**：`/architect` 把 **P14 Phase 5** 拆成 P0（删 `low` latency 选项）+
 > P1（修 P13 normal 失声）。**P0 已完成并 commit `507c9e9`**——消掉 `PIPECAT_AUDIT.md` 审计唯一 🔴；
 > 新增 3 个回归测试。**P1 用户已选路线 A（subclass `FishAudioTTSService`）**，但需真机验证、medium diff，
@@ -459,20 +479,25 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - **commit 时排除了 run_voice.py 夹带的 `_LatencySpikeLogger`（P8-C spike，用户要求保留）**——
   用部分 patch 只 stage latency 那一处 hunk，spike 仍在工作区未提交。
 
-#### Phase 5 · P1 · 修 P13 normal 失声（未开工，路线已定 = A）
-- **用户已选路线 A**：subclass `FishAudioTTSService` 覆写最小必要方法，救回 `normal`（最高音质档）。
-  路线 B（钉死 balanced）/ C（升级排查）已否决。
-- 根因（综述 §5 + 本轮零真机代码核实）：Fish `_receive_messages` 用 `get_active_audio_context_id()`
-  （= `_playing_context_id or _turn_context_id`），`normal` 节奏下音频晚到时两游标皆 None →
-  `append_to_audio_context` 命中 "no context ID provided"（`tts_service.py:1297`）丢音频。
-  **障碍**：透明重建分支（`tts_service.py:1304`）只在 `context_id == _turn_context_id` 时触发，
-  turn context 已清时救不回——所以需 subclass，没有零侵入一行修法。
-- **⚠️ 验证要求**：代码可纯写，但"normal 不再失声"必须**真机多轮对话验证**（单测只能覆盖 context
-  生命周期，测不出真实音频竞态）。
-- **不动**：绝不 patch `.venv` 库源码，只 subclass。
-- **建议**：新 session 先对路线 A 跑 `/architect` 二次拆分（medium diff，不是 small）。
-- 要读：`.venv/.../pipecat/services/fish/tts.py` + `pipecat/services/tts_service.py`
-  （`InterruptibleTTSService` 的 audio-context 生命周期）+ `run_voice.py`。
+#### ~~Phase 5 · P1 · 修 P13 normal 失声~~ ✅ 结案 = 放弃 normal，锁死 balanced（2026-06-23，第五十轮，未 commit）
+- **结论：P13 = won't fix。`normal` 彻底放弃，`run_voice.py` 只允许 `balanced`，拒绝 `normal`/`low`。**
+  **勿在新 session 重开此修复。**
+- **route A 试过 → 失败**：写了 subclass `CyberCompanionFishAudioTTSService` 覆写 `get_active_audio_context_id`
+  在游标空窗回退。真机第二轮仍失声。**根因之前判断错了**——不是「游标 None 但队列还在」，而是
+  audio-context 队列被**空闲超时拆除**：`_handle_audio_context` 用 `asyncio.wait_for(queue.get(),
+  timeout=_stop_frame_timeout_s)`（默认 **3.0s**，`tts_service.py:156`），等不到帧就 `del _audio_contexts[cid]`
+  （`tts_service.py:1425`）。subclass 已删（不留死代码）。
+- **A/B 实测（`data/pipecat_spike/ab_latency.py`，同句/同音色/同 s2-pro 只切 latency）**：
+  - **balanced 首字节 ~0.5s（真流式，边生成边播）；normal 首字节 ~3.5s（批量——整段渲染完才一次性吐）**。
+  - 统一了两症状：normal 前 3.5s 一字节不发 → 超 3.0s 队列超时 → 队列被拆 → 批量音频无处可投（P13 失声）；
+    且即使修好，每轮回复前仍有 **~3 秒死寂**，与「一直在场」内核冲突。
+  - **用户听感**：normal 音质比 balanced 好但**不碾压**，3 秒延迟换这点音质**完全不值**。
+- **改动**：`run_voice.py` `latency` 只允许 `balanced`（注释写 A/B 依据）+ `test_fish_audio_pipecat_tts.py`
+  6 passed（接受/默认 balanced + 拒绝 low/normal 参数化）。**未 commit**（run_voice diff 夹带历史 spike logger，
+  提交须选择性 stage）。
+- **文字路径例外（不改）**：`fish_audio.py:137` 文字 TTS 仍 `normal`——文字气泡即时出现、非实时一来一回，
+  3 秒等出声远没语音链路伤，保留可辩护。用户若后续想文字语音也秒回再切 balanced（独立决定）。
+- **Fish 若将来出「流式高音质模式」再重评 normal。**
 
 ## ~~P7 · Pipecat 前端入口~~ ✅ 已完成并实机验证 PASS（2026-06-17，commits `9a7a278`→`dc4ce4e`）
 - `backend/realtime/pipeline_router.py` 新建：`POST /realtime/start` / `POST /realtime/stop` / `GET /realtime/status`
@@ -744,21 +769,55 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 >   复述原文）一旦上推送会被放大，值得先看真实使用数据再决定。**不要在下个 session 重新发起
 >   这个讨论**，除非用户主动提起或观察期已过。
 
-## P11 ·（轻量玩法，可穿插）回复永远用特定语言（如日语 / 英语）
-> **2026-06-22（第三十八轮）新增**。三个小玩法里唯一"真·小"的一个（不沾人设/不沾隐私）。
-- **Scope**：加一个开关，让 Boxi 无论你说什么，回复（文字 + 语音）都用指定语言（日 / 英 / …）。
-- **可行性**：基本是 prompt 指令（输出语言）+ 选一个该语言的 Fish 音色。LLM 原生处理生成/翻译；
-  情绪标签是英文方括号、**语言无关**，标签器照常工作。
-- **唯一坑**：音色——现有主选音色全是中文音色，Fish 各语言质量分层不同（见 `docs/FISH_AUDIO_REFERENCE.md`），
-  日/英要另挑该语言听感好的 `reference_id` 做盲听。
-- **验收**：开关打开后，中文输入也得到目标语言的文字 + 该语言听感 OK 的语音；关掉恢复中文。
-- **要读**：`config/tts.json`、persona 注入相关（`context_builder.py` / `companion_brain.py` 的语言/语气指令）、
-  `docs/FISH_AUDIO_REFERENCE.md`（语言质量分层）。
-- **2026-06-22 范围收紧（用户拍板）**：**仅限文字路径**，语音路径不做。**新增需求**：不是单纯把
-  回复换成目标语言——每次回复要**同时展示中文译文**（即目标语言原文 + 中文翻译并排/上下展示），
-  不是"切换语言、看不到中文"。这意味着实施时需要多一步翻译（目标语言→中文）或反过来（先生成
-  中文再翻译成目标语言展示），UI 也需要同时呈现两段文本，比单纯"prompt 指定输出语言"复杂一些，
-  scope 待后续 `/architect` 时重新评估。
+## P11 · 文字双语回复（特定语言 + 中文译文）
+
+> **2026-06-23（第五十一轮）`/architect` 拆 P0（后端）+ P1（前端）。用户拍板四点**：①双语生成
+> 用第二个模型（Gemini）分担翻译，主 LLM 不背双语任务；②全局 toggle（开/关 + en/ja）；
+> ③信笺模式（LetterView）先不动，只做经典气泡；④toggle 状态 **localStorage 持久化**（刷新记得上次选择）。
+
+### ~~P11-P0 · 翻译模块 + 接入两条聊天路由~~ ✅ 已完成并 commit `2d79671`（2026-06-23，第五十一轮）
+- 新建 `backend/app/tts/translator.py`：`translate_to_chinese(text, *, router, provider_name="gemini")`，
+  照抄 `expression_tagger.py` 的解耦骨架（独立单一任务 prompt + 失败硬性降级返回 `None`，绝不阻断主回复）。
+- `backend/app/memory/context_builder.py`：`build_provider_context` 新增 `target_language` 参数，
+  开启时注入 `[Output language]` 指令（已正确扣减 token 预算）；关闭（默认 `None`）零行为变化。
+- `backend/app/schemas.py`：`ChatCompleteRequest` 加 `target_language: Literal["en","ja"]|None`，
+  `ChatCompleteResponse` 加 `translation: str|None`。
+- `backend/app/main.py`：`/chat/complete`（723行）+ `/chat/stream`（972行）两处接入——主 LLM 回复成功后，
+  若 `target_language` 不为空才调一次 `translate_to_chinese`，结果落进 response 字段 / SSE `done.meta.translation`。
+- 577 pytest 全绿（561 + 新增 16：`test_translator.py` 8 + `test_context_builder.py` 4 +
+  `test_providers.py`/`test_chat_stream.py` 各 2，覆盖 on/off 两态 + provider 报错降级）。
+
+### ~~P11-P1 · 前端 UI · 开关 + 双语展示 + localStorage 持久化~~ ✅ 已完成（2026-06-23，第五十二轮）
+- **实际改动面比原计划稍大**——`frontend/src/api/chat.ts`（`requestChatComplete`/`requestChatStream`
+  加 `targetLanguage` 参数 + 响应类型加 `translation` 字段）、`frontend/src/chat/types.ts`（`ChatMessage`
+  加 `translation`）、`frontend/src/avatar/useAvatarState.ts`（`ChatFetchResult` 同步加 `translation`，
+  编译时发现的中间类型缺漏）、`frontend/src/App.tsx`（三态循环开关：关/EN/JA，localStorage key
+  `cyber-companion-target-language`，气泡渲染 `message.translation`）、`frontend/src/styles.css`
+  （新增 `.message-translation` 样式）。
+- **用户拍板的 3 点细节**：①历史消息译文消失（刷新后从 `/memory/messages` 拉的旧消息没有 translation）
+  暂时可接受，后面要单独补一个任务做后端持久化；②toggle 只影响新消息，已显示的旧译文不回溯隐藏；
+  ③切换 en/ja 不重新翻译屏幕上已有内容。
+- **验证**：`tsc --noEmit` 零错误；浏览器 preview 真机验证——EN 档和 JA 档都实测过（开启后主 LLM 直接用
+  目标语言回复，`translation` 字段是回译的中文，对照展示在气泡下方斜体小字）；localStorage 持久化（设置
+  后刷新页面状态保留）验证通过；关闭开关后新消息恢复纯中文无译文、旧消息译文不消失，符合上面 3 点拍板；
+  console 零新报错。
+- **🆕 真机验证副产物（新发现，未排查，已记 HANDOFF「已知 bug/风险」）**：JA 档下 Fish 标签偶发吐出
+  脏标签 `[ zufrieden]`（带前导空格 + 德语词，非词表内标签），只复现一次，根因未知，留给以后专门排查。
+
+## P15 ·（新立项，次优）Pipecat 链路对话显示双方字幕
+> **2026-06-23（第五十轮）用户新提**：和 Boxi 用 Pipecat 链路对话时，想像现在纯 E2E 一样**看到双方字幕**
+> （你说的 ASR 文本 + 她回的文本）。
+- **现状**：`backend/realtime/run_voice.py` 跑的是 **LocalAudioTransport（本机麦克风+音箱）**，是终端语音
+  循环，**没有把字幕推到前端 UI**。纯 E2E 之所以有字幕，是每轮走 `/rtc/turn` 下发。
+- **本质**：把链路里**已有的** STT 识别文本（`DoubaoStreamingSTTService` 的 `TranscriptionFrame`）+
+  brain 输出文本（`CompanionBrain`）接出来，推给某个 UI 通道。
+- **未定/先查**：P7 加过 `/realtime/start` 等前端入口，但 **Pipecat 现在到底走不走前端、是否已有字幕通道**
+  需 `/architect` 时读代码确认（别臆断）。可能要决定字幕走 WebSocket/SSE 还是别的。
+- **Scope（待 `/architect` 细化）**：不动 soul/behavior/memory；只在 Pipecat transport/processor 层把两侧
+  文本接出 + 前端呈现。
+- **验收（初定）**：Pipecat 对话时前端能实时看到「用户说的」+「Boxi 回的」两侧文本。
+- **要读（`/architect` 时）**：`backend/realtime/run_voice.py`、`backend/realtime/pipeline_router.py`（P7 入口）、
+  `frontend/src/voice/`、`backend/realtime/companion_brain*.py`。
 
 ## 后续讨论名单（未拆解，仅记录方向，待用户发起详细讨论）
 - **Obsidian / 电脑链接（让 Boxi 更了解我）**：⚠️ 撞 CLAUDE.md「不加宽泛文件系统访问」限制。

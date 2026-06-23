@@ -27,6 +27,8 @@ export type ChatMessage = {
   meta?: MessageMeta;
   /** Marks a proactive initiation bubble (PI-3 delivery). */
   initiation?: "proactive";
+  /** Bilingual reply translation (P11), only present on the turn it was generated for. */
+  translation?: string | null;
 };
 
 export type TurnSummary = {

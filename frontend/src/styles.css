@@ -262,6 +262,14 @@ button {
   line-height: 1.4;
 }
 
+.message-translation {
+  margin-top: 6px;
+  color: #c9bfa5;
+  font-size: 0.85rem;
+  font-style: italic;
+  line-height: 1.45;
+}
+
 .message.boxi.initiation-proactive {
   border-color: #7a6848;
   background: linear-gradient(135deg, #2f2a24 0%, #2a2726 58%);
