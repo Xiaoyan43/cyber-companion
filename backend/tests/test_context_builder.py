@@ -90,6 +90,36 @@ def test_build_provider_context_does_not_mutate_user_input(store: MemoryStore) -
     assert user_input == "hello there"
 
 
+def test_build_provider_context_omits_language_instruction_by_default(store: MemoryStore) -> None:
+    built = build_provider_context(store, user_input="hello")
+    system_message = built.messages[0].content
+
+    assert "[Output language]" not in system_message
+
+
+def test_build_provider_context_injects_english_instruction(store: MemoryStore) -> None:
+    built = build_provider_context(store, user_input="hello", target_language="en")
+    system_message = built.messages[0].content
+
+    assert "[Output language]" in system_message
+    assert "English" in system_message
+
+
+def test_build_provider_context_injects_japanese_instruction(store: MemoryStore) -> None:
+    built = build_provider_context(store, user_input="hello", target_language="ja")
+    system_message = built.messages[0].content
+
+    assert "[Output language]" in system_message
+    assert "日本語" in system_message
+
+
+def test_build_provider_context_ignores_unknown_language_code(store: MemoryStore) -> None:
+    built = build_provider_context(store, user_input="hello", target_language="fr")
+    system_message = built.messages[0].content
+
+    assert "[Output language]" not in system_message
+
+
 def test_rank_memories_prefers_job_progress_for_resume_query(store: MemoryStore) -> None:
     store.create_memory(type="stable_profile", content="User likes concise replies.", importance=0.8)
     job_memory = store.create_memory(

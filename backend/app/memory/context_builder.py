@@ -189,6 +189,23 @@ _TRAILER_REMINDER = (
     "不可省略。）"
 )
 
+_LANGUAGE_NAMES = {"en": "English", "ja": "日本語（日语）"}
+
+_LANGUAGE_INSTRUCTION_TEMPLATE = (
+    "[Output language]\n"
+    "本轮强制用 {language_name} 写正文回复——人格、语气、记忆推理过程都不变，只是表达语言换成 "
+    "{language_name}。<<<BOXI_SIGNALS>>> 仍然按原有格式输出，不受语言切换影响。"
+)
+
+
+def _format_language_instruction(target_language: str | None) -> str | None:
+    if target_language is None:
+        return None
+    language_name = _LANGUAGE_NAMES.get(target_language)
+    if language_name is None:
+        return None
+    return _LANGUAGE_INSTRUCTION_TEMPLATE.format(language_name=language_name)
+
 
 def _truncate_user_input_for_provider(user_input: str, max_tokens: int) -> str:
     if max_tokens <= 0 or estimate_token_count(user_input) <= max_tokens:
@@ -225,6 +242,7 @@ def build_provider_context(
     user_input: str,
     budget: BudgetConfig | None = None,
     behavior: BehaviorDecision | None = None,
+    target_language: str | None = None,
 ) -> BuiltContext:
     config = budget or BudgetConfig()
     mood = store.get_mood_state()
@@ -301,17 +319,22 @@ def build_provider_context(
     reserved_tokens = estimate_token_count(provider_user_input) + sum(
         estimate_token_count(f"{message.role}: {message.content}") for message in recent_raw
     )
+    language_instruction = _format_language_instruction(target_language)
     trailer_tokens = estimate_token_count(_TRAILER_REMINDER)
     protocol_tokens = estimate_token_count(OUTPUT_PROTOCOL)
+    language_tokens = estimate_token_count(language_instruction) if language_instruction else 0
     memory_budget = max(
         256,
         config.max_input_tokens_per_turn
         - reserved_tokens
         - protocol_tokens
-        - trailer_tokens,
+        - trailer_tokens
+        - language_tokens,
     )
     packed_sections, truncated = _pack_sections(system_sections, max_input_tokens=memory_budget)
     packed_sections.append(OUTPUT_PROTOCOL)
+    if language_instruction:
+        packed_sections.append(language_instruction)
     packed_sections.append(_TRAILER_REMINDER.strip())
 
     provider_messages: list[ChatMessage] = [

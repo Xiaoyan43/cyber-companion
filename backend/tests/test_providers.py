@@ -67,6 +67,29 @@ def test_chat_complete_uses_mock_provider(client: TestClient) -> None:
     assert payload["cost"]["total_usd"] == 0.0
 
 
+def test_chat_complete_omits_translation_when_target_language_unset(client: TestClient) -> None:
+    response = client.post(
+        "/chat/complete",
+        json={"messages": [{"role": "user", "content": "你好"}]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["translation"] is None
+
+
+def test_chat_complete_returns_translation_when_target_language_set(client: TestClient) -> None:
+    response = client.post(
+        "/chat/complete",
+        json={
+            "messages": [{"role": "user", "content": "你好"}],
+            "target_language": "en",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["translation"] is not None
+
+
 def test_chat_complete_missing_deepseek_key_returns_clear_error(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

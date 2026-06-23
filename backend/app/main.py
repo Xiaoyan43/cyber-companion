@@ -51,6 +51,7 @@ from backend.app.stt.types import TranscriptionRequest
 from backend.app.tts.exceptions import TTSError
 from backend.app.tts.expression_tagger import apply_expression_tags
 from backend.app.tts.router import get_tts_router, reset_tts_router
+from backend.app.tts.translator import translate_to_chinese
 from backend.app.tts.types import SynthesisRequest
 from backend.app.providers.exceptions import ProviderError
 from backend.app.providers.router import get_provider_router, reset_provider_router
@@ -749,6 +750,7 @@ def chat_complete(
     final_decision = decision.decision
     called_llm = False
     reply_signals: dict | None = None
+    translation: str | None = None
 
     if decision.should_call_llm:
         # Resolve the target model first so the spend brake can also veto pricier
@@ -773,6 +775,7 @@ def chat_complete(
                 user_input=user_input,
                 budget=budget,
                 behavior=decision,
+                target_language=request.target_language,
             )
             completion_request = ChatCompletionRequest(
                 messages=built.messages,
@@ -789,6 +792,8 @@ def chat_complete(
 
             parsed = parse_structured_assistant_response(result.content)
             reply_signals = parsed.signals
+            if request.target_language:
+                translation = translate_to_chinese(parsed.content, router=router)
             avatar_state = parsed.avatar_state or (
                 "talking" if decision.decision in {"reply", "interrupt"} else decision.avatar_state
             )
@@ -860,6 +865,7 @@ def chat_complete(
         avatar_state=avatar_state,
         decision=final_decision,
         should_call_llm=called_llm,
+        translation=translation,
     )
 
 
@@ -873,6 +879,7 @@ def _chat_stream_done_meta(
     avatar_state: str,
     decision: str,
     should_call_llm: bool,
+    translation: str | None = None,
 ) -> dict[str, object]:
     return {
         "provider": result.provider,
@@ -881,6 +888,7 @@ def _chat_stream_done_meta(
         "decision": decision,
         "avatar_state": avatar_state,
         "should_call_llm": should_call_llm,
+        "translation": translation,
         "usage": {
             "input_tokens": result.usage.input_tokens,
             "output_tokens": result.usage.output_tokens,
@@ -999,6 +1007,7 @@ def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
         called_llm = False
         avatar_state = decision.avatar_state
         result: ChatCompletionResult | None = None
+        translation: str | None = None
 
         try:
             if decision.should_call_llm:
@@ -1048,6 +1057,7 @@ def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
                     user_input=user_input,
                     budget=budget,
                     behavior=decision,
+                    target_language=request.target_language,
                 )
                 completion_request = ChatCompletionRequest(
                     messages=built.messages,
@@ -1103,6 +1113,8 @@ def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
                 avatar_state = parsed.avatar_state or (
                     "talking" if decision.decision in {"reply", "interrupt"} else decision.avatar_state
                 )
+                if request.target_language:
+                    translation = translate_to_chinese(parsed.content, router=router)
             else:
                 result = build_local_completion(decision, user_input=user_input)
                 avatar_state = decision.avatar_state
@@ -1136,6 +1148,7 @@ def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
                         avatar_state=avatar_state,
                         decision=final_decision,
                         should_call_llm=called_llm,
+                        translation=translation,
                     ),
                 },
             )

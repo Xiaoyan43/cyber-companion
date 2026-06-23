@@ -73,6 +73,31 @@ def test_chat_stream_emits_deltas_then_done(client: TestClient) -> None:
     assert len(after) == len(before) + 2
 
 
+def test_chat_stream_omits_translation_when_target_language_unset(client: TestClient) -> None:
+    response = client.post(
+        "/chat/stream",
+        json={"messages": [{"role": "user", "content": "你好流式"}]},
+    )
+
+    events = parse_sse_events(response.text)
+    meta = events[-1]["meta"]
+    assert meta["translation"] is None
+
+
+def test_chat_stream_returns_translation_when_target_language_set(client: TestClient) -> None:
+    response = client.post(
+        "/chat/stream",
+        json={
+            "messages": [{"role": "user", "content": "你好流式"}],
+            "target_language": "ja",
+        },
+    )
+
+    events = parse_sse_events(response.text)
+    meta = events[-1]["meta"]
+    assert meta["translation"] is not None
+
+
 def test_chat_stream_persists_turn_once_and_runs_auto_memory_write(client: TestClient) -> None:
     before = client.get("/memory/messages").json()["messages"]
     response = client.post(

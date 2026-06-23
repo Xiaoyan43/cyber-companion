@@ -18,6 +18,7 @@ class ChatCompleteRequest(BaseModel):
     messages: list[ChatMessageSchema] = Field(min_length=1)
     provider: str | None = None
     max_output_tokens: int = Field(default=2400, ge=1, le=4000)
+    target_language: Literal["en", "ja"] | None = None
 
 
 class TokenUsageSchema(BaseModel):
@@ -43,6 +44,7 @@ class ChatCompleteResponse(BaseModel):
     avatar_state: str = "talking"
     decision: str = "reply"
     should_call_llm: bool = True
+    translation: str | None = None
 
 
 class BehaviorDecisionSchema(BaseModel):
