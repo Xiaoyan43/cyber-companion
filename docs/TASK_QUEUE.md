@@ -1,6 +1,10 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-23（第四十九轮）**：`/architect` 把 **P14 Phase 5** 拆成 P0（删 `low` latency 选项）+
+> P1（修 P13 normal 失声）。**P0 已完成并 commit `507c9e9`**——消掉 `PIPECAT_AUDIT.md` 审计唯一 🔴；
+> 新增 3 个回归测试。**P1 用户已选路线 A（subclass `FishAudioTTSService`）**，但需真机验证、medium diff，
+> 留独立 session。详见 HANDOFF 和下方 Phase 5 节。
 > **2026-06-23（第四十七轮）**：用户决定开一个大 epic **P14 · Pipecat 链路最大化**（全量读 Pipecat +
 > Fish Audio Pipecat 文档 → 审计现有链路配置是否最优/正确 → 批量测试 → 双 LLM 决策讨论 → 修 P13）。
 > 本轮只做了 epic 拆解 + 落 TASK_QUEUE，**未开工**。已确认这是多 session epic，每个 phase 一个干净
@@ -447,9 +451,28 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
   （见上方"关键事实 #4"的非对称分工方案 + 句间延迟/情绪连贯两个待验证点）。决定后再 `/architect` 拆实现。
 
 ### Phase 5 · 修 P13（latency=normal 失声，放最后）
-- 根因见"关键事实 #3"。先确认是改调用方式还是 subclass/上报上游；同时处理"关键事实 #2"（run_voice.py
-  允许 `low` 但官方 service 不支持）。要读：`.venv/.../pipecat/services/fish/tts.py` +
-  `pipecat/services/tts_service.py`（`InterruptibleTTSService` 的 context 生命周期）+ run_voice.py。
+
+#### ~~Phase 5 · P0 · 删除 `low` latency 选项~~ ✅ 已完成并 commit `507c9e9`（2026-06-23，第四十九轮）
+- `run_voice.py:103` 允许集合 `{normal,balanced,low}` → `{normal,balanced}`，`low` 是官方
+  `FishAudioTTSService` 未定义透传行为，已消掉 `PIPECAT_AUDIT.md` 审计唯一 🔴（B-1）。
+- 新增 3 个回归测试（`test_fish_audio_pipecat_tts.py`），5 passed。
+- **commit 时排除了 run_voice.py 夹带的 `_LatencySpikeLogger`（P8-C spike，用户要求保留）**——
+  用部分 patch 只 stage latency 那一处 hunk，spike 仍在工作区未提交。
+
+#### Phase 5 · P1 · 修 P13 normal 失声（未开工，路线已定 = A）
+- **用户已选路线 A**：subclass `FishAudioTTSService` 覆写最小必要方法，救回 `normal`（最高音质档）。
+  路线 B（钉死 balanced）/ C（升级排查）已否决。
+- 根因（综述 §5 + 本轮零真机代码核实）：Fish `_receive_messages` 用 `get_active_audio_context_id()`
+  （= `_playing_context_id or _turn_context_id`），`normal` 节奏下音频晚到时两游标皆 None →
+  `append_to_audio_context` 命中 "no context ID provided"（`tts_service.py:1297`）丢音频。
+  **障碍**：透明重建分支（`tts_service.py:1304`）只在 `context_id == _turn_context_id` 时触发，
+  turn context 已清时救不回——所以需 subclass，没有零侵入一行修法。
+- **⚠️ 验证要求**：代码可纯写，但"normal 不再失声"必须**真机多轮对话验证**（单测只能覆盖 context
+  生命周期，测不出真实音频竞态）。
+- **不动**：绝不 patch `.venv` 库源码，只 subclass。
+- **建议**：新 session 先对路线 A 跑 `/architect` 二次拆分（medium diff，不是 small）。
+- 要读：`.venv/.../pipecat/services/fish/tts.py` + `pipecat/services/tts_service.py`
+  （`InterruptibleTTSService` 的 audio-context 生命周期）+ `run_voice.py`。
 
 ## ~~P7 · Pipecat 前端入口~~ ✅ 已完成并实机验证 PASS（2026-06-17，commits `9a7a278`→`dc4ce4e`）
 - `backend/realtime/pipeline_router.py` 新建：`POST /realtime/start` / `POST /realtime/stop` / `GET /realtime/status`

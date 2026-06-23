@@ -12,12 +12,14 @@
 （两阶段标签，原 P8-C 已被吸收进此）决策讨论 → 修 P13。**第四十七轮只做了 epic 拆解 + 落
 TASK_QUEUE，未开工**，并预先做了一轮联网研究拿到几个关键事实（见 `docs/TASK_QUEUE.md` P14 节
 「关键事实」5 条，新 session 不必重新 derive）。
-**第四十八轮已完成 P14 Phase 1 的 P0（文档全量落盘）**。**下一步 = `/clear` 后新 session 做 Phase 1 的
-P1（写 `docs/PIPECAT_REFERENCE.md` 综述）**，详见 `docs/TASK_QUEUE.md` P14 节。
+**第四十八轮完成 Phase 1+2（文档落盘+综述+审计）+ Phase 3 抢答修复。第四十九轮（本轮）完成 Phase 5
+P0（删 `low` latency 选项，commit `507c9e9`）**，消掉审计唯一 🔴。**下一步 = `/clear` 后新 session 做
+Phase 5 P1（修 P13 normal 失声，路线 A=subclass，已定但需先 `/architect` 二次拆分 + 真机验证）**，
+详见 `docs/TASK_QUEUE.md` P14 节。
 
 > 背景（已完成，无需再动）：第四十六轮用 spike round 2（扩大样本量）确认了语音路径标签退化明显比
 > 文字路径差（长篇 60% 退化、多轮 opening_only 33%），这是 P14 要做双 LLM 的数据依据。**P13（Pipecat
-> TTS latency=normal 多轮失声）仍待修，排在 P14 Phase 5。**
+> TTS latency=normal 多轮失声）根因已定位，P0(low清理)已修，P1(normal修复)待新 session 做。**
 
 ## 本轮已完成（2026-06-23，第四十九轮）
 
