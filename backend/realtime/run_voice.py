@@ -100,12 +100,17 @@ def _build_tts(tts_backend: str) -> tuple[object, int]:
 
         FISH_SAMPLE_RATE = 44_100
         latency = os.getenv("CYBER_COMPANION_VOICE_TTS_LATENCY", "balanced").strip().lower()
-        # `low` removed (P14 Phase 5): the official FishAudioTTSService only documents
-        # normal/balanced; passing `low` forwards it to the Fish server verbatim as undefined
-        # behavior. `normal` is kept but currently races to silence on multi-turn (P13) —
-        # pending the P1 subclass fix. Default stays `balanced` (verified working).
-        if latency not in {"normal", "balanced"}:
-            raise SystemExit("CYBER_COMPANION_VOICE_TTS_LATENCY must be one of: normal, balanced")
+        # Only `balanced` is allowed (P14 Phase 5 P1, A/B verdict 2026-06-23):
+        #  - `low`  : undefined passthrough to the Fish server (P0, round 49).
+        #  - `normal`: Fish renders the whole clip server-side then sends it in one batch
+        #    (measured first-byte ~3.5s vs balanced ~0.5s). This (a) caused the P13 multi-turn
+        #    silence — the batch arrives after pipecat's 3.0s stop_frame_timeout_s tears the
+        #    audio context down — and (b) means ~3s of dead air before every reply, which kills
+        #    presence. Same-sentence A/B confirmed normal's quality edge is marginal, not worth
+        #    the cost. Decision: lock `balanced` (true streaming), drop `normal`. Re-evaluate only
+        #    if Fish ships a streaming high-quality mode.
+        if latency != "balanced":
+            raise SystemExit("CYBER_COMPANION_VOICE_TTS_LATENCY must be: balanced")
         svc = FishAudioTTSService(
             api_key=api_key,
             settings=FishAudioTTSService.Settings(
