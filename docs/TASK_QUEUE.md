@@ -1,14 +1,14 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
-> **2026-06-24（第五十四轮）**：**P11-P2（历史消息译文持久化）已完成并真机验证 PASS，未 commit**。
+> **2026-06-24（第五十四轮）**：**P11-P2（历史消息译文持久化）已完成并真机验证 PASS，已 commit `73e996a`**。
 > `/architect` 拆解后发现 scope 比旧描述更精确——读取侧 `store.py` 不需要改（metadata 已整体透传），
 > 真正改动在 `chat_persistence.py`（`persist_chat_turn` 新增 `translation` 参数）+ `main.py`（两条聊天
 > 路由传参）+ 前端 `chat/types.ts`。**实施中发现并修复一个隐藏 bug**：`/chat/stream` 路径原本在
 > `_finalize_streamed_turn` 落库**之后**才计算翻译，导致流式路径翻译永远来不及落库——已把翻译计算挪
 > 进该函数内部解决。新增 2 个回归测试，579 pytest 全绿，真机验证（刷新页面后译文仍在）PASS。**P11 全部
 > 完成（P0+P1+P2）**。同轮用户还直接请求清空 `messages` 表（已备份，211 条记录清空，不影响 mood/
-> relationship/memories）。**下一步**：commit 本轮 diff / P14 Phase 4（双 LLM）。详见 HANDOFF。
+> relationship/memories）。**下一步**：P14 Phase 4（双 LLM）。详见 HANDOFF。
 > **2026-06-23（第五十三轮）**：**P15（Pipecat 双方字幕）全部完成（P0+P1）并真机验证 PASS，未
 > commit**。`/architect` 拆出 P0（后端）+ P1（前端）；新建 `backend/realtime/transcript_broadcaster.py`
 > （`TranscriptBroadcaster` + 两个旁路 tap，用户句 tap 插在 `brain_processor` 前、Boxi 句 tap 插在
@@ -828,7 +828,7 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - **🆕 真机验证副产物（新发现，未排查，已记 HANDOFF「已知 bug/风险」）**：JA 档下 Fish 标签偶发吐出
   脏标签 `[ zufrieden]`（带前导空格 + 德语词，非词表内标签），只复现一次，根因未知，留给以后专门排查。
 
-### ~~P11-P2 · 历史消息译文持久化~~ ✅ 已完成并真机验证 PASS（2026-06-24，第五十四轮，未 commit）
+### ~~P11-P2 · 历史消息译文持久化~~ ✅ 已完成并真机验证 PASS，已 commit `73e996a`（2026-06-24，第五十四轮）
 - **触发**：P11-P1 真机验证时用户发现"刷新页面后中文译文消失"——这是设计已知限制（见上），不是 bug。
 - **实际改动**（scope 比原计划更精确）：`backend/app/memory/chat_persistence.py`（`persist_chat_turn`
   新增 `translation` 参数，仿 `decision`/`avatar_state` 写法）+ `backend/app/main.py`（`/chat/complete`

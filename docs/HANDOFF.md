@@ -7,13 +7,13 @@
 最终形态 = Direction C「一个有世界的存在」（深度 > 延迟；soul 写每个字）。仓库 **public**（MIT）。
 
 ## 当前阶段目标
-**P11（文字双语回复）全部完成（P0+P1+P2）**。**P14 · Pipecat 链路最大化 epic 已结清**（Phase 1+2+3+5
-全部有结论且全部已 commit，Phase 4 双 LLM 仍未开工）。**P15（Pipecat 双方字幕）全部完成并已 commit
-`d20d7f7`**。**下一步候选**：commit 本轮 P11-P2 diff / P14 Phase 4（双 LLM）。
+**P11（文字双语回复）全部完成（P0+P1+P2）并已 commit**。**P14 · Pipecat 链路最大化 epic 已结清**
+（Phase 1+2+3+5 全部有结论且全部已 commit，Phase 4 双 LLM 仍未开工）。**P15（Pipecat 双方字幕）全部
+完成并已 commit `d20d7f7`**。**下一步候选**：P14 Phase 4（双 LLM，epic 最大块，先 `/architect`）。
 
 ## 本轮已完成（2026-06-24，第五十四轮）
 
-### P11-P2 · 历史消息译文持久化 ✅ 已完成并真机验证 PASS，未 commit
+### P11-P2 · 历史消息译文持久化 ✅ 已完成并真机验证 PASS，已 commit `73e996a`
 - **`/architect` 拆解后发现 scope 比 HANDOFF 旧描述更精确**：读取侧 `backend/app/memory/store.py`
   **不需要改**——`_message_to_schema` 已把整个 `metadata` dict 原样透传，新字段自动随 metadata 出现；
   真正要改的是写入侧 `backend/app/memory/chat_persistence.py`。
@@ -36,7 +36,7 @@
   对得上当轮响应值。
 - **验证**：`tsc --noEmit` 零错误；579 pytest 全绿（含新增 2 个）；**真机浏览器验证 PASS**——开 EN/JA
   开关发一条消息，刷新页面后历史气泡下方中文译文仍正常显示。
-- **未 commit**——等用户确认后提交。
+- **已 commit `73e996a`**（7 files changed, 121 insertions, 37 deletions）。
 
 ### 清空 Boxi 对话历史（用户直接请求，非任务队列项）
 - 用户要求"清空 Boxi 的上下文"，确认范围仅 `messages` 表（不动 `mood_state`/`relationship_state`/
@@ -173,7 +173,6 @@
 
 ## 下一步只需读取（按候选任务挑一个）
 - **永远先读**：`docs/HANDOFF.md`（本文件）+ `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`。
-- **先 commit 本轮 P11-P2 diff**（见上方「已修改文件」）。
 - **做 P14 Phase 4（双 LLM）**：先讨论形态，要读 `docs/PIPECAT_REFERENCE.md` §7（`LLMTextProcessor`/
   `PatternPairAggregator` 原生路线）+ `docs/PIPECAT_AUDIT.md`。
 
@@ -187,8 +186,7 @@
 - ❌ 全仓库扫描
 
 ## 推荐下一个最小任务
-- **首选 = commit P11-P2 diff**（scope 已收尾，真机验证 PASS，只待提交）。
-- **次选 = P14 Phase 4（双 LLM）**：epic 最大块，需先 `/architect` 细化 scope。
+- **P14 Phase 4（双 LLM）**：epic 最后一块，需先讨论形态再 `/architect` 细化 scope。
 
 ---
 
