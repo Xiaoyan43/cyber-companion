@@ -1,0 +1,61 @@
+{
+  "_comment": "Production whitelist material pool for idle_experience generation. Each entry fact-checked against well-established, verifiable public knowledge (canonical films / confirmed historical science news). Summaries are deliberately general — no invented plot details or specifics beyond what is stated.",
+  "items": [
+    {
+      "id": "movie-blade-runner-2049",
+      "kind": "movie",
+      "title": "银翼杀手2049",
+      "summary": "2017年上映的科幻电影，《银翼杀手》续作。男主角K是一名银翼杀手，奉命追捕旧型号仿生人，调查中发现可能存在仿生人产下后代的线索，引出关于身份与人性的疑问。",
+      "source_note": "公开影视资料，概括性剧情简介，未涉及具体台词或细节情节"
+    },
+    {
+      "id": "movie-spirited-away",
+      "kind": "movie",
+      "title": "千与千寻",
+      "summary": "2001年上映的宫崎骏动画电影。少女千寻误入神灵居住的异世界，父母被变成猪，她必须在汤婆婆的浴场工作、找回自己的名字，才能带父母回到人类世界。",
+      "source_note": "公开影视资料，广为人知的剧情概括，未涉及具体台词细节"
+    },
+    {
+      "id": "movie-the-truman-show",
+      "kind": "movie",
+      "title": "楚门的世界",
+      "summary": "1998年上映的电影。主角楚门从出生起就生活在一个巨大的封闭摄影棚里，身边所有人都是演员，他的整个人生被全天候直播给电视观众，自己却毫不知情，直到逐渐察觉异样。",
+      "source_note": "公开影视资料，广为人知的剧情概括，未涉及具体台词细节"
+    },
+    {
+      "id": "movie-wall-e",
+      "kind": "movie",
+      "title": "机器人总动员",
+      "summary": "2008年上映的皮克斯动画电影。地球被废弃数百年后，清扫机器人瓦力独自留在地球上日复一日地工作，直到侦察机器人伊娃出现，两人的相遇带来了情感与变化。",
+      "source_note": "公开影视资料，广为人知的剧情概括，未涉及具体台词细节"
+    },
+    {
+      "id": "movie-interstellar",
+      "kind": "movie",
+      "title": "星际穿越",
+      "summary": "2014年上映的科幻电影。地球环境持续恶化，前宇航员库珀通过虫洞前往遥远星系寻找适宜人类居住的星球，途中经历时间膨胀，与留在地球的女儿之间产生了跨越时间的牵绊。",
+      "source_note": "公开影视资料，广为人知的剧情概括，未涉及具体台词细节"
+    },
+    {
+      "id": "news-voyager1-interstellar-space",
+      "kind": "news",
+      "title": "旅行者1号进入星际空间",
+      "summary": "美国国家航空航天局（NASA）2013年正式确认，旅行者1号探测器已于2012年穿越太阳风层顶，成为首个进入星际空间的人造物体，目前仍在以无线电与地球保持联系。",
+      "source_note": "NASA 官方确认的真实历史科学新闻，公开可查"
+    },
+    {
+      "id": "news-james-webb-telescope-launch",
+      "kind": "news",
+      "title": "韦布空间望远镜发射升空",
+      "summary": "詹姆斯·韦布空间望远镜于2021年12月25日发射升空，是目前最大、最强大的太空望远镜，主要用于观测早期宇宙、系外行星和遥远星系，2022年起陆续传回深空影像。",
+      "source_note": "NASA/ESA 官方公开的真实历史科学新闻，可查"
+    },
+    {
+      "id": "news-human-genome-project-completion",
+      "kind": "news",
+      "title": "人类基因组计划完成测序",
+      "summary": "国际合作的人类基因组计划于2003年宣布完成人类基因组的全序列测定，是生物学史上的重要里程碑，为之后的基因研究和精准医学奠定了基础。",
+      "source_note": "公开历史科学新闻，多方记录可查"
+    }
+  ]
+}
