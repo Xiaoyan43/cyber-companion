@@ -90,6 +90,23 @@ def test_chat_complete_returns_translation_when_target_language_set(client: Test
     assert response.json()["translation"] is not None
 
 
+def test_chat_complete_persists_translation_into_message_metadata(client: TestClient) -> None:
+    response = client.post(
+        "/chat/complete",
+        json={
+            "messages": [{"role": "user", "content": "你好"}],
+            "target_language": "en",
+        },
+    )
+    assert response.status_code == 200
+    translation = response.json()["translation"]
+    assert translation is not None
+
+    messages = client.get("/memory/messages").json()["messages"]
+    assistant_message = next(m for m in reversed(messages) if m["role"] == "assistant")
+    assert assistant_message["metadata"]["translation"] == translation
+
+
 def test_chat_complete_missing_deepseek_key_returns_clear_error(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

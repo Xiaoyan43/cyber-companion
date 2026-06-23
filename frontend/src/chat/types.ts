@@ -86,6 +86,10 @@ export function storedMessageToChatMessage(message: StoredMessage): ChatMessage 
       message.role === "assistant" && message.metadata?.decision === "proactive"
         ? "proactive"
         : undefined,
+    translation:
+      message.role === "assistant" && typeof message.metadata?.translation === "string"
+        ? message.metadata.translation
+        : undefined,
   };
 }
 

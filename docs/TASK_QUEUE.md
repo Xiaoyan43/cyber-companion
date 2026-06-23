@@ -1,6 +1,14 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-24（第五十四轮）**：**P11-P2（历史消息译文持久化）已完成并真机验证 PASS，未 commit**。
+> `/architect` 拆解后发现 scope 比旧描述更精确——读取侧 `store.py` 不需要改（metadata 已整体透传），
+> 真正改动在 `chat_persistence.py`（`persist_chat_turn` 新增 `translation` 参数）+ `main.py`（两条聊天
+> 路由传参）+ 前端 `chat/types.ts`。**实施中发现并修复一个隐藏 bug**：`/chat/stream` 路径原本在
+> `_finalize_streamed_turn` 落库**之后**才计算翻译，导致流式路径翻译永远来不及落库——已把翻译计算挪
+> 进该函数内部解决。新增 2 个回归测试，579 pytest 全绿，真机验证（刷新页面后译文仍在）PASS。**P11 全部
+> 完成（P0+P1+P2）**。同轮用户还直接请求清空 `messages` 表（已备份，211 条记录清空，不影响 mood/
+> relationship/memories）。**下一步**：commit 本轮 diff / P14 Phase 4（双 LLM）。详见 HANDOFF。
 > **2026-06-23（第五十三轮）**：**P15（Pipecat 双方字幕）全部完成（P0+P1）并真机验证 PASS，未
 > commit**。`/architect` 拆出 P0（后端）+ P1（前端）；新建 `backend/realtime/transcript_broadcaster.py`
 > （`TranscriptBroadcaster` + 两个旁路 tap，用户句 tap 插在 `brain_processor` 前、Boxi 句 tap 插在
@@ -820,15 +828,15 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - **🆕 真机验证副产物（新发现，未排查，已记 HANDOFF「已知 bug/风险」）**：JA 档下 Fish 标签偶发吐出
   脏标签 `[ zufrieden]`（带前导空格 + 德语词，非词表内标签），只复现一次，根因未知，留给以后专门排查。
 
-### 🔜 P11-P2 · 历史消息译文持久化（小任务，用户已知，无紧迫性）
+### ~~P11-P2 · 历史消息译文持久化~~ ✅ 已完成并真机验证 PASS（2026-06-24，第五十四轮，未 commit）
 - **触发**：P11-P1 真机验证时用户发现"刷新页面后中文译文消失"——这是设计已知限制（见上），不是 bug。
-- **Scope**：后端把 `translation` 一起存进消息落库的 metadata（`backend/app/main.py` 落库那段，
-  仿照现有 `decision`/`usage`/`cost` 字段的存法）；前端 `frontend/src/chat/types.ts` 的
-  `storedMessageToChatMessage` 把它读出来映射进 `ChatMessage.translation`。
-- **不动**：`/chat/complete`/`/chat/stream` 的当轮响应逻辑（已工作，不需要改）。
-- **验收**：发一条带译文的消息→刷新页面→历史消息气泡下方仍显示译文。
-- **要读**：`backend/app/main.py`（落库那段）、`backend/app/memory/store.py`（消息读取）、
-  `frontend/src/chat/types.ts`（`storedMessageToChatMessage`）。
+- **实际改动**（scope 比原计划更精确）：`backend/app/memory/chat_persistence.py`（`persist_chat_turn`
+  新增 `translation` 参数，仿 `decision`/`avatar_state` 写法）+ `backend/app/main.py`（`/chat/complete`
+  直传；`/chat/stream` 因隐藏时序 bug 把翻译计算挪进 `_finalize_streamed_turn` 内部，函数返回值改为
+  `tuple[ChatCompletionResult, str|None]`）+ `frontend/src/chat/types.ts`（`storedMessageToChatMessage`
+  新增 `translation` 映射）。`backend/app/memory/store.py` **未改**——metadata 已整体透传，无需改读取层。
+- **验收 ✅**：新增 2 个回归测试验证落库→读出链路；真机验证——发一条带译文的消息→刷新页面→历史
+  消息气泡下方仍显示译文。579 pytest 全绿，`tsc --noEmit` 零错误。
 
 ## P15 ·（新立项，次优）Pipecat 链路对话显示双方字幕
 > **2026-06-23（第五十轮）用户新提**：和 Boxi 用 Pipecat 链路对话时，想像现在纯 E2E 一样**看到双方字幕**

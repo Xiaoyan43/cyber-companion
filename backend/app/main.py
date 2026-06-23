@@ -828,6 +828,7 @@ def chat_complete(
         decision=final_decision,
         avatar_state=avatar_state,
         should_call_llm=called_llm,
+        translation=translation,
     )
     user_message_id = saved_ids[0] if user_input.strip() and saved_ids else None
     try:
@@ -916,7 +917,8 @@ def _finalize_streamed_turn(
     decision: str,
     avatar_state: str,
     should_call_llm: bool,
-) -> ChatCompletionResult:
+    target_language: str | None = None,
+) -> tuple[ChatCompletionResult, str | None]:
     cost = estimate_cost(model, usage)
     result = ChatCompletionResult(
         provider=provider_name,
@@ -938,6 +940,9 @@ def _finalize_streamed_turn(
         store.get_mood_state(),
         router=get_provider_router(),
     )
+    translation: str | None = None
+    if target_language:
+        translation = translate_to_chinese(parsed.content, router=get_provider_router())
     result = ChatCompletionResult(
         provider=result.provider,
         model=result.model,
@@ -953,6 +958,7 @@ def _finalize_streamed_turn(
         decision=final_decision,
         avatar_state=final_avatar_state,
         should_call_llm=should_call_llm,
+        translation=translation,
     )
     user_message_id = saved_ids[0] if user_input.strip() and saved_ids else None
     try:
@@ -966,13 +972,16 @@ def _finalize_streamed_turn(
     except Exception:
         pass
     maybe_update_conversation_summary(store, budget=budget)
-    return ChatCompletionResult(
-        provider=result.provider,
-        model=result.model,
-        content=result.content,
-        usage=result.usage,
-        cost=result.cost,
-        mock=result.mock,
+    return (
+        ChatCompletionResult(
+            provider=result.provider,
+            model=result.model,
+            content=result.content,
+            usage=result.usage,
+            cost=result.cost,
+            mock=result.mock,
+        ),
+        translation,
     )
 
 
@@ -1091,7 +1100,7 @@ def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
                     return
 
                 accumulated_text = "".join(accumulated_parts)
-                result = _finalize_streamed_turn(
+                result, translation = _finalize_streamed_turn(
                     store,
                     budget,
                     user_input=user_input,
@@ -1105,6 +1114,7 @@ def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
                         "talking" if decision.decision in {"reply", "interrupt"} else decision.avatar_state
                     ),
                     should_call_llm=True,
+                    target_language=request.target_language,
                 )
                 called_llm = True
                 store.note_llm_turn()
@@ -1113,8 +1123,6 @@ def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
                 avatar_state = parsed.avatar_state or (
                     "talking" if decision.decision in {"reply", "interrupt"} else decision.avatar_state
                 )
-                if request.target_language:
-                    translation = translate_to_chinese(parsed.content, router=router)
             else:
                 result = build_local_completion(decision, user_input=user_input)
                 avatar_state = decision.avatar_state

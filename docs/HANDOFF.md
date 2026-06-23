@@ -1,4 +1,4 @@
-# HANDOFF — 上下文交接（2026-06-23，第五十二轮）
+# HANDOFF — 上下文交接（2026-06-24，第五十四轮）
 
 > 本文件每次「瘦身交接」/「工作流交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
 
@@ -7,11 +7,46 @@
 最终形态 = Direction C「一个有世界的存在」（深度 > 延迟；soul 写每个字）。仓库 **public**（MIT）。
 
 ## 当前阶段目标
-**P11（文字双语回复）全部完成（P0+P1）**。**P14 · Pipecat 链路最大化 epic 已结清**（Phase 1+2+3+5
-全部有结论且全部已 commit，Phase 4 双 LLM 仍未开工）。**P15（Pipecat 双方字幕）全部完成（P0+P1）并
-真机验证 PASS，待 commit**。**下一步候选**：P11-P2（译文持久化）/ P14 Phase 4（双 LLM）。
+**P11（文字双语回复）全部完成（P0+P1+P2）**。**P14 · Pipecat 链路最大化 epic 已结清**（Phase 1+2+3+5
+全部有结论且全部已 commit，Phase 4 双 LLM 仍未开工）。**P15（Pipecat 双方字幕）全部完成并已 commit
+`d20d7f7`**。**下一步候选**：commit 本轮 P11-P2 diff / P14 Phase 4（双 LLM）。
+
+## 本轮已完成（2026-06-24，第五十四轮）
+
+### P11-P2 · 历史消息译文持久化 ✅ 已完成并真机验证 PASS，未 commit
+- **`/architect` 拆解后发现 scope 比 HANDOFF 旧描述更精确**：读取侧 `backend/app/memory/store.py`
+  **不需要改**——`_message_to_schema` 已把整个 `metadata` dict 原样透传，新字段自动随 metadata 出现；
+  真正要改的是写入侧 `backend/app/memory/chat_persistence.py`。
+- **改动** [backend/app/memory/chat_persistence.py](../backend/app/memory/chat_persistence.py)：
+  `persist_chat_turn` 新增 `translation: str | None = None` 参数，非空时写入
+  `assistant_metadata["translation"]`（仿 `decision`/`avatar_state` 的可选字段写法）。
+- **改动** [backend/app/main.py](../backend/app/main.py)：
+  - `/chat/complete`：调用 `persist_chat_turn` 时多传 `translation=translation`（变量已在作用域内）。
+  - `/chat/stream`：**实施时发现一个隐藏时序 bug**——`_finalize_streamed_turn` 内部先调用
+    `persist_chat_turn` 落库，而外层翻译计算（`translate_to_chinese`）发生在该函数返回**之后**，
+    导致流式路径落库时翻译永远还没算出来。修复：把翻译计算挪进 `_finalize_streamed_turn` 内部
+    （新增 `target_language` 参数，复用内部已有的 `parsed.content`），函数返回值改为
+    `tuple[ChatCompletionResult, str | None]`，外层用 `result, translation = _finalize_streamed_turn(...)`
+    接收，删掉外层重复的翻译调用。
+- **改动** [frontend/src/chat/types.ts](../frontend/src/chat/types.ts)：`storedMessageToChatMessage`
+  新增 `translation` 字段映射（从 `message.metadata.translation` 读取，非 string 时降级 `undefined`）。
+- **新增 2 个回归测试**：`test_chat_complete_persists_translation_into_message_metadata`
+  （`backend/tests/test_providers.py`）+ `test_chat_stream_persists_translation_into_message_metadata`
+  （`backend/tests/test_chat_stream.py`），均验证"落库→`/memory/messages` 读出"链路里 translation 字段
+  对得上当轮响应值。
+- **验证**：`tsc --noEmit` 零错误；579 pytest 全绿（含新增 2 个）；**真机浏览器验证 PASS**——开 EN/JA
+  开关发一条消息，刷新页面后历史气泡下方中文译文仍正常显示。
+- **未 commit**——等用户确认后提交。
+
+### 清空 Boxi 对话历史（用户直接请求，非任务队列项）
+- 用户要求"清空 Boxi 的上下文"，确认范围仅 `messages` 表（不动 `mood_state`/`relationship_state`/
+  `memories`/`conversation_summaries`）。操作前已备份到
+  `data/backups/cyber_companion_<timestamp>_before_clear_messages.db`，删除前 211 条记录，删除后确认
+  `messages` 表为空。不在 git 历史里（数据库变更，非代码）。
 
 ## 本轮已完成（2026-06-23，第五十三轮）
+
+> **⚠️ 更新（第五十四轮）：本节标注的"未 commit"已过期——P15-P0+P1 已合并 commit `d20d7f7`。**
 
 ### P15-P1 · Pipecat 双方字幕 · 前端渲染 ✅ 已完成并真机验证 PASS，未 commit
 - **新建** [frontend/src/voice/useVoiceTranscript.ts](../frontend/src/voice/useVoiceTranscript.ts)：
@@ -110,12 +145,7 @@
   stage，排除这段（同第四十九/五十/本轮的做法）。
 
 ## 当前未完成
-- **🔜 P11-P2 · 历史消息译文持久化（小任务，非阻塞，用户已知）**：刷新后历史消息没有 `translation`
-  字段——后端只在当轮响应里返回，没有持久化进消息 metadata。Scope：`backend/app/main.py`（落库段）+
-  `backend/app/memory/store.py`（读取段）+ 前端 `chat/types.ts` 的 `storedMessageToChatMessage`。
-  详见 `docs/TASK_QUEUE.md` P11 节。
-- **P15 · Pipecat 链路双方字幕（次优，新立项）**：把 STT 文本 + brain 文本接出来推 UI。先 `/architect` 查
-  Pipecat 与前端现状再拆。
+- **P11-P2 已完成并真机验证 PASS，未 commit**（详见上方本轮节）。
 - **P14 Phase 4 · 双 LLM 两阶段标签（未开工，epic 最大块）**：原生路线（`LLMTextProcessor`+
   `PatternPairAggregator` 插 brain↔tts），先讨论形态再 `/architect`。注意：Phase 5 锁了 balanced 流式，
   双 LLM 的延迟杠杆设计要据此重估。
@@ -135,7 +165,7 @@
 - 沿用既有风险（详见 `docs/TASK_QUEUE.md` P10 节）：cost 模块不认 openrouter 模型、R8、R4、标签器质量基线矛盾等。
 - **P11-P0 已知限制（非阻塞，设计如此）**：本地兜底回复（预算拦截/behavior 本地短路）路径不调用翻译——
   这些路径本就是中文短句，无需翻译，`translation` 字段恒为 `None`，前端只需按字段存在与否渲染。
-- **P11-P1 已知限制（非阻塞，已立 P11-P2）**：历史消息译文不持久化，刷新后消失。
+- ~~**P11-P1 已知限制**：历史消息译文不持久化，刷新后消失。~~ **已在 P11-P2（第五十四轮）修复**。
 - **🆕 新发现（P11-P1 真机验证时，日语档，未排查，无优先级）**：Fish 标签偶发输出脏标签
   `[ zufrieden]`（带前导空格 + 德语词，非词表内标签）。只在 `target_language=ja` 真机测试中复现
   一次，未排查根因（不确定是主 LLM 在日语模式下标签词表混乱、还是 Fish 标签生成本身的已知抽风）。
@@ -143,11 +173,7 @@
 
 ## 下一步只需读取（按候选任务挑一个）
 - **永远先读**：`docs/HANDOFF.md`（本文件）+ `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`。
-- **做 P11-P2（译文持久化）**：读 `backend/app/main.py`（落库段，找现有 `decision`/`usage`/`cost`
-  怎么存进 metadata，照样加 `translation`）+ `backend/app/memory/store.py`（消息读取）+
-  `frontend/src/chat/types.ts` 的 `storedMessageToChatMessage`。
-- **做 P15（Pipecat 双方字幕）**：先 `/architect`，要读 `backend/realtime/run_voice.py`、
-  `backend/realtime/pipeline_router.py`、`frontend/src/voice/`、`backend/realtime/companion_brain*.py`。
+- **先 commit 本轮 P11-P2 diff**（见上方「已修改文件」）。
 - **做 P14 Phase 4（双 LLM）**：先讨论形态，要读 `docs/PIPECAT_REFERENCE.md` §7（`LLMTextProcessor`/
   `PatternPairAggregator` 原生路线）+ `docs/PIPECAT_AUDIT.md`。
 
@@ -161,8 +187,8 @@
 - ❌ 全仓库扫描
 
 ## 推荐下一个最小任务
-- **首选 = P11-P2（历史消息译文持久化）**：scope 明确，用户已知问题，small 任务。
-- **次选 = P15（Pipecat 双方字幕）或 P14 Phase 4（双 LLM）**：均需先 `/architect` 细化 scope。
+- **首选 = commit P11-P2 diff**（scope 已收尾，真机验证 PASS，只待提交）。
+- **次选 = P14 Phase 4（双 LLM）**：epic 最大块，需先 `/architect` 细化 scope。
 
 ---
 

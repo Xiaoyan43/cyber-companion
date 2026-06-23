@@ -19,6 +19,7 @@ def persist_chat_turn(
     decision: str | None = None,
     avatar_state: str | None = None,
     should_call_llm: bool | None = None,
+    translation: str | None = None,
 ) -> list[int]:
     saved_ids: list[int] = []
 
@@ -56,6 +57,8 @@ def persist_chat_turn(
         assistant_metadata["avatar_state"] = avatar_state
     if should_call_llm is not None:
         assistant_metadata["should_call_llm"] = should_call_llm
+    if translation is not None:
+        assistant_metadata["translation"] = translation
     assistant_message = store.create_message(
         role="assistant",
         content=result.content,

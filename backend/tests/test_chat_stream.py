@@ -98,6 +98,24 @@ def test_chat_stream_returns_translation_when_target_language_set(client: TestCl
     assert meta["translation"] is not None
 
 
+def test_chat_stream_persists_translation_into_message_metadata(client: TestClient) -> None:
+    response = client.post(
+        "/chat/stream",
+        json={
+            "messages": [{"role": "user", "content": "你好流式"}],
+            "target_language": "ja",
+        },
+    )
+
+    events = parse_sse_events(response.text)
+    translation = events[-1]["meta"]["translation"]
+    assert translation is not None
+
+    messages = client.get("/memory/messages").json()["messages"]
+    assistant_message = next(m for m in messages if m["role"] == "assistant")
+    assert assistant_message["metadata"]["translation"] == translation
+
+
 def test_chat_stream_persists_turn_once_and_runs_auto_memory_write(client: TestClient) -> None:
     before = client.get("/memory/messages").json()["messages"]
     response = client.post(
