@@ -1,12 +1,28 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
-> **2026-06-23（第五十二轮）**：**P11-P1（前端：双语开关 + 气泡展示）已完成并 commit（见 HANDOFF）**。
+> **2026-06-23（第五十三轮）**：**P15（Pipecat 双方字幕）全部完成（P0+P1）并真机验证 PASS，未
+> commit**。`/architect` 拆出 P0（后端）+ P1（前端）；新建 `backend/realtime/transcript_broadcaster.py`
+> （`TranscriptBroadcaster` + 两个旁路 tap，用户句 tap 插在 `brain_processor` 前、Boxi 句 tap 插在
+> 之后），`pipeline_router.py` 新增 `WS /realtime/transcript`；前端新建 `voice/useVoiceTranscript.ts`
+> 订阅该 WebSocket，`App.tsx` 复用现有聊天气泡样式渲染字幕。用户拍板：场景=本机调试、通道=WebSocket
+> （为以后双向打断信号留口子）、前端渲染复用现有气泡样式。两轮真机验证均 PASS（后端事件正确收到、
+> 语音行为不受影响；前端字幕正常显示、关闭后消失无报错）。**下一步**：P11-P2（译文持久化）/ P14
+> Phase 4（双 LLM），详见 HANDOFF。
+> **2026-06-23（第五十二轮）**：**P11-P1（前端：双语开关 + 气泡展示）已完成并 commit `7393efe`**。
 > EN/JA 两档真机验证通过；用户拍板「历史译文消失暂可接受，后面补」+「toggle 只影响新消息」+
 > 「切换语言不重翻已显示内容」。**P11 全部完成（P0+P1）**。真机验证时新发现一个未排查小 bug
 > （JA 档下 Fish 偶发脏标签 `[ zufrieden]`），已记录，无优先级，留给以后排查。
-> **下一步候选**：① 提交第五十轮遗留的 `run_voice.py`（锁 balanced）diff；② P15（Pipecat 双方字幕，新立项）；
-> ③ P14 Phase 4（双 LLM，epic 最大块）。详见 HANDOFF。
+> 同轮新增**日语 Fish Audio 音色试听**（新建 `backend/scripts/ja_voice_audition.py`，commit `41fa0eb`，
+> 用法同 `tagger_eval.py --voice`）——两批共 11 个候选音色试听完，结果落 memory
+> （`fish-audio-ja-voice-shortlist`，独立于中文清单，未接后端按语言切换）。`config/tts.json` 的
+> `fish_audio.voice` 中途多次切换试听，**最终切回中文主选「慵懒偏低音」`ef5c98bdc…`，无净改动**。
+> 同轮还清掉了第五十/五十一轮遗留的几个未提交小尾巴，分 3 个 commit 落地：`255a063`（锁死 Pipecat
+> latency=balanced，选择性 stage 排除 `_LatencySpikeLogger`）、`94d40dc`（文字聊天 latency 改回
+> normal + `.gitignore`）、`0c1d01f`（语音路径标签退化率统计脚本）、`f7204f9`（P9-P2-B 生产素材池 +
+> 验证报告）。`_LatencySpikeLogger` 仍按用户要求留在工作区未提交。
+> **下一步候选**：① P11 译文持久化（历史消息刷新后译文消失，small 任务）；② P15（Pipecat 双方字幕，
+> 新立项）；③ P14 Phase 4（双 LLM，epic 最大块）。详见 HANDOFF。
 > **2026-06-23（第五十一轮）**：**P11-P0（后端：翻译模块 + 双语开关接入）已完成并 commit `2d79671`**。
 > `/architect` 把 P11 拆成 P0（后端）+ P1（前端），用户拍板「双语生成方式用第二个模型（Gemini）分担、
 > 不让主 LLM 背翻译任务」+「全局 toggle（开/关 + en/ja）」+「信笺模式先不动」+「toggle 状态 localStorage 持久化」。
@@ -479,7 +495,7 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 - **commit 时排除了 run_voice.py 夹带的 `_LatencySpikeLogger`（P8-C spike，用户要求保留）**——
   用部分 patch 只 stage latency 那一处 hunk，spike 仍在工作区未提交。
 
-#### ~~Phase 5 · P1 · 修 P13 normal 失声~~ ✅ 结案 = 放弃 normal，锁死 balanced（2026-06-23，第五十轮，未 commit）
+#### ~~Phase 5 · P1 · 修 P13 normal 失声~~ ✅ 结案 = 放弃 normal，锁死 balanced（2026-06-23，commit `255a063`）
 - **结论：P13 = won't fix。`normal` 彻底放弃，`run_voice.py` 只允许 `balanced`，拒绝 `normal`/`low`。**
   **勿在新 session 重开此修复。**
 - **route A 试过 → 失败**：写了 subclass `CyberCompanionFishAudioTTSService` 覆写 `get_active_audio_context_id`
@@ -493,8 +509,8 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
     且即使修好，每轮回复前仍有 **~3 秒死寂**，与「一直在场」内核冲突。
   - **用户听感**：normal 音质比 balanced 好但**不碾压**，3 秒延迟换这点音质**完全不值**。
 - **改动**：`run_voice.py` `latency` 只允许 `balanced`（注释写 A/B 依据）+ `test_fish_audio_pipecat_tts.py`
-  6 passed（接受/默认 balanced + 拒绝 low/normal 参数化）。**未 commit**（run_voice diff 夹带历史 spike logger，
-  提交须选择性 stage）。
+  6 passed（接受/默认 balanced + 拒绝 low/normal 参数化）。**第五十二轮已 commit `255a063`**——只 stage
+  了 latency 那一处 hunk，`_LatencySpikeLogger`（用户要求保留）仍留在工作区未提交。
 - **文字路径例外（不改）**：`fish_audio.py:137` 文字 TTS 仍 `normal`——文字气泡即时出现、非实时一来一回，
   3 秒等出声远没语音链路伤，保留可辩护。用户若后续想文字语音也秒回再切 balanced（独立决定）。
 - **Fish 若将来出「流式高音质模式」再重评 normal。**
@@ -803,6 +819,16 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
   console 零新报错。
 - **🆕 真机验证副产物（新发现，未排查，已记 HANDOFF「已知 bug/风险」）**：JA 档下 Fish 标签偶发吐出
   脏标签 `[ zufrieden]`（带前导空格 + 德语词，非词表内标签），只复现一次，根因未知，留给以后专门排查。
+
+### 🔜 P11-P2 · 历史消息译文持久化（小任务，用户已知，无紧迫性）
+- **触发**：P11-P1 真机验证时用户发现"刷新页面后中文译文消失"——这是设计已知限制（见上），不是 bug。
+- **Scope**：后端把 `translation` 一起存进消息落库的 metadata（`backend/app/main.py` 落库那段，
+  仿照现有 `decision`/`usage`/`cost` 字段的存法）；前端 `frontend/src/chat/types.ts` 的
+  `storedMessageToChatMessage` 把它读出来映射进 `ChatMessage.translation`。
+- **不动**：`/chat/complete`/`/chat/stream` 的当轮响应逻辑（已工作，不需要改）。
+- **验收**：发一条带译文的消息→刷新页面→历史消息气泡下方仍显示译文。
+- **要读**：`backend/app/main.py`（落库那段）、`backend/app/memory/store.py`（消息读取）、
+  `frontend/src/chat/types.ts`（`storedMessageToChatMessage`）。
 
 ## P15 ·（新立项，次优）Pipecat 链路对话显示双方字幕
 > **2026-06-23（第五十轮）用户新提**：和 Boxi 用 Pipecat 链路对话时，想像现在纯 E2E 一样**看到双方字幕**

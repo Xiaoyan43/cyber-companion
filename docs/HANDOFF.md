@@ -7,60 +7,113 @@
 最终形态 = Direction C「一个有世界的存在」（深度 > 延迟；soul 写每个字）。仓库 **public**（MIT）。
 
 ## 当前阶段目标
-**P11（文字双语回复）全部完成（P0 后端 + P1 前端）**。**P14 · Pipecat 链路最大化 epic 已结清**
-（Phase 1+2+3+5 全部有结论，Phase 4 双 LLM 仍未开工）。**下一步候选**：提交第五十轮遗留的
-`run_voice.py` diff / P15（Pipecat 双方字幕）/ P14 Phase 4（双 LLM）。
+**P11（文字双语回复）全部完成（P0+P1）**。**P14 · Pipecat 链路最大化 epic 已结清**（Phase 1+2+3+5
+全部有结论且全部已 commit，Phase 4 双 LLM 仍未开工）。**P15（Pipecat 双方字幕）全部完成（P0+P1）并
+真机验证 PASS，待 commit**。**下一步候选**：P11-P2（译文持久化）/ P14 Phase 4（双 LLM）。
+
+## 本轮已完成（2026-06-23，第五十三轮）
+
+### P15-P1 · Pipecat 双方字幕 · 前端渲染 ✅ 已完成并真机验证 PASS，未 commit
+- **新建** [frontend/src/voice/useVoiceTranscript.ts](../frontend/src/voice/useVoiceTranscript.ts)：
+  `pipecatStatus==="running"` 时打开 WebSocket 订阅 `/realtime/transcript`，关闭时断开，最多保留最近
+  20 条（避免无限增长）。
+- **改动** [frontend/src/App.tsx](../frontend/src/App.tsx)：classic 模式下 message-list 上方新增字幕
+  区，复用现有 `.message`/`.speaker` 气泡样式渲染 user/boxi 两种字幕（与用户拍板"复用现有聊天气泡
+  风格"一致），Pipecat 未运行时不渲染。
+- **改动** [frontend/src/styles.css](../frontend/src/styles.css)：新增 `.pipecat-transcript` 容器样式
+  （滚动、限高 160px，视觉与 `.message-list` 一致）。
+- **验证**：`tsc --noEmit` 零错误，25 个 vitest 全绿；真机验证——启动 Pipecat、说话后字幕气泡正常显示
+  user/boxi 两条，关闭后字幕区消失、无 console 报错。
+- **未 commit**——与 P15-P0 一起，等用户确认后统一提交。
+
+### P15-P0 · Pipecat 双方字幕 · 后端通道 ✅ 已完成并真机验证 PASS，未 commit
+- **`/architect` 拆出 P0（后端通道）+ P1（前端渲染）**，关键发现：Pipecat 管线用
+  `LocalAudioTransport`（音频在跑后端进程的本机，非浏览器麦克风），`pipeline_router.py` 之前只有
+  start/stop/status，没有任何把文本推给前端的通道——P15 比"加个字幕组件"工作量大，需要先搭通道。
+  用户拍板：①场景=本机调试用；②通道用 **WebSocket**（非 SSE，为以后可能的双向打断信号留口子）；
+  ③前端渲染要复用现有聊天气泡样式（P1 任务范围）。
+- **新建** [backend/realtime/transcript_broadcaster.py](../backend/realtime/transcript_broadcaster.py)：
+  `TranscriptBroadcaster`（订阅者队列 + `emit`）+ 两个纯转发 tap——`_UserTranscriptTap`（捕获
+  `TranscriptionFrame`，必须插在 `brain_processor` **之前**，因为 `CompanionBrainProcessor` 会吞掉
+  `TranscriptionFrame` 不转发）、`_BoxiTranscriptTap`（聚合 `LLMTextFrame` delta 直到
+  `LLMFullResponseEndFrame` 才发一条完整句子，插在 `brain_processor` **之后**）。
+- **改动** [backend/realtime/run_voice.py](../backend/realtime/run_voice.py)：两个 tap 插入
+  `pipeline_steps`（仿现有 `_LatencySpikeLogger` 的旁路写法，不拦截/不修改原 frame）。
+- **改动** [backend/realtime/pipeline_router.py](../backend/realtime/pipeline_router.py)：新增
+  `WS /realtime/transcript`，accept 后订阅 broadcaster、事件原样 `send_json`，断开时 unsubscribe。
+- **真机验证 PASS**（用户本机跑 `python -m websockets ws://127.0.0.1:8000/realtime/transcript` +
+  对话一轮）：终端收到 user/boxi 两条字幕事件，且语音对话本身听感与改动前一致，没有破坏原有行为。
+- **未 commit**——下一 session/确认后再提交。
 
 ## 本轮已完成（2026-06-23，第五十二轮）
 
-### P11-P1 · 前端 UI · 双语开关 + 气泡展示 ✅ 已完成并 commit
+### P11-P1 · 前端 UI · 双语开关 + 气泡展示 ✅ 已完成并 commit `7393efe`
 - **用户拍板的 3 点决策**：①历史消息译文消失（刷新后从 `/memory/messages` 拉的旧消息没有
-  `translation`）暂时可接受，后面要单独补一个任务做后端持久化；②toggle 只影响"未来新消息"，
-  已经显示的旧译文不回溯隐藏；③切换 en/ja 不重新翻译屏幕上已显示的内容。
-- **改动比原计划（仅 `App.tsx`）稍大**——架构拆解阶段读代码发现 `requestChatComplete`/
-  `requestChatStream` 当前签名不支持传 `target_language`，必须连带改 `api/chat.ts`：
-  - **[frontend/src/api/chat.ts](../frontend/src/api/chat.ts)**：两个请求函数加
-    `targetLanguage?: "en"|"ja"` 参数，请求体按需透传 `target_language`；
+  `translation`）暂时可接受，已立为 P11-P2 后续小任务；②toggle 只影响"未来新消息"，已经显示的旧
+  译文不回溯隐藏；③切换 en/ja 不重新翻译屏幕上已显示的内容。
+- **改动**（架构拆解阶段读代码发现比原计划"只改 `App.tsx`"稍大，必须连带改 `api/chat.ts`）：
+  - `frontend/src/api/chat.ts`：两个请求函数加 `targetLanguage?: "en"|"ja"` 参数；
     `ChatCompleteResponse`/`ChatStreamDoneMeta` 加 `translation?: string|null`。
-  - **[frontend/src/chat/types.ts](../frontend/src/chat/types.ts)**：`ChatMessage` 加
-    `translation?: string|null`。
-  - **[frontend/src/avatar/useAvatarState.ts](../frontend/src/avatar/useAvatarState.ts)**：
-    `ChatFetchResult`（流式/非流式结果的中间类型）同步加 `translation`——编译时才发现的缺漏。
-  - **[frontend/src/App.tsx](../frontend/src/App.tsx)**：新增 `targetLanguage` state
-    （三态 `"off"|"en"|"ja"`，初始值读 `localStorage["cyber-companion-target-language"]`，
-    变化时写回）+ chat-header-actions 里一个循环式 toggle 按钮（关→EN→JA→关，沿用
-    `.letter-toggle-button` 样式）+ 气泡渲染 `message.translation`（原文下方一行）。
-  - **[frontend/src/styles.css](../frontend/src/styles.css)**：新增 `.message-translation`
-    （斜体、浅色、略小字号）。
-- **验证**：`tsc --noEmit` 零错误；浏览器 preview 真机验证——EN 档和 JA 档都实测过一轮真实对话
-  （开启后**主 LLM 直接用目标语言回复**，`translation` 字段是**回译的中文**，对照展示在气泡
-  下方）；localStorage 持久化验证通过（设置后刷新页面状态保留）；关闭开关后新消息恢复纯中文
-  无译文、旧消息译文不消失，与上面 3 点拍板一致；console 零新报错。
-- **🆕 真机验证副产物（新发现，未排查）**：JA 档下 Fish 标签偶发吐出脏标签 `[ zufrieden]`
-  （带前导空格 + 德语词，非词表内标签）。只复现一次，根因未知，已记入下方「已知 bug/风险」。
+  - `frontend/src/chat/types.ts`：`ChatMessage` 加 `translation?: string|null`。
+  - `frontend/src/avatar/useAvatarState.ts`：`ChatFetchResult`（中间类型）同步加 `translation`
+    ——编译时才发现的缺漏。
+  - `frontend/src/App.tsx`：新增 `targetLanguage` state（三态 `"off"|"en"|"ja"`，localStorage key
+    `cyber-companion-target-language`）+ 循环式 toggle 按钮（关→EN→JA→关）+ 气泡渲染
+    `message.translation`。
+  - `frontend/src/styles.css`：新增 `.message-translation`（斜体、浅色、略小字号）。
+- **验证**：`tsc --noEmit` 零错误；浏览器 preview 真机验证——EN/JA 两档都实测过一轮真实对话（开启后
+  **主 LLM 直接用目标语言回复**，`translation` 字段是**回译的中文**，对照展示在气泡下方）；
+  localStorage 持久化验证通过；关闭开关后新消息恢复纯中文无译文、旧消息译文不消失，与 3 点拍板一致；
+  console 零新报错。
+- **🆕 真机验证副产物（新发现，未排查）**：JA 档下 Fish 标签偶发吐出脏标签 `[ zufrieden]`（带前导
+  空格 + 德语词，非词表内标签）。只复现一次，根因未知，已记入下方「已知 bug/风险」。
 
-## 已修改文件（本轮，第五十二轮）
-- [frontend/src/api/chat.ts](../frontend/src/api/chat.ts)、
-  [frontend/src/chat/types.ts](../frontend/src/chat/types.ts)、
-  [frontend/src/avatar/useAvatarState.ts](../frontend/src/avatar/useAvatarState.ts)、
-  [frontend/src/App.tsx](../frontend/src/App.tsx)、
-  [frontend/src/styles.css](../frontend/src/styles.css)：见上「本轮已完成」逐文件说明。
-- `docs/HANDOFF.md`、`docs/TASK_QUEUE.md`：本轮交接更新。
+### 日语 Fish Audio 音色试听（两批，11 个候选）
+- **新建 [backend/scripts/ja_voice_audition.py](../backend/scripts/ja_voice_audition.py)**
+  （commit `41fa0eb`）：用法仿 `tagger_eval.py --voice`，4 段手写带标签的 Boxi 风格日语台词
+  （兴奋重逢/冷淡委屈/得意挖苦/揶揄+心软）在每个候选音色下各合成一遍，输出到
+  `data/ja_voice_audition/<voice_id>/`（gitignored）。
+- **试听结果已落 memory**（`fish-audio-ja-voice-shortlist`，与中文清单 `fish-audio-preferred-voices`
+  分开记）：
+  - 主选（8）：关西腔 `569c5eef…`、正常动漫 `0089dce5…`、动漫 `73647cd4…`、`dae087ca…`、
+    `5161d414…`、`63bc41e6…`、`9ef9e752…`、`2d0a1ea9…`。
+  - 备选（2）：播音男 `297a6fd2…`、温柔 `5c33c0e2…`。
+  - 淘汰（1）：游戏 `dc487cc6…`。
+- **`config/tts.json` 的 `fish_audio.voice` 中途多次切换试听**（关西腔→动漫→正常动漫），**最终切回
+  中文主选「慵懒偏低音」`ef5c98bdc88845b7a4a4c7382179e5ea`**——当前生效音色对仓库状态**无净改动**
+  （`git diff config/tts.json` 为空）。当前**没有按语言自动切换音色的机制**，日语清单目前只是为以后
+  接入做的预选，还未接进后端。
 
-## 未 commit 的历史遗留（非本轮产物，沿用第五十轮状态，本轮未碰）
-- **`backend/realtime/run_voice.py` + `backend/tests/test_fish_audio_pipecat_tts.py`**：第五十轮 P14 Phase 5 P1
-  的产物（锁 Fish latency=`balanced`，拒绝 `normal`/`low`）。diff 仍夹带历史 `_LatencySpikeLogger`（用户要求
-  保留、一直未提交）——**提交时须选择性 stage，只进 latency 那几个 hunk**（同第四十九/五十轮的做法）。
-- `.gitignore`、`backend/app/tts/fish_audio.py`、`backend/tests/test_tts.py`、
-  `backend/scripts/companion_brain_tag_eval.py`、`config/idle_material_pool.json`、`docs/P9_P2B_VERIFICATION.md`、
-  `experiments/*`：更早轮次的遗留，本轮未碰，等用户决定何时一起提交。
+### 清掉第五十/五十一轮遗留的未提交小尾巴（4 个 commit）
+- **`255a063`**：锁死 Pipecat 语音路径 `latency=balanced`（P14 Phase 5 P1，P13 won't fix）。只
+  stage 了 latency 那一处 hunk，`_LatencySpikeLogger`（用户要求保留）仍留在工作区未提交。
+- **`94d40dc`**：文字聊天 TTS `latency` 改回 `normal`（第五十轮已拍板的例外，之前没跟着一起提交）+
+  `.gitignore` 加 `data/pipecat_spike/`。
+- **`0c1d01f`**：新建 `backend/scripts/companion_brain_tag_eval.py`（P8-C 前置 spike 用的语音路径
+  标签退化率统计脚本，spike 早已跑完出结论，脚本收进仓库留作以后复测）。
+- **`f7204f9`**：`config/idle_material_pool.json`（P9-P2-B 生产素材池，8 条事实核查素材）+
+  `docs/P9_P2B_VERIFICATION.md`（真机验证报告，结论 PASS）。
+
+## 已修改文件（本轮，第五十二轮，共 6 个 commit）
+- `7393efe`：`frontend/src/{api/chat.ts, chat/types.ts, avatar/useAvatarState.ts, App.tsx,
+  styles.css}` + `docs/HANDOFF.md`/`docs/TASK_QUEUE.md`（P11-P1 前端）。
+- `41fa0eb`：新建 `backend/scripts/ja_voice_audition.py`。
+- `255a063`：`backend/realtime/run_voice.py`（仅 latency hunk）+
+  `backend/tests/test_fish_audio_pipecat_tts.py`。
+- `94d40dc`：`.gitignore` + `backend/app/tts/fish_audio.py` + `backend/tests/test_tts.py`。
+- `0c1d01f`：新建 `backend/scripts/companion_brain_tag_eval.py`。
+- `f7204f9`：新建 `config/idle_material_pool.json` + `docs/P9_P2B_VERIFICATION.md`。
+
+## 未 commit 的历史遗留（仅剩 1 项，用户要求保留）
+- **`backend/realtime/run_voice.py` 里的 `_LatencySpikeLogger`**：P8-C 前置 spike 的临时延迟探针
+  代码，用户明确要求保留在工作区、不提交。提交 `run_voice.py` 任何后续改动时都要用部分 patch 选择性
+  stage，排除这段（同第四十九/五十/本轮的做法）。
 
 ## 当前未完成
-- **P11 后续小任务（非阻塞，用户已知）**：历史消息（刷新后从 `/memory/messages` 拉取）不带
-  `translation`——后端目前只在当轮响应里返回译文，没有持久化进消息 metadata。想要刷新后保留
-  历史译文，需要单独开一个小任务改后端 metadata 持久化。
-- **提交第五十轮遗留的 `run_voice.py` diff（次选，随时可插空做）**：锁死 Fish latency=balanced，
-  选择性 stage 排除 spike logger（见上「未 commit 的历史遗留」）。
+- **🔜 P11-P2 · 历史消息译文持久化（小任务，非阻塞，用户已知）**：刷新后历史消息没有 `translation`
+  字段——后端只在当轮响应里返回，没有持久化进消息 metadata。Scope：`backend/app/main.py`（落库段）+
+  `backend/app/memory/store.py`（读取段）+ 前端 `chat/types.ts` 的 `storedMessageToChatMessage`。
+  详见 `docs/TASK_QUEUE.md` P11 节。
 - **P15 · Pipecat 链路双方字幕（次优，新立项）**：把 STT 文本 + brain 文本接出来推 UI。先 `/architect` 查
   Pipecat 与前端现状再拆。
 - **P14 Phase 4 · 双 LLM 两阶段标签（未开工，epic 最大块）**：原生路线（`LLMTextProcessor`+
@@ -68,6 +121,8 @@
   双 LLM 的延迟杠杆设计要据此重估。
 - **P14 Phase 3 剩余（需真机+用户在场）**：抢话（bot 被打断，审计 D）量化 `resume_guard`；Fish 调参
   （temperature/prosody，审计 B-2）。
+- **日语音色清单未接后端**：`fish-audio-ja-voice-shortlist` 只是预选名单，没有"按 `target_language`
+  自动切换音色"的机制。若想要 JA 回复自动换音色，需要单独开任务接 TTS 路由层。
 - **沿用未完成项**：P12（Hume prosody，仅立项）、P9-P2-C（素材源真联网）、P9-D（投递层，用户暂缓）。
 
 ## 已知 bug / 风险
@@ -80,15 +135,33 @@
 - 沿用既有风险（详见 `docs/TASK_QUEUE.md` P10 节）：cost 模块不认 openrouter 模型、R8、R4、标签器质量基线矛盾等。
 - **P11-P0 已知限制（非阻塞，设计如此）**：本地兜底回复（预算拦截/behavior 本地短路）路径不调用翻译——
   这些路径本就是中文短句，无需翻译，`translation` 字段恒为 `None`，前端只需按字段存在与否渲染。
-- **P11-P1 已知限制（非阻塞，用户已知）**：历史消息译文不持久化，刷新后消失（见上「当前未完成」）。
+- **P11-P1 已知限制（非阻塞，已立 P11-P2）**：历史消息译文不持久化，刷新后消失。
 - **🆕 新发现（P11-P1 真机验证时，日语档，未排查，无优先级）**：Fish 标签偶发输出脏标签
   `[ zufrieden]`（带前导空格 + 德语词，非词表内标签）。只在 `target_language=ja` 真机测试中复现
   一次，未排查根因（不确定是主 LLM 在日语模式下标签词表混乱、还是 Fish 标签生成本身的已知抽风）。
   **复现条件**：开 JA 译文档 + 发一条消息触发主 LLM 用日语回复。留给以后专门 session 排查。
 
+## 下一步只需读取（按候选任务挑一个）
+- **永远先读**：`docs/HANDOFF.md`（本文件）+ `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`。
+- **做 P11-P2（译文持久化）**：读 `backend/app/main.py`（落库段，找现有 `decision`/`usage`/`cost`
+  怎么存进 metadata，照样加 `translation`）+ `backend/app/memory/store.py`（消息读取）+
+  `frontend/src/chat/types.ts` 的 `storedMessageToChatMessage`。
+- **做 P15（Pipecat 双方字幕）**：先 `/architect`，要读 `backend/realtime/run_voice.py`、
+  `backend/realtime/pipeline_router.py`、`frontend/src/voice/`、`backend/realtime/companion_brain*.py`。
+- **做 P14 Phase 4（双 LLM）**：先讨论形态，要读 `docs/PIPECAT_REFERENCE.md` §7（`LLMTextProcessor`/
+  `PatternPairAggregator` 原生路线）+ `docs/PIPECAT_AUDIT.md`。
+
+## 下一步不要读取（省上下文）
+- ❌ `docs/SESSION_LOG.md`（历史日志，不维护）
+- ❌ `reference/`（含 `reference/pipecat/`，P14 文档线已结）
+- ❌ `experiments/`（废弃 spike，故意不提交）
+- ❌ **不要重开 P13 normal 修复**（已结案 won't fix）
+- ❌ 不要重新发起 P9-D 投递层讨论（用户已暂缓）
+- ❌ 不要重新发起日语音色试听（两批 11 个已试完，名单已定，除非用户主动提起）
+- ❌ 全仓库扫描
+
 ## 推荐下一个最小任务
-- **首选 = 提交第五十轮遗留的 `run_voice.py` diff**：纯收尾性质，scope 明确（选择性 stage 排除
-  spike logger），随时可插空做。
+- **首选 = P11-P2（历史消息译文持久化）**：scope 明确，用户已知问题，small 任务。
 - **次选 = P15（Pipecat 双方字幕）或 P14 Phase 4（双 LLM）**：均需先 `/architect` 细化 scope。
 
 ---

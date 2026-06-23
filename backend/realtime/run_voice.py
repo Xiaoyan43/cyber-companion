@@ -209,6 +209,11 @@ async def _main_pipeline() -> None:
     from backend.realtime.companion_brain import CompanionBrain
     from backend.realtime.companion_brain_processor import CompanionBrainProcessor
     from backend.realtime.half_duplex_mute_processor import HalfDuplexMuteGate, HalfDuplexMuteProcessor
+    from backend.realtime.transcript_broadcaster import (
+        boxi_transcript_tap,
+        get_transcript_broadcaster,
+        user_transcript_tap,
+    )
     from backend.realtime.vad_processor import SileroVADProcessor
     from backend.realtime.voice_config import (
         ENV_ASR_END_WINDOW_MS,
@@ -256,7 +261,17 @@ async def _main_pipeline() -> None:
         )
     else:
         pipeline_steps.extend([vad, stt])
-    pipeline_steps.extend([brain_processor, tts, transport.output()])
+
+    transcript_broadcaster = get_transcript_broadcaster()
+    pipeline_steps.extend(
+        [
+            user_transcript_tap(transcript_broadcaster),
+            brain_processor,
+            boxi_transcript_tap(transcript_broadcaster),
+            tts,
+            transport.output(),
+        ]
+    )
 
     pipeline = Pipeline(pipeline_steps)
 

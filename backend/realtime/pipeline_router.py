@@ -1,8 +1,9 @@
 """HTTP start/stop endpoints for the Pipecat local voice pipeline.
 
-POST /realtime/start  — launch pipeline (LocalAudioTransport, mic+speaker)
-POST /realtime/stop   — cancel the running pipeline
-GET  /realtime/status — {"status": "running"|"stopped"}
+POST /realtime/start      — launch pipeline (LocalAudioTransport, mic+speaker)
+POST /realtime/stop       — cancel the running pipeline
+GET  /realtime/status     — {"status": "running"|"stopped"}
+WS   /realtime/transcript — push {"role": "user"|"boxi", "text": str, "ts": float} per finalized turn
 
 One pipeline per server process; starting again while running is a no-op.
 """
@@ -11,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from loguru import logger
 
 router = APIRouter()
@@ -43,6 +44,23 @@ async def stop_pipeline() -> dict:
 async def pipeline_status() -> dict:
     running = _pipeline_task is not None and not _pipeline_task.done()
     return {"status": "running" if running else "stopped"}
+
+
+@router.websocket("/realtime/transcript")
+async def transcript_ws(websocket: WebSocket) -> None:
+    from backend.realtime.transcript_broadcaster import get_transcript_broadcaster
+
+    await websocket.accept()
+    broadcaster = get_transcript_broadcaster()
+    queue = broadcaster.subscribe()
+    try:
+        while True:
+            event = await queue.get()
+            await websocket.send_json(event)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        broadcaster.unsubscribe(queue)
 
 
 async def _run_pipeline() -> None:

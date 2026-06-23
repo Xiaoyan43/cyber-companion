@@ -42,6 +42,7 @@ import { RelationshipPanel } from "./components/RelationshipPanel";
 import { primeAudioPlayback } from "./voice/audioUnlock";
 import { usePushToTalk } from "./voice/usePushToTalk";
 import { useTextToSpeech } from "./voice/useTextToSpeech";
+import { useVoiceTranscript } from "./voice/useVoiceTranscript";
 import { useRtcVoice } from "./rtc/useRtcVoice";
 import type { RtcAgentPhase } from "./rtc/rtcMessages";
 
@@ -148,6 +149,7 @@ function App() {
       setPipecatStatus("error");
     }
   };
+  const pipecatTranscript = useVoiceTranscript(pipecatStatus === "running", apiBaseUrl);
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const lastBoxiText = useMemo(
@@ -1046,6 +1048,20 @@ function App() {
           <LetterView mood={letterMood} text={lastBoxiText} />
         ) : (
           <>
+            {pipecatStatus === "running" ? (
+              <div className="pipecat-transcript" aria-live="polite">
+                {pipecatTranscript.length === 0 ? (
+                  <p className="chat-empty">Pipecat 字幕：等待你说话…</p>
+                ) : (
+                  pipecatTranscript.map((entry, index) => (
+                    <article key={`${entry.ts}-${index}`} className={`message ${entry.role}`}>
+                      <span className="speaker">{entry.role === "boxi" ? "Boxi" : "You"}</span>
+                      <p>{entry.text}</p>
+                    </article>
+                  ))
+                )}
+              </div>
+            ) : null}
             <div className="message-list" ref={messageListRef}>
               {historyStatus === "loading" ? (
                 <p className="chat-empty">Loading chat history...</p>

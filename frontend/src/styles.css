@@ -270,6 +270,16 @@ button {
   line-height: 1.45;
 }
 
+.pipecat-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 10px 2px;
+  border-bottom: 1px solid #4d463d;
+}
+
 .message.boxi.initiation-proactive {
   border-color: #7a6848;
   background: linear-gradient(135deg, #2f2a24 0%, #2a2726 58%);
