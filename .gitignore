@@ -38,6 +38,7 @@ data/*.sqlite
 data/*.sqlite3
 data/runtime/
 data/backups/
+data/pipecat_spike/
 logs/
 
 # Generated media

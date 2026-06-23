@@ -944,7 +944,7 @@ def test_fish_audio_synthesize_stream_yields_chunks(monkeypatch: pytest.MonkeyPa
     assert captured["headers"]["model"] == "s2-pro"
     assert captured["headers"]["Authorization"] == "Bearer test-key"
     assert captured["json"]["format"] == "opus"
-    assert captured["json"]["latency"] == "balanced"
+    assert captured["json"]["latency"] == "normal"
     assert captured["json"]["prosody"] == {"normalize_loudness": False}  # speech_rate=0 → no speed key
 
 

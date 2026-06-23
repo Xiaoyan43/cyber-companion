@@ -134,7 +134,7 @@ class FishAudioTTSProvider(TextToSpeechProvider):
             "text": text,
             "reference_id": self._resolved_voice_id(),
             "format": self._audio_format,
-            "latency": "balanced",
+            "latency": "normal",
             "temperature": self._temperature,
             "top_p": self._top_p,
         }
