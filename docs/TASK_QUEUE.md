@@ -1,6 +1,37 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-24（第五十七轮）**：**P14 Phase 4 已 commit 落地（`a1232b4` + `d153991`）**。①坐实首音延迟卡点
+> 是 TTS 自带 `SimpleTextAggregator` 的句末 lookahead（**不是**上轮猜的 `AggregatedFrameSequencer`）——遇句末
+> 标点要等下一个字符到达才确认边界，第 1 句因此被卡到第 2 句标签调用完成。②修复 = processor 改推
+> `AggregatedTextFrame`（直通 `_push_tts_frames`、跳过 lookahead），真机首音 **4.9s→~2.5s**，标签效果不退化，
+> PASS，commit `a1232b4`（含整套 P0+P1+P2，排除 `_LatencySpikeLogger`）。③**并发预贴标**（每句标签调用并行
+> 在飞 + 按序释放 + 中断守卫，+2 测试）commit `d153991`，真机延迟未退化、按序、中断正常。**但真机暴露两个
+> 独立新问题**：**A.「破音/音频欠载」**（无标签处也破音、像「耳机没插好」=输出缓冲欠载；与标签器/并发改动
+> 无关；并发预贴标消除时序依赖后破音照旧 → 不是时序问题；**下一步主线 P0** = 先做隔离实验「关标签器听破音
+> 是否还在」一刀切分清责任）；**B. 标签器质量 P1**（标签位置错位贴标点前/句尾、`[break]`/`[long-break]` 句中
+> 滥用、省略号 `…` 幻觉杂音）。**⚠️ `.env` 已还原 `=1`，做 A 实验会临时改 0、测完务必改回 1。** 详见 HANDOFF。
+> **2026-06-24（第五十六轮）**：**体检 + A/B + 根因排查，未 commit**。体检确认上一 session 卡死时
+> P14 Phase 4 代码（P0+P1+P2）本身完整、真机标签效果已验证 PASS，唯一半成品是 `run_voice.py` 没接
+> `CYBER_COMPANION_VOICE_EXPRESSION_TAGGER` 开关——已补全（3 处小改）。借这个开关做真机 A/B：tagger
+> ON 首音延迟均值 4.90s vs OFF 均值 2.42s（砍半）。深挖根因发现**首音延迟卡在"第 2 句"标签器调用
+> 完成、不是第 1 句**（三组真机数据强相关，差值固定 0.7-0.9s）——OQ1 非对称变体"第 1 句跳过标签器"
+> 这个优化**没能**省下首音延迟，疑似 Pipecat TTS 帧排序机制（`AggregatedFrameSequencer`）在等第 2 句
+> 文本到位才放音频，未读源码坐实。**下一步 = 选一个修复方向**（坐实机制/并发预贴标/扩大 skip-first/
+> 换更快标签模型，4 选，详见 HANDOFF 第五十六轮节），决定后才能 commit。**⚠️ `.env` 里
+> `CYBER_COMPANION_VOICE_EXPRESSION_TAGGER=0` 仍是测试用的关闭状态，下次正常用 `run_voice` 前记得还原**。
+> **2026-06-24（第五十五轮）**：**P14 Phase 4（语音双 LLM）开工**。先跑探针证伪——把文字路径好 prompt
+> 搬进语音单阶段 Grok（改 `companion_brain.py` `VOICE_MODE_INSTRUCTION`）后 `--repeats 25 --extended`
+> 重测：短回复/多轮 opening_only 明显好转，但 `long_narrative`（立 Phase 4 的头号理由）repeat 退化
+> **60%→60% 纹丝不动**、tagged_ratio 0.16→0.10 → **坐实是任务结构问题、必须两阶段**。随后定形态 B +
+> 三个 OQ（OQ1=简化变体「所有句子都交标签器、效果不行再换非对称」、OQ2=整段已说作 prior_context、
+> OQ3=Gemini）。**P0（`apply_expression_tags_to_sentence` 离线流式逐句标签器函数 + 8 单测，25 passed）
+> 已完成**。随后**同 session 把 P1（`ExpressionTaggerProcessor` + 管线装配）+ P2（brain 停止自贴标签）
+> 代码也全部写完，**595 pytest 全绿，全部未 commit**。新建 `expression_tagger_processor.py`（增量断句 +
+> 整段已说 prior_context + `_turn_id` 中断守卫 + 每句 to_thread 调 Gemini 标签器），插在 `run_voice.py` 的
+> `boxi_transcript_tap` 之后/`tts` 之前（字幕纯文本、TTS 拿带标签）；`VOICE_MODE_INSTRUCTION` 移除全部标签
+> 规则（覆盖探针 prompt）。**下一步 = 真机验证语音两阶段链路**（用户跑 `run_voice`，照 HANDOFF「真机验证
+> 清单」5 条听感判断；PASS → commit 排除 `_LatencySpikeLogger`，不行 → 按 OQ1 换非对称方案）。
 > **2026-06-24（第五十四轮）**：**P11-P2（历史消息译文持久化）已完成并真机验证 PASS，已 commit `73e996a`**。
 > `/architect` 拆解后发现 scope 比旧描述更精确——读取侧 `store.py` 不需要改（metadata 已整体透传），
 > 真正改动在 `chat_persistence.py`（`persist_chat_turn` 新增 `translation` 参数）+ `main.py`（两条聊天
