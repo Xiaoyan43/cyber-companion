@@ -1,6 +1,18 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-24（第五十八轮）**：**P0「破音/音频欠载」根因定位 + 修复完成，已 commit `8d5b2fb`，真机
+> Fish+Doubao 双路径 PASS**。真机隔离 + 静态排除逐项证伪（标签器/Phase4/Fish/采样率/P15 tap/探针/设备全部
+> 排除），根因 = pipecat `LocalAudioOutputTransport.start()` 创建 PyAudio **输出**流时没传 `frames_per_buffer`
+> （`local/audio.py:155`；那个 20ms 是 input 流的），用 PortAudio 默认小缓冲 + blocking write，event loop 偶发
+> 停顿（VAD onnx/jieba/网络）→ 供帧 gap → underrun → 破音。修复 = `run_voice.py` `_main_pipeline` 新增
+> `_BufferedLocalAudioOutputTransport`（subclass override `start`，输出流显式 `frames_per_buffer`≈200ms）+
+> `_BufferedLocalAudioTransport`，只动真机路径（`_main_realtime` Doubao S2S 未碰）。8 realtime 测试绿。
+> **代价**：首音延迟理论 +≤200ms（真机未觉明显，可调系数 0.2→0.1 权衡）。**破音排查前两轮连猜连错（底层固有/
+> Fish 采样率均证伪）——纪律：必须真机隔离，不凭日志/记忆猜。** 副产物：隔离时切 Doubao，用户听感「Doubao 音色
+> 不如 Fish 丰富但质量/自然度更高」→ TTS 选型重新打开为后续候选（memory 已记，不是现在换）。**下一步主线 =
+> B 标签器质量（P1）**：真机确认依旧——省略号 `…` 幻觉（合成原文不存在内容/重复旧话）、标签位置错位、`[break]`
+> 句中滥用。**⚠️ `.env` 本轮隔离用的 `CYBER_COMPANION_VOICE_TTS` / `EXPRESSION_TAGGER` 已全部还原正常配置。**
 > **2026-06-24（第五十七轮）**：**P14 Phase 4 已 commit 落地（`a1232b4` + `d153991`）**。①坐实首音延迟卡点
 > 是 TTS 自带 `SimpleTextAggregator` 的句末 lookahead（**不是**上轮猜的 `AggregatedFrameSequencer`）——遇句末
 > 标点要等下一个字符到达才确认边界，第 1 句因此被卡到第 2 句标签调用完成。②修复 = processor 改推
