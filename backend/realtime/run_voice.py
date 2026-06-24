@@ -201,7 +201,11 @@ async def _main_pipeline() -> None:
 
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.worker import PipelineParams, PipelineWorker
-    from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
+    from pipecat.transports.local.audio import (
+        LocalAudioOutputTransport,
+        LocalAudioTransport,
+        LocalAudioTransportParams,
+    )
     from pipecat.workers.runner import WorkerRunner
 
     from backend.app.memory.retrieval import tokenize
@@ -232,7 +236,39 @@ async def _main_pipeline() -> None:
 
     tokenize("预热")
 
-    transport = LocalAudioTransport(
+    # P0 audio-underrun fix: pipecat's LocalAudioOutputTransport opens its PyAudio output
+    # stream with NO explicit frames_per_buffer (transports/local/audio.py:155), so PortAudio's
+    # small default buffer underruns whenever the event loop stalls (VAD onnx / jieba / network)
+    # longer than that buffer — heard as crackle ("耳机没插好") on this low-spec Mac. The output
+    # write is blocking and depends on the loop feeding frames in time, so a generous ~200ms
+    # output buffer gives headroom against those stalls. Only the output leg is overridden.
+    class _BufferedLocalAudioOutputTransport(LocalAudioOutputTransport):
+        async def start(self, frame) -> None:  # type: ignore[override]
+            # Skip LocalAudioOutputTransport.start (it opens an unbuffered stream); run the
+            # grandparent BaseOutputTransport.start, then open our own buffered stream.
+            await super(LocalAudioOutputTransport, self).start(frame)
+            if self._out_stream:
+                return
+            self._sample_rate = self._params.audio_out_sample_rate or frame.audio_out_sample_rate
+            frames_per_buffer = int(self._sample_rate * 0.2)  # ~200ms output buffer
+            self._out_stream = self._py_audio.open(
+                format=self._py_audio.get_format_from_width(2),
+                channels=self._params.audio_out_channels,
+                rate=self._sample_rate,
+                output=True,
+                output_device_index=self._params.output_device_index,
+                frames_per_buffer=frames_per_buffer,
+            )
+            self._out_stream.start_stream()
+            await self.set_transport_ready(frame)
+
+    class _BufferedLocalAudioTransport(LocalAudioTransport):
+        def output(self):  # type: ignore[override]
+            if not self._output:
+                self._output = _BufferedLocalAudioOutputTransport(self._pyaudio, self._params)
+            return self._output
+
+    transport = _BufferedLocalAudioTransport(
         LocalAudioTransportParams(
             audio_in_enabled=True,
             audio_out_enabled=True,
