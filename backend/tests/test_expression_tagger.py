@@ -9,6 +9,7 @@ from backend.app.tts.expression_tagger import (
     DEFAULT_TAGGER_PROVIDER,
     TAGGER_INSTRUCTION_TEMPLATE,
     apply_expression_tags,
+    apply_expression_tags_to_sentence,
 )
 
 
@@ -84,6 +85,25 @@ def test_apply_expression_tags_falls_back_on_empty_result() -> None:
     result = apply_expression_tags("原文不变。", _mood(), router=router)  # type: ignore[arg-type]
 
     assert result == "原文不变。"
+
+
+def test_apply_expression_tags_falls_back_when_tagger_changes_wording() -> None:
+    # Regression: tagger rewrote a word instead of only inserting tags ("你呢" → "我呢"),
+    # which would make TTS speak something Boxi never wrote. Reject altered output.
+    router = _FakeRouter(content="[curious] 我呢，最爱哪一部？")
+
+    result = apply_expression_tags("你呢，最爱哪一部？", _mood(), router=router)  # type: ignore[arg-type]
+
+    assert result == "你呢，最爱哪一部？"
+
+
+def test_apply_expression_tags_accepts_tags_only_insertion() -> None:
+    # Whitespace around inserted tags is fine — only words/punctuation must be preserved.
+    router = _FakeRouter(content="你呢， [curious] 最爱哪一部？")
+
+    result = apply_expression_tags("你呢，最爱哪一部？", _mood(), router=router)  # type: ignore[arg-type]
+
+    assert result == "你呢， [curious] 最爱哪一部？"
 
 
 def test_apply_expression_tags_skips_provider_call_when_input_blank() -> None:
@@ -166,3 +186,116 @@ def test_tagger_instruction_keeps_official_physio_emotion_combo_example() -> Non
     # emotion tag back-to-back (e.g. [panting][tired]) — this was dropped during an earlier
     # rewrite of rule 5 and is restored here as an exception to the no-stacking rule.
     assert "[panting] [tired]" in TAGGER_INSTRUCTION_TEMPLATE
+
+
+# --- streaming per-sentence variant (P14 Phase 4, form B) -------------------------------
+
+
+def test_apply_expression_tags_to_sentence_returns_tagged_sentence() -> None:
+    router = _FakeRouter(content="进来吧[laughing]，挤一挤还是能装下你的。")
+
+    result = apply_expression_tags_to_sentence(
+        "进来吧，挤一挤还是能装下你的。", _mood(), router=router  # type: ignore[arg-type]
+    )
+
+    assert result == "进来吧[laughing]，挤一挤还是能装下你的。"
+
+
+def test_apply_expression_tags_to_sentence_falls_back_on_provider_error() -> None:
+    router = _FakeRouter(error=ProviderError("boom", provider="gemini"))
+
+    result = apply_expression_tags_to_sentence("原句不变。", _mood(), router=router)  # type: ignore[arg-type]
+
+    assert result == "原句不变。"
+
+
+def test_apply_expression_tags_to_sentence_falls_back_on_unexpected_error() -> None:
+    router = _FakeRouter(error=RuntimeError("unexpected"))
+
+    result = apply_expression_tags_to_sentence("原句不变。", _mood(), router=router)  # type: ignore[arg-type]
+
+    assert result == "原句不变。"
+
+
+def test_apply_expression_tags_to_sentence_falls_back_on_empty_result() -> None:
+    router = _FakeRouter(content="   ")
+
+    result = apply_expression_tags_to_sentence("原句不变。", _mood(), router=router)  # type: ignore[arg-type]
+
+    assert result == "原句不变。"
+
+
+def test_apply_expression_tags_to_sentence_falls_back_when_tagger_changes_wording() -> None:
+    # Same fidelity guard as the whole-text path: a word substitution ("你呢" → "我呢") must
+    # be rejected so TTS never speaks words Boxi didn't write.
+    router = _FakeRouter(content="[curious] 我呢，最爱哪一部？")
+
+    result = apply_expression_tags_to_sentence("你呢，最爱哪一部？", _mood(), router=router)  # type: ignore[arg-type]
+
+    assert result == "你呢，最爱哪一部？"
+
+
+def test_apply_expression_tags_to_sentence_skips_provider_call_when_input_blank() -> None:
+    router = _FakeRouter(content="should not be used")
+
+    result = apply_expression_tags_to_sentence("   ", _mood(), router=router)  # type: ignore[arg-type]
+
+    assert result == "   "
+    assert router.captured_request is None
+
+
+@pytest.mark.parametrize("fragment", ["…", "……", "。！？", "...", "、"])
+def test_apply_expression_tags_to_sentence_skips_punctuation_only_fragments(fragment: str) -> None:
+    # Regression: a bare "…" (from splitting "……") sent to the tagger made it hallucinate
+    # words to tag (e.g. "[sighing] 我不知道。"), which TTS would then speak. Punctuation-only
+    # fragments must pass through untouched without an LLM call.
+    router = _FakeRouter(content="should not be used")
+
+    result = apply_expression_tags_to_sentence(fragment, _mood(), router=router)  # type: ignore[arg-type]
+
+    assert result == fragment
+    assert router.captured_request is None
+
+
+def test_apply_expression_tags_to_sentence_uses_gemini_by_default() -> None:
+    router = _FakeRouter(content="带标签的句子")
+
+    apply_expression_tags_to_sentence("一句话", _mood(), router=router)  # type: ignore[arg-type]
+
+    assert router.captured_provider_name == DEFAULT_TAGGER_PROVIDER == "gemini"
+
+
+def test_apply_expression_tags_to_sentence_omits_prior_context_message_when_empty() -> None:
+    router = _FakeRouter(content="带标签的句子")
+
+    apply_expression_tags_to_sentence("一句话", _mood(), router=router)  # type: ignore[arg-type]
+
+    assert router.captured_request is not None
+    # No prior context → only the rules system prompt + the user sentence, no extra message.
+    assert len(router.captured_request.messages) == 2
+    system_message, user_message = router.captured_request.messages
+    assert system_message.role == "system"
+    assert user_message.role == "user"
+    assert user_message.content == "一句话"
+
+
+def test_apply_expression_tags_to_sentence_injects_prior_context_as_extra_system_message() -> None:
+    router = _FakeRouter(content="带标签的句子")
+
+    apply_expression_tags_to_sentence(
+        "现在这一句。",
+        _mood(),
+        prior_context="刚才已经说过的前文。",
+        router=router,  # type: ignore[arg-type]
+    )
+
+    assert router.captured_request is not None
+    messages = router.captured_request.messages
+    assert len(messages) == 3
+    rules_prompt, prior_prompt, user_message = messages
+    assert rules_prompt.role == "system"
+    assert prior_prompt.role == "system"
+    assert "刚才已经说过的前文。" in prior_prompt.content
+    assert "不要重复输出" in prior_prompt.content
+    assert user_message.role == "user"
+    assert user_message.content == "现在这一句。"

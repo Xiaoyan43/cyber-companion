@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from loguru import logger
 
 from backend.app.memory.database import MoodStateRecord
@@ -9,6 +11,33 @@ from backend.app.providers.router import ProviderRouter
 from backend.app.providers.types import ChatCompletionRequest, ChatMessage
 
 DEFAULT_TAGGER_PROVIDER = "gemini"
+
+# A "sentence" that is only punctuation/whitespace (e.g. a bare "…" left over from splitting
+# "……") has nothing to tag. Sending it to the tagger makes the LLM *hallucinate* content to
+# tag (observed: "…" → "[sighing] 我不知道。"), which would make TTS speak words Boxi never
+# said. So we skip the call for fragments with no zh/ja/en word characters.
+_TAGGABLE_CONTENT_RE = re.compile(r"[0-9A-Za-z぀-ヿ一-鿿]")
+
+
+def _has_taggable_content(text: str) -> bool:
+    return bool(_TAGGABLE_CONTENT_RE.search(text))
+
+
+_TAG_RE = re.compile(r"\[[^\]]*\]")
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _preserves_original_wording(original: str, tagged: str) -> bool:
+    """True iff ``tagged`` is ``original`` with only ``[tags]`` inserted — no words changed.
+
+    The tagger LLM is told "不改变原文一个字" but occasionally rewrites a word anyway (observed:
+    "你呢" → "我呢"), which makes TTS speak something Boxi never wrote. Prompt rules can't
+    guarantee this, so we enforce it in code: strip every ``[...]`` tag and all whitespace from
+    both sides and require an exact match; mismatch ⇒ the tagger altered the wording ⇒ reject.
+    """
+    norm_original = _WHITESPACE_RE.sub("", original)
+    norm_tagged = _WHITESPACE_RE.sub("", _TAG_RE.sub("", tagged))
+    return norm_original == norm_tagged
 
 # Expression layer (P8): a dedicated single-purpose call whose only job is inserting Fish
 # Audio tags into already-finalized reply text. Vocab/position rules sourced from
@@ -64,6 +93,17 @@ TAGGER_INSTRUCTION_TEMPLATE = (
 )
 
 
+# Injected as an extra system message (only when there is prior context) so the streaming
+# per-sentence tagger can keep tone continuous across sentences. The streaming path can only
+# ever see *already-spoken* sentences, never future ones — this is the inherent coherence
+# trade-off vs. the whole-text ``apply_expression_tags`` (see docs/PIPECAT_REFERENCE.md §3).
+SENTENCE_PRIOR_CONTEXT_TEMPLATE = (
+    "你在这条回复里前面已经说过下面这些话（仅供你理解此刻的语气走向，"
+    "不要重复输出这些话、也不要给它们重新贴标签，只给本次这一句贴标签）：\n"
+    "{prior_context}"
+)
+
+
 def _format_mood_block(mood: MoodStateRecord) -> str:
     return (
         f"mood={mood.mood}, energy={mood.energy:.2f}, annoyance={mood.annoyance:.2f}, "
@@ -109,4 +149,74 @@ def apply_expression_tags(
     if not tagged:
         logger.warning("Expression tagger returned empty content, falling back to plain text.")
         return text
+    if not _preserves_original_wording(stripped, tagged):
+        logger.warning("Expression tagger altered the wording (not just tags), falling back to plain text.")
+        return text
+    return tagged
+
+
+def apply_expression_tags_to_sentence(
+    sentence: str,
+    mood: MoodStateRecord,
+    *,
+    prior_context: str = "",
+    router: ProviderRouter,
+    provider_name: str = DEFAULT_TAGGER_PROVIDER,
+) -> str:
+    """Tag a single sentence (streaming path), keeping tone continuous via ``prior_context``.
+
+    Mirrors :func:`apply_expression_tags` but operates on one sentence at a time so the voice
+    pipeline can tag a reply sentence-by-sentence while earlier sentences are still playing
+    (P14 Phase 4, form B). ``prior_context`` is the already-spoken text of the current reply,
+    passed for tone continuity only — the tagger is told not to re-output or re-tag it. The
+    caller (the Pipecat processor) owns any length cap on ``prior_context``.
+
+    Same hard requirement as :func:`apply_expression_tags`: any failure degrades to the
+    original untagged sentence — the tagger must never break or delay the turn.
+    """
+    stripped = sentence.strip()
+    if not stripped:
+        return sentence
+    if not _has_taggable_content(stripped):
+        # Punctuation-only fragment (e.g. a bare "…") — nothing to tag, and asking the LLM to
+        # tag it makes it hallucinate words. Pass through untouched.
+        return sentence
+
+    messages = [
+        ChatMessage(
+            role="system",
+            content=TAGGER_INSTRUCTION_TEMPLATE.format(mood_block=_format_mood_block(mood)),
+        )
+    ]
+    prior = prior_context.strip()
+    if prior:
+        messages.append(
+            ChatMessage(
+                role="system",
+                content=SENTENCE_PRIOR_CONTEXT_TEMPLATE.format(prior_context=prior),
+            )
+        )
+    messages.append(ChatMessage(role="user", content=stripped))
+
+    request = ChatCompletionRequest(
+        messages=messages,
+        max_output_tokens=estimate_token_count(stripped) + 128,
+    )
+
+    try:
+        result = router.complete(request, provider_name=provider_name)
+    except ProviderError as error:
+        logger.warning(f"Sentence tagger provider failed, falling back to plain text: {error.message}")
+        return sentence
+    except Exception as error:  # pragma: no cover - defensive, must never break the main turn
+        logger.warning(f"Sentence tagger raised unexpected error, falling back to plain text: {error}")
+        return sentence
+
+    tagged = result.content.strip()
+    if not tagged:
+        logger.warning("Sentence tagger returned empty content, falling back to plain text.")
+        return sentence
+    if not _preserves_original_wording(stripped, tagged):
+        logger.warning("Sentence tagger altered the wording (not just tags), falling back to plain text.")
+        return sentence
     return tagged

@@ -38,10 +38,14 @@ ENV_MAX_TOKENS = "CYBER_COMPANION_VOICE_MAX_TOKENS"
 ENV_HALF_DUPLEX = "CYBER_COMPANION_VOICE_HALF_DUPLEX"
 ENV_VOICE_MODE = "CYBER_COMPANION_VOICE_MODE"
 ENV_VOICE_OUTPUT_MODE = "CYBER_COMPANION_VOICE_OUTPUT_MODE"
+# Kill-switch for the P14 Phase 4 two-stage expression tagger (set to 0/off to bypass it and
+# send the brain's plain text straight to TTS — used to A/B first-audio latency tagger on vs off).
+ENV_EXPRESSION_TAGGER = "CYBER_COMPANION_VOICE_EXPRESSION_TAGGER"
 
 DEFAULT_HALF_DUPLEX = True
 DEFAULT_VOICE_MODE = "pipeline"
 DEFAULT_VOICE_OUTPUT_MODE = 0
+DEFAULT_EXPRESSION_TAGGER = True
 
 
 def load_vad_stop_secs() -> float:
@@ -69,6 +73,10 @@ def _env_bool(name: str, default: bool) -> bool:
 
 def load_half_duplex_enabled() -> bool:
     return _env_bool(ENV_HALF_DUPLEX, DEFAULT_HALF_DUPLEX)
+
+
+def load_expression_tagger_enabled() -> bool:
+    return _env_bool(ENV_EXPRESSION_TAGGER, DEFAULT_EXPRESSION_TAGGER)
 
 
 def load_voice_mode() -> str:

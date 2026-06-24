@@ -22,11 +22,15 @@ def test_append_voice_mode_instruction_adds_system_message() -> None:
     assert augmented[-1].content == VOICE_MODE_INSTRUCTION
 
 
-def test_voice_mode_instruction_uses_fish_audio_tags() -> None:
-    assert "[sighing]" in VOICE_MODE_INSTRUCTION
-    assert "[gasping]" in VOICE_MODE_INSTRUCTION
-    assert "最前" in VOICE_MODE_INSTRUCTION
+def test_voice_mode_instruction_tells_brain_to_write_plain_text_no_tags() -> None:
+    # P14 Phase 4 (form B): the brain writes plain spoken text only; a downstream
+    # ExpressionTaggerProcessor adds Fish Audio tags. So the instruction must NOT carry tag
+    # vocabulary/rules, and must explicitly forbid the brain from writing its own tags.
+    assert "不要自己写任何语音合成标签" in VOICE_MODE_INSTRUCTION
     assert "BOXI_SIGNALS" in VOICE_MODE_INSTRUCTION
+    # Guard against regressing to the old single-stage tagging instruction.
+    assert "[sighing]" not in VOICE_MODE_INSTRUCTION
+    assert "最前" not in VOICE_MODE_INSTRUCTION
 
 
 def test_stream_turn_local_reply_without_llm() -> None:

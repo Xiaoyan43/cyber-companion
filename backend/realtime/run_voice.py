@@ -206,8 +206,10 @@ async def _main_pipeline() -> None:
 
     from backend.app.memory.retrieval import tokenize
     from backend.app.memory.store import get_memory_store
+    from backend.app.providers.router import get_provider_router
     from backend.realtime.companion_brain import CompanionBrain
     from backend.realtime.companion_brain_processor import CompanionBrainProcessor
+    from backend.realtime.expression_tagger_processor import ExpressionTaggerProcessor
     from backend.realtime.half_duplex_mute_processor import HalfDuplexMuteGate, HalfDuplexMuteProcessor
     from backend.realtime.transcript_broadcaster import (
         boxi_transcript_tap,
@@ -217,10 +219,12 @@ async def _main_pipeline() -> None:
     from backend.realtime.vad_processor import SileroVADProcessor
     from backend.realtime.voice_config import (
         ENV_ASR_END_WINDOW_MS,
+        ENV_EXPRESSION_TAGGER,
         ENV_HALF_DUPLEX,
         ENV_MAX_TOKENS,
         ENV_VAD_STOP_SECS,
         load_asr_end_window_ms,
+        load_expression_tagger_enabled,
         load_half_duplex_enabled,
         load_vad_stop_secs,
         load_voice_max_tokens,
@@ -242,6 +246,7 @@ async def _main_pipeline() -> None:
     vad_stop_secs = load_vad_stop_secs()
     asr_end_window_ms = load_asr_end_window_ms()
     half_duplex = load_half_duplex_enabled()
+    expression_tagger_enabled = load_expression_tagger_enabled()
 
     store = get_memory_store()
     brain = CompanionBrain(store, max_output_tokens=voice_max_tokens)
@@ -268,6 +273,18 @@ async def _main_pipeline() -> None:
             user_transcript_tap(transcript_broadcaster),
             brain_processor,
             boxi_transcript_tap(transcript_broadcaster),
+        ]
+    )
+    # Expression tagger sits AFTER the Boxi transcript tap so subtitles read the plain reply
+    # text (no Fish tags) and BEFORE tts so the synthesized audio gets the tags (P14 Phase 4).
+    # Gated by CYBER_COMPANION_VOICE_EXPRESSION_TAGGER so we can A/B first-audio latency with the
+    # tagger bypassed (plain brain text straight to TTS).
+    if expression_tagger_enabled:
+        pipeline_steps.append(
+            ExpressionTaggerProcessor(store=store, router=get_provider_router())
+        )
+    pipeline_steps.extend(
+        [
             tts,
             transport.output(),
         ]
@@ -302,7 +319,8 @@ async def _main_pipeline() -> None:
         f"{ENV_VAD_STOP_SECS}={vad_stop_secs}, "
         f"{ENV_ASR_END_WINDOW_MS}={asr_end_window_ms}, "
         f"{ENV_MAX_TOKENS}={voice_max_tokens}, "
-        f"{ENV_HALF_DUPLEX}={'on' if half_duplex else 'off'}; "
+        f"{ENV_HALF_DUPLEX}={'on' if half_duplex else 'off'}, "
+        f"{ENV_EXPRESSION_TAGGER}={'on' if expression_tagger_enabled else 'off'}; "
         "smart_turn=off (no LLMUserAggregator in pipeline — VAD-only endpointing)"
     )
 
