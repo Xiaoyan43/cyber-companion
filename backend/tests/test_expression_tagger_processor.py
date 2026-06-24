@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import asyncio
+import time
+
 import pytest
 
 pytest.importorskip("pipecat")
 
+import backend.realtime.expression_tagger_processor as proc_mod
 from backend.realtime.expression_tagger_processor import (
+    ExpressionTaggerProcessor,
     build_prior_context,
     split_complete_sentences,
 )
@@ -71,3 +76,85 @@ def test_prior_context_keeps_only_last_sentence_when_one_already_exceeds_cap() -
     result = build_prior_context(spoken, char_cap=3)
 
     assert result == "这是一句很长很长很长的话。"
+
+
+# --- concurrent pre-tagging: ordered release --------------------------------------------
+
+
+class _FakeStore:
+    def get_mood_state(self):  # noqa: ANN201 - mood is opaque to the fake tagger below
+        return object()
+
+
+def test_drainer_releases_sentences_in_order_despite_out_of_order_tagging() -> None:
+    """Tagger calls finish out of order (s1 slowest, s3 fastest) but must be pushed s1→s2→s3."""
+    sentences = ["第一句。", "第二句。", "第三句。"]
+    # Earlier sentences sleep LONGER so their tagger Tasks complete last — if release order
+    # followed completion order it would come out reversed.
+    delays = {"第一句。": 0.06, "第二句。": 0.03, "第三句。": 0.0}
+
+    def fake_tagger(sentence, mood, *, prior_context, router, provider_name):  # noqa: ANN001, ANN202
+        time.sleep(delays[sentence])  # runs in the to_thread executor, so concurrency is real
+        return f"[t] {sentence}"
+
+    async def run() -> list[str]:
+        pushed: list[str] = []
+        processor = ExpressionTaggerProcessor(
+            store=_FakeStore(),
+            router=object(),
+            tag_first_sentence=True,  # tag every sentence so all three race
+        )
+
+        async def capture(frame, direction=None):  # noqa: ANN001, ANN202
+            pushed.append(frame.text)
+
+        processor.push_frame = capture  # type: ignore[assignment]
+
+        processor._begin_turn()
+        for sentence in sentences:
+            processor._schedule(sentence)
+        await processor._finish_turn()
+        return pushed
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(proc_mod, "apply_expression_tags_to_sentence", fake_tagger)
+    try:
+        pushed = asyncio.run(run())
+    finally:
+        monkey.undo()
+
+    assert pushed == ["[t] 第一句。", "[t] 第二句。", "[t] 第三句。"]
+
+
+def test_abort_turn_drops_inflight_sentences() -> None:
+    """An interruption mid-turn must cancel in-flight tagging and push nothing for that turn."""
+    def slow_tagger(sentence, mood, *, prior_context, router, provider_name):  # noqa: ANN001, ANN202
+        time.sleep(0.2)
+        return f"[t] {sentence}"
+
+    async def run() -> list[str]:
+        pushed: list[str] = []
+        processor = ExpressionTaggerProcessor(
+            store=_FakeStore(), router=object(), tag_first_sentence=True
+        )
+
+        async def capture(frame, direction=None):  # noqa: ANN001, ANN202
+            pushed.append(frame.text)
+
+        processor.push_frame = capture  # type: ignore[assignment]
+
+        processor._begin_turn()
+        processor._schedule("会被打断的一句。")
+        await asyncio.sleep(0)  # let the tagging Task start
+        await processor._abort_turn()  # interruption before tagging finishes
+        await asyncio.sleep(0.25)  # past the tagger sleep — nothing should have been pushed
+        return pushed
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(proc_mod, "apply_expression_tags_to_sentence", slow_tagger)
+    try:
+        pushed = asyncio.run(run())
+    finally:
+        monkey.undo()
+
+    assert pushed == []

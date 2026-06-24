@@ -3,13 +3,22 @@
 Sits between ``CompanionBrainProcessor`` and the TTS service. The brain streams plain
 ``LLMTextFrame`` deltas; this processor re-aggregates them into sentences, sends each finished
 sentence to the dedicated expression tagger (Gemini), and pushes the *tagged* sentence
-downstream so TTS speaks it with Fish Audio tags.
+downstream (as an ``AggregatedTextFrame`` so the TTS service synthesises it immediately
+instead of re-buffering it behind its own sentence-boundary lookahead) so TTS speaks it
+with Fish Audio tags.
+
+Concurrent pre-tagging: each sentence's tagger call is kicked off (as an asyncio Task) the
+instant the sentence is split off the stream — they run in parallel — while an ordered drain
+loop awaits them in sentence order and pushes each as soon as it's ready. So while sentence 1
+plays, sentences 2..N are already being tagged; by the time sentence 1's audio ends the next
+tagged sentence is usually ready, keeping playback dense instead of stalling one tagger
+round-trip per sentence boundary.
 
 Form B / OQ decisions (see docs/HANDOFF.md "P14 Phase 4 拆解"):
-- OQ1 = simplified variant: *every* sentence (including the first) goes through the tagger;
-  the brain no longer tags itself (P2). The only un-hidden latency is the tagger call before
-  the very first sentence; later sentences' tagger calls overlap with earlier playback.
-- OQ2 = "整段已说": each sentence is tagged with all already-spoken sentences of the current
+- OQ1 = simplified variant: the brain no longer tags itself (P2). With ``tag_first_sentence``
+  False (default), the first content sentence skips the tagger so first audio isn't delayed by
+  a round-trip; every other sentence is tagged.
+- OQ2 = "整段已说": each sentence is tagged with all already-streamed sentences of the current
   reply as ``prior_context`` (for tone continuity), capped by ``prior_context_char_cap``.
 - OQ3 = Gemini (the tagger's default provider).
 
@@ -87,8 +96,11 @@ def build_prior_context(spoken_sentences: list[str], char_cap: int) -> str:
     return "".join(reversed(kept))
 
 
+_DRAIN_SENTINEL = object()
+
+
 class ExpressionTaggerProcessor(FrameProcessor):
-    """Re-aggregates brain deltas into sentences and tags each one before it reaches TTS."""
+    """Re-aggregates brain deltas into sentences, tags them concurrently, releases them in order."""
 
     def __init__(
         self,
@@ -106,17 +118,22 @@ class ExpressionTaggerProcessor(FrameProcessor):
         self._char_cap = prior_context_char_cap
         # Asymmetric / latency lever (OQ1 fallback): when False, the first content sentence
         # skips the tagger and goes straight to TTS so first audio isn't delayed by a tagger
-        # round-trip (~1-2s). Later sentences are tagged, overlapping with playback. Set True
-        # to tag every sentence (uniform, but the opening costs one tagger call of latency).
+        # round-trip (~1-2s). Set True to tag every sentence (uniform, but the opening costs
+        # one tagger call of latency).
         self._tag_first_sentence = tag_first_sentence
         self._buffer = ""
-        self._spoken: list[str] = []
+        self._plain_so_far: list[str] = []
         self._collecting = False
         self._first_content_emitted = False
-        # Bumped on every turn start AND every interruption. A tagger call captures it before
-        # awaiting and drops its (now-stale) result if it changed during the await.
+        # Bumped on every turn start AND every interruption. A scheduled sentence captures it; the
+        # drainer drops any sentence whose turn_id no longer matches (interruption/new turn race).
         self._turn_id = 0
         self._mood = None
+        # Concurrent pre-tagging: each sentence's tagger Task is started immediately and parked on
+        # the queue; a single per-turn drainer awaits them in order and pushes them downstream.
+        self._queue: asyncio.Queue | None = None
+        self._drain_task: asyncio.Task | None = None
+        self._inflight: list[asyncio.Task] = []
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
@@ -127,26 +144,28 @@ class ExpressionTaggerProcessor(FrameProcessor):
             return
 
         if isinstance(frame, InterruptionFrame):
-            # Invalidate any in-flight tagger call and drop the partial sentence.
-            self._turn_id += 1
-            self._buffer = ""
-            self._collecting = False
+            # Invalidate any in-flight tagger calls + drainer and drop the partial sentence.
+            await self._abort_turn()
             await self.push_frame(frame, direction)
             return
 
         if isinstance(frame, LLMTextFrame) and self._collecting:
-            # Replace the raw delta stream with tagged whole-sentence frames.
+            # Replace the raw delta stream with tagged whole-sentence frames. Each finished
+            # sentence is scheduled for tagging right away (concurrent); the drainer pushes them.
             self._buffer += frame.text
             sentences, self._buffer = split_complete_sentences(self._buffer)
             for sentence in sentences:
-                await self._tag_and_push(sentence)
+                self._schedule(sentence)
             return
 
         if isinstance(frame, LLMFullResponseEndFrame) and self._collecting:
             tail, self._buffer = self._buffer, ""
             self._collecting = False
             if tail.strip():
-                await self._tag_and_push(tail)
+                self._schedule(tail)
+            # Flush every queued sentence (in order) before letting the End frame past, so the
+            # downstream sees Start → all tagged sentences → End.
+            await self._finish_turn()
             await self.push_frame(frame, direction)
             return
 
@@ -155,58 +174,113 @@ class ExpressionTaggerProcessor(FrameProcessor):
     def _begin_turn(self) -> None:
         self._turn_id += 1
         self._buffer = ""
-        self._spoken = []
+        self._plain_so_far = []
         self._collecting = True
         self._first_content_emitted = False
+        self._inflight = []
+        self._queue = asyncio.Queue()
+        self._drain_task = asyncio.create_task(self._drain(self._queue))
         try:
             self._mood = self._store.get_mood_state()
         except Exception as error:  # pragma: no cover - defensive, must never break the turn
             logger.warning(f"ExpressionTaggerProcessor: failed to load mood ({error}); tagging without mood block")
             self._mood = None
 
-    async def _tag_and_push(self, sentence: str) -> None:
+    def _schedule(self, sentence: str) -> None:
+        """Start tagging ``sentence`` concurrently and park it on the queue for ordered release."""
+        if self._queue is None:
+            return
         turn_id = self._turn_id
         is_content = _has_taggable_content(sentence)
-        # Asymmetric latency lever: let the first content sentence out untagged (fast first
-        # audio); tag the rest. With tag_first_sentence=True every content sentence is tagged.
+        # Asymmetric latency lever: let the first content sentence out untagged (fast first audio).
         skip_first = is_content and not self._first_content_emitted and not self._tag_first_sentence
         if is_content:
             self._first_content_emitted = True
-
-        if skip_first:
-            tagged = sentence
-            logger.info(f"🏷️  tagger[skip-first] {sentence!r}")
-        elif self._mood is None:
-            tagged = sentence
-            logger.info(f"🏷️  tagger[no-mood] {sentence!r}")
-        else:
-            prior = build_prior_context(self._spoken, self._char_cap)
-            started = time.monotonic()
-            tagged = await asyncio.to_thread(
-                apply_expression_tags_to_sentence,
-                sentence,
-                self._mood,
-                prior_context=prior,
-                router=self._router,
-                provider_name=self._provider_name,
-            )
-            elapsed_ms = (time.monotonic() - started) * 1000
-            logger.info(f"🏷️  tagger {elapsed_ms:.0f}ms | {sentence!r} -> {tagged!r}")
-
-        # Interrupted or a new turn started while we were tagging → this sentence is stale.
-        if turn_id != self._turn_id:
-            return
-
+        # prior_context is "everything streamed so far in this reply" — known at split time, so we
+        # build it now (not when the tagger result lands) to keep it deterministic under concurrency.
+        prior = build_prior_context(self._plain_so_far, self._char_cap)
         if sentence.strip():
-            self._spoken.append(sentence)
+            self._plain_so_far.append(sentence)
+        task = asyncio.create_task(self._compute_tagged(sentence, prior, skip_first=skip_first))
+        self._inflight.append(task)
+        self._queue.put_nowait((turn_id, sentence, task))
 
-        # Push the tagged sentence as a *pre-aggregated* frame so the TTS service treats it as a
-        # finished sentence and synthesises it immediately (tts_service.py routes AggregatedTextFrame
-        # straight to _push_tts_frames). A plain LLMTextFrame would instead re-enter the built-in
-        # SimpleTextAggregator, whose sentence-boundary lookahead holds each sentence until the *next*
-        # sentence's first char arrives — i.e. until the next tagger round-trip finishes — adding that
-        # latency to first audio. raw_text carries the un-tagged sentence so TTS-internal context
-        # aggregation / word timestamps see clean text without the [tags].
-        text_frame = AggregatedTextFrame(tagged, AggregationType.SENTENCE, raw_text=sentence)
-        text_frame.includes_inter_frame_spaces = True
-        await self.push_frame(text_frame)
+    async def _compute_tagged(self, sentence: str, prior: str, *, skip_first: bool) -> str:
+        """Return the tagged sentence (or the plain sentence on skip / no-mood / failure)."""
+        if skip_first:
+            logger.info(f"🏷️  tagger[skip-first] {sentence!r}")
+            return sentence
+        if self._mood is None:
+            logger.info(f"🏷️  tagger[no-mood] {sentence!r}")
+            return sentence
+        if not _has_taggable_content(sentence):
+            return sentence
+        started = time.monotonic()
+        tagged = await asyncio.to_thread(
+            apply_expression_tags_to_sentence,
+            sentence,
+            self._mood,
+            prior_context=prior,
+            router=self._router,
+            provider_name=self._provider_name,
+        )
+        elapsed_ms = (time.monotonic() - started) * 1000
+        logger.info(f"🏷️  tagger {elapsed_ms:.0f}ms | {sentence!r} -> {tagged!r}")
+        return tagged
+
+    async def _drain(self, queue: asyncio.Queue) -> None:
+        """Await tagger Tasks in sentence order and push each tagged sentence downstream."""
+        while True:
+            item = await queue.get()
+            if item is _DRAIN_SENTINEL:
+                return
+            turn_id, sentence, task = item
+            try:
+                tagged = await task
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:  # pragma: no cover - tagger already degrades internally
+                logger.warning(f"ExpressionTaggerProcessor: tagging task failed ({error}); using plain sentence")
+                tagged = sentence
+            # Interrupted or a new turn started while we were tagging → this sentence is stale.
+            if turn_id != self._turn_id:
+                continue
+            # Push as a *pre-aggregated* frame so TTS synthesises it immediately (tts_service.py
+            # routes AggregatedTextFrame straight to _push_tts_frames). A plain LLMTextFrame would
+            # re-enter the built-in SimpleTextAggregator, whose sentence-boundary lookahead holds
+            # each sentence until the *next* sentence's first char arrives — i.e. until the next
+            # tagger round-trip finishes — adding that latency to first audio. raw_text carries the
+            # un-tagged sentence so TTS-internal context aggregation / word timestamps see clean text.
+            text_frame = AggregatedTextFrame(tagged, AggregationType.SENTENCE, raw_text=sentence)
+            text_frame.includes_inter_frame_spaces = True
+            await self.push_frame(text_frame)
+
+    async def _finish_turn(self) -> None:
+        """Signal end-of-turn and wait for the drainer to flush every queued sentence."""
+        if self._queue is None or self._drain_task is None:
+            return
+        self._queue.put_nowait(_DRAIN_SENTINEL)
+        try:
+            await self._drain_task
+        except asyncio.CancelledError:  # pragma: no cover - only if aborted concurrently
+            pass
+        self._queue = None
+        self._drain_task = None
+        self._inflight = []
+
+    async def _abort_turn(self) -> None:
+        """Cancel the drainer + all in-flight tagger Tasks and drop any partial sentence."""
+        self._turn_id += 1  # bump first so any push in flight sees the stale turn_id and drops
+        self._buffer = ""
+        self._collecting = False
+        for task in self._inflight:
+            task.cancel()
+        if self._drain_task is not None:
+            self._drain_task.cancel()
+            try:
+                await self._drain_task
+            except asyncio.CancelledError:
+                pass
+        self._queue = None
+        self._drain_task = None
+        self._inflight = []
