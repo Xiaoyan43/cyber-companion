@@ -27,7 +27,7 @@
     },
     "fish_audio": {
       "enabled": true,
-      "model": "s2-pro",
+      "model": "s2.1-pro-free",
       "voice": "fbe02f8306fc4d3d915e9871722a39d5",
       "api_key_env": "FISH_AUDIO_API_KEY",
       "cloud": true

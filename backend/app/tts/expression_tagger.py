@@ -5,7 +5,6 @@ import re
 from loguru import logger
 
 from backend.app.memory.database import MoodStateRecord
-from backend.app.providers.cost import estimate_token_count
 from backend.app.providers.exceptions import ProviderError
 from backend.app.providers.router import ProviderRouter
 from backend.app.providers.types import ChatCompletionRequest, ChatMessage
@@ -21,6 +20,19 @@ _TAGGABLE_CONTENT_RE = re.compile(r"[0-9A-Za-z぀-ヿ一-鿿]")
 
 def _has_taggable_content(text: str) -> bool:
     return bool(_TAGGABLE_CONTENT_RE.search(text))
+
+
+def _tagger_output_token_budget(stripped: str) -> int:
+    """Token budget for a tagger call that must echo ``stripped`` back plus a few tags.
+
+    ``estimate_token_count`` (``len // 3``) is tuned for English and badly *under*-counts
+    CJK text, where a character is usually closer to 1-2 tokens than 1/3. Reusing it here
+    starves long Chinese replies of output tokens, so the model gets cut off mid-echo and
+    ``_preserves_original_wording`` (correctly) rejects the truncated result, dropping every
+    tag in the call. Budget on raw character count instead — an overestimate for English,
+    but it must cover reproducing the whole input verbatim, not just summarizing it.
+    """
+    return len(stripped) + 256
 
 
 _TAG_RE = re.compile(r"\[[^\]]*\]")
@@ -239,7 +251,7 @@ def apply_expression_tags(
             ChatMessage(role="system", content=system_prompt),
             ChatMessage(role="user", content=stripped),
         ],
-        max_output_tokens=estimate_token_count(stripped) + 128,
+        max_output_tokens=_tagger_output_token_budget(stripped),
     )
 
     try:
@@ -256,7 +268,10 @@ def apply_expression_tags(
         logger.warning("Expression tagger returned empty content, falling back to plain text.")
         return text
     if not _preserves_original_wording(stripped, tagged):
-        logger.warning("Expression tagger altered the wording (not just tags), falling back to plain text.")
+        logger.warning(
+            "Expression tagger altered the wording (not just tags), falling back to plain text. "
+            f"original={stripped!r} tagged={tagged!r}"
+        )
         return text
     cleaned = _strip_dangling_trailing_tags(tagged)
     guarded = _normalize_tag_placement(cleaned)
@@ -310,7 +325,7 @@ def apply_expression_tags_to_sentence(
 
     request = ChatCompletionRequest(
         messages=messages,
-        max_output_tokens=estimate_token_count(stripped) + 128,
+        max_output_tokens=_tagger_output_token_budget(stripped),
     )
 
     try:
@@ -327,7 +342,10 @@ def apply_expression_tags_to_sentence(
         logger.warning("Sentence tagger returned empty content, falling back to plain text.")
         return sentence
     if not _preserves_original_wording(stripped, tagged):
-        logger.warning("Sentence tagger altered the wording (not just tags), falling back to plain text.")
+        logger.warning(
+            "Sentence tagger altered the wording (not just tags), falling back to plain text. "
+            f"original={stripped!r} tagged={tagged!r}"
+        )
         return sentence
     cleaned = _strip_dangling_trailing_tags(tagged)
     guarded = _normalize_tag_placement(cleaned)

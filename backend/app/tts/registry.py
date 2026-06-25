@@ -34,6 +34,7 @@ def build_tts_provider(entry: TTSProviderConfigEntry) -> TextToSpeechProvider:
             enabled=entry.enabled,
             api_key_env=entry.api_key_env or "FISH_AUDIO_API_KEY",
             voice_id=entry.voice,
+            model=entry.model,
         )
 
     return MockTTSProvider(model=entry.model)

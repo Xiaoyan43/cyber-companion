@@ -87,16 +87,19 @@ def _build_tts(tts_backend: str) -> tuple[object, int]:
 
         api_key = _require_env("FISH_AUDIO_API_KEY")
         reference_id = os.getenv("FISH_AUDIO_REFERENCE_ID", "").strip()
+        cfg_path = pathlib.Path(__file__).parent.parent.parent / "config" / "tts.json"
+        fish_cfg: dict = {}
+        try:
+            fish_cfg = json.loads(cfg_path.read_text())["providers"]["fish_audio"]
+        except Exception:
+            pass
         if not reference_id:
-            cfg_path = pathlib.Path(__file__).parent.parent.parent / "config" / "tts.json"
-            try:
-                reference_id = json.loads(cfg_path.read_text())["providers"]["fish_audio"]["voice"]
-            except Exception:
-                pass
+            reference_id = fish_cfg.get("voice", "")
         if not reference_id:
             raise SystemExit(
                 "FISH_AUDIO_REFERENCE_ID env or config/tts.json providers.fish_audio.voice required"
             )
+        model = fish_cfg.get("model", "s2-pro")
 
         FISH_SAMPLE_RATE = 44_100
         latency = os.getenv("CYBER_COMPANION_VOICE_TTS_LATENCY", "balanced").strip().lower()
@@ -115,7 +118,7 @@ def _build_tts(tts_backend: str) -> tuple[object, int]:
             api_key=api_key,
             settings=FishAudioTTSService.Settings(
                 voice=reference_id,
-                model="s2-pro",
+                model=model,
                 latency=latency,
             ),
             output_format="pcm",
