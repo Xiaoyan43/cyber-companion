@@ -1,6 +1,31 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-25（第六十二轮）**：**task 2 位置/格式守卫 P0+P1 已 commit `b07375d`（真机两轮净正向、不误伤）。**
+> `/architect` 把 task 2 拆成四个守卫（畸形归一化 / `[break]` 冗余密度 / 词中插 / 开头堆叠），本轮落地前两个：
+> P0 `_normalize_malformed_tags`（`[ sighing ]`→`[sighing]`、`[soft  tone]`→`[soft tone]`、空标签 `[]`/`[   ]` 剥除）
+> + P1 `_normalize_break_tags`（`[break]`/`[long-break]` 紧贴停顿标点即剥除 + 单次调用≤1，孤立无标点相邻的单 break 保留）
+> 组合进 `_normalize_tag_placement`，接在 `_strip_dangling_trailing_tags` 之后，**整段 + 流式逐句双路径统一生效**；
+> 只增删/修复 `[tags]`、原文一字不动。加 `🧹 placement guard` 观测日志（守卫真改动时打 before→after，**看后端终端非前端**）。
+> 21 新单测 + 既有 38 全绿，相关切片 134 passed。**真机两轮 P0/P1 一次没触发**（`[ sighing ]` 畸形 / `[break]`
+> 这两轮没复现 → 守卫针对**低频**症状），但证明**零误伤**（8+ 种合法标签全保留）。**真机暴露两个新问题（均非位置/格式
+> 守卫射程，见下「🔴 task 3 / 🟡 task 4」）；P2/P3（词中插 / 开头堆叠）降级——这两轮均未复现，优先级让位 task 3。**
+>
+> 🔴 **task 3 · 标签器音效标签滥用（语义判断质量，建议下一步主线）**：Gemini 把 `[sighing]`（Fish 里是触发**真实
+> 叹气声**的音效标签）当成「这句偏温柔/惆怅」的**通用软情绪记号**在用——真机一轮内伤感故事 + 表白场景出现 6+ 次，
+> 真人不会每隔一句实际叹气，**听感不自然**。**根因 = 语义归类错误（音效 vs 语气混淆），属 LLM 判断、不属位置/格式。**
+> 治本杠杆全在 LLM 侧：① prompt 划清「音效/生理类 = 会发真实声音、只在 Boxi 真会做那个动作时才用；想表达 wistful
+> 用 `[soft tone]` 等语气标签」；② 或换标签器模型（memory `future-provider-swap-candidates` 已记 tagger LLM 待换）。
+> **禁止用代码删 `[sighing]`**——那是替 LLM 判断情绪恰当性、踩架构红线，且用户明确不要代码硬干预密度（治标不治本）。
+> 要读：`backend/app/tts/expression_tagger.py`（`TAGGER_INSTRUCTION_TEMPLATE` 第 4 条音效/语气精度区分）+
+> `docs/FISH_AUDIO_REFERENCE.md`（音效标签「触发真实声音 vs 仅影响演绎」分类）。先 `/architect`。
+>
+> 🟡 **task 4 · 自回声残余（归 self-echo/AEC 兜底，暂缓）**：真机一轮 Boxi 自问自答——其上句结尾「现在想让我**怎么
+> 陪你**？」的音箱尾音被麦克风采回，ASR 误转成「能陪你」，因不是 Boxi 尾巴的干净精确/同音后缀（多了误听的「能」）
+> 或已超 4s 窗口，逃过 `self_echo_filter` → brain 当用户输入回应。**这是 self-echo 内容级兜底（commit `c40efda`）的
+> 已知残余，真治靠 AEC（浏览器/WebRTC 白送），挂未来「产品上 web/WebRTC」独立 epic。** 收紧匹配会误杀真实接话
+> （用户也可能真说「能陪你」），是兜底固有两难。**本轮不动；与 voice-bargein-needs-aec 同源。**
+>
 > **2026-06-25（第六十一轮）**：**语音体验三连修复，全部真机 PASS 并 commit。** ①省略号修复真机确认后
 > commit `a922465`（上一轮代码）。②**自我回声**（commit `c40efda`）：真根因 = half-duplex 在 BotStoppedSpeaking
 > 解除静音，但音箱仍在放缓冲尾音（输出缓冲领先真实播放）→ 外接音箱无 AEC → 麦克风采回 → ASR 在 resume guard
