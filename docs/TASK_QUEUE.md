@@ -1,6 +1,26 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-26（第六十四轮）**：**TTS 模型切换 + 两个配置 bug 修复 + 标签器 token 预算修正，
+> 已 commit `982a168`**。①用户带来 Fish 官方博客确认 S2.1 Pro / S2.1 Pro Free 同一套模型权重，
+> 切 `config/tts.json` 到 `s2.1-pro-free`；过程中发现并修复两处独立 bug——`registry.py` 的
+> `fish_audio` 分支没传 `model=entry.model`（文字路径一直用代码默认值 `s2-pro`，配置不生效）+
+> `run_voice.py` 硬编码 `model="s2-pro"`（语音路径同样不读配置）。②真机复现"文字路径长回复标签
+> 全部消失"，定位到 `expression_tagger.py` 的 `max_output_tokens` 预算用 `estimate_token_count`
+> （`len//3`，按英文调校）严重低估中文 token 数，长回复"复述原文+插标签"撞预算上限被截断，
+> `_preserves_original_wording` 护栏正确拒绝截断结果但导致整段标签作废——改成按字符数+256 的
+> 预算（`_tagger_output_token_budget`），消除截断。③**截断消除后暴露出更深层问题**：还观察到一次
+> "漏句"（标签器吞掉原文开头一个小句）导致同样的整段作废——**坐实文字路径"整段全有或全无"架构
+> 本身脆弱，不管失败原因是什么，单点失败就让全篇标签归零**。语音路径已经是逐句调用
+> （`apply_expression_tags_to_sentence`）所以只丢一句，文字路径还是整段调用（`apply_expression_
+> tags`）。**下一步主线 = 文字路径标签器逐句化**，复用语音路径现成的逐句函数，对齐两条路径的
+> 容错粒度。详见 HANDOFF。④新增 Fish Audio 官方文档 MCP server（`claude mcp add` 写入
+> `.mcp.json`，project scope），评估后认为这层对本项目有实质帮助（直接命中本轮"文档信息滞后/
+> 拼凑出错"的反复症状），llms.txt 不装直接按需 WebFetch、Agent Skills 对已有定制集成代码价值不大
+> 跳过。**MCP 状态 pending approval，需在新 session 里首次批准才能用**。⑤用户反馈切换免费版后
+> 仍被扣钱，怀疑根因是克隆音色（`reference_id`）本身的使用费、与 model 档位选择是两套独立计费——
+> **未验证，留给用户自行核实**。
+>
 > **2026-06-25（第六十三轮）**：**task 3（标签器音效标签语义闭门）已完成并真机验证 PASS，已 commit
 > `70d5c7a`。** `/architect` 确认 scope 收窄到只改 `TAGGER_INSTRUCTION_TEMPLATE` 一个字符串：①规则4
 > A/B 类区分纠正为"独立可分离声音事件 vs 改变音色/语气"（用户指出原"会不会发声"措辞不准）；②新增
