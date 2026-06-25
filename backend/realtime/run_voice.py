@@ -215,6 +215,11 @@ async def _main_pipeline() -> None:
     from backend.realtime.companion_brain_processor import CompanionBrainProcessor
     from backend.realtime.expression_tagger_processor import ExpressionTaggerProcessor
     from backend.realtime.half_duplex_mute_processor import HalfDuplexMuteGate, HalfDuplexMuteProcessor
+    from backend.realtime.self_echo_filter import (
+        SelfEchoCaptureProcessor,
+        SelfEchoFilterProcessor,
+        SelfEchoGate,
+    )
     from backend.realtime.transcript_broadcaster import (
         boxi_transcript_tap,
         get_transcript_broadcaster,
@@ -230,6 +235,8 @@ async def _main_pipeline() -> None:
         load_asr_end_window_ms,
         load_expression_tagger_enabled,
         load_half_duplex_enabled,
+        load_self_echo_enabled,
+        load_self_echo_window_ms,
         load_vad_stop_secs,
         load_voice_max_tokens,
     )
@@ -283,6 +290,10 @@ async def _main_pipeline() -> None:
     asr_end_window_ms = load_asr_end_window_ms()
     half_duplex = load_half_duplex_enabled()
     expression_tagger_enabled = load_expression_tagger_enabled()
+    # Self-echo backstop only makes sense alongside half-duplex (it patches the half-duplex
+    # resume-guard leak); skip it entirely in barge-in mode where AEC/headphones is the answer.
+    self_echo_enabled = half_duplex and load_self_echo_enabled()
+    echo_gate = SelfEchoGate(window_ms=load_self_echo_window_ms()) if self_echo_enabled else None
 
     store = get_memory_store()
     brain = CompanionBrain(store, max_output_tokens=voice_max_tokens)
@@ -303,6 +314,11 @@ async def _main_pipeline() -> None:
     else:
         pipeline_steps.extend([vad, stt])
 
+    # Self-echo filter sits BEFORE the user tap/brain so a suppressed echo never reaches the
+    # brain (no self-reply) nor the subtitle broadcaster.
+    if echo_gate is not None:
+        pipeline_steps.append(SelfEchoFilterProcessor(echo_gate))
+
     transcript_broadcaster = get_transcript_broadcaster()
     pipeline_steps.extend(
         [
@@ -311,6 +327,10 @@ async def _main_pipeline() -> None:
             boxi_transcript_tap(transcript_broadcaster),
         ]
     )
+    # Capture sits AFTER the Boxi tap (plain reply text, no Fish tags yet) and BEFORE the
+    # tagger so it records what Boxi actually says, for the filter above to match against.
+    if echo_gate is not None:
+        pipeline_steps.append(SelfEchoCaptureProcessor(echo_gate))
     # Expression tagger sits AFTER the Boxi transcript tap so subtitles read the plain reply
     # text (no Fish tags) and BEFORE tts so the synthesized audio gets the tags (P14 Phase 4).
     # Gated by CYBER_COMPANION_VOICE_EXPRESSION_TAGGER so we can A/B first-audio latency with the
@@ -356,7 +376,8 @@ async def _main_pipeline() -> None:
         f"{ENV_ASR_END_WINDOW_MS}={asr_end_window_ms}, "
         f"{ENV_MAX_TOKENS}={voice_max_tokens}, "
         f"{ENV_HALF_DUPLEX}={'on' if half_duplex else 'off'}, "
-        f"{ENV_EXPRESSION_TAGGER}={'on' if expression_tagger_enabled else 'off'}; "
+        f"{ENV_EXPRESSION_TAGGER}={'on' if expression_tagger_enabled else 'off'}, "
+        f"self_echo={'on' if self_echo_enabled else 'off'}; "
         "smart_turn=off (no LLMUserAggregator in pipeline — VAD-only endpointing)"
     )
 
