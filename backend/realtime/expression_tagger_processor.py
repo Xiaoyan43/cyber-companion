@@ -52,9 +52,17 @@ from backend.app.tts.expression_tagger import (
     apply_expression_tags_to_sentence,
 )
 
-# Reuse the exact terminator set the offline tag_stats yardstick splits on, so streaming
-# segmentation and the degradation metrics agree on what counts as a sentence boundary.
-from backend.app.tts.tag_stats import _TERMINATORS as SENTENCE_TERMINATORS
+# Streaming-splitter sentence terminators. Derived from the offline tag_stats yardstick but
+# WITH "…" removed: in conversational Chinese an ellipsis is almost always a *mid-utterance
+# pause*, not an end of sentence (the brain writes "还是只是单纯地…羡慕那个时候的自己？" as one
+# thought). Splitting on it fragments that single sentence into a grammatically-incomplete
+# standalone Fish request ("……单纯地" with nothing after it), which is what makes Fish improvise
+# filler audio over the broken fragment (real-machine repro, 2026-06-25). The tag_stats set keeps
+# "…" — over-splitting only ever lowers its degradation false-positives — so the two are
+# deliberately decoupled here for their different purposes.
+from backend.app.tts.tag_stats import _TERMINATORS as _STATS_TERMINATORS
+
+SENTENCE_TERMINATORS = _STATS_TERMINATORS - {"…"}
 
 _DEFAULT_PRIOR_CONTEXT_CHAR_CAP = 800
 
@@ -62,16 +70,28 @@ _DEFAULT_PRIOR_CONTEXT_CHAR_CAP = 800
 def split_complete_sentences(buffer: str) -> tuple[list[str], str]:
     """Split ``buffer`` into (complete sentences, trailing remainder).
 
-    A sentence runs up to and including a terminator char. The remainder is whatever follows
-    the last terminator (an in-progress sentence with no terminator yet). Pure + side-effect
-    free so it can be unit-tested without a pipeline.
+    A sentence runs up to and including a *run* of consecutive terminator chars (e.g. "。\n" or
+    "！？") so they stay attached to the sentence they end instead of each char cutting its own
+    boundary — a naive per-char cut would strand a content-less fragment that still gets sent to
+    Fish as its own flushed request. Note ``SENTENCE_TERMINATORS`` excludes "…" (see its comment),
+    so a mid-utterance ellipsis does not split a sentence. The remainder is whatever follows the
+    last terminator run (an in-progress sentence with no terminator yet). Pure + side-effect free
+    so it can be unit-tested without a pipeline.
     """
     sentences: list[str] = []
     start = 0
-    for index, char in enumerate(buffer):
-        if char in SENTENCE_TERMINATORS:
-            sentences.append(buffer[start : index + 1])
-            start = index + 1
+    index = 0
+    length = len(buffer)
+    while index < length:
+        if buffer[index] in SENTENCE_TERMINATORS:
+            end = index
+            while end < length and buffer[end] in SENTENCE_TERMINATORS:
+                end += 1
+            sentences.append(buffer[start:end])
+            start = end
+            index = end
+        else:
+            index += 1
     return sentences, buffer[start:]
 
 
@@ -190,17 +210,20 @@ class ExpressionTaggerProcessor(FrameProcessor):
         """Start tagging ``sentence`` concurrently and park it on the queue for ordered release."""
         if self._queue is None:
             return
+        if not _has_taggable_content(sentence):
+            # Pure punctuation/whitespace fragment (e.g. a stray terminator run that still slips
+            # through the splitter) — nothing to say. Forwarding it would send Fish a content-less
+            # request to flush, which is exactly the shape that makes it hallucinate filler audio
+            # over the "finished" utterance (real-machine repro, 2026-06-25). Drop it instead.
+            return
         turn_id = self._turn_id
-        is_content = _has_taggable_content(sentence)
         # Asymmetric latency lever: let the first content sentence out untagged (fast first audio).
-        skip_first = is_content and not self._first_content_emitted and not self._tag_first_sentence
-        if is_content:
-            self._first_content_emitted = True
+        skip_first = not self._first_content_emitted and not self._tag_first_sentence
+        self._first_content_emitted = True
         # prior_context is "everything streamed so far in this reply" — known at split time, so we
         # build it now (not when the tagger result lands) to keep it deterministic under concurrency.
         prior = build_prior_context(self._plain_so_far, self._char_cap)
-        if sentence.strip():
-            self._plain_so_far.append(sentence)
+        self._plain_so_far.append(sentence)
         task = asyncio.create_task(self._compute_tagged(sentence, prior, skip_first=skip_first))
         self._inflight.append(task)
         self._queue.put_nowait((turn_id, sentence, task))

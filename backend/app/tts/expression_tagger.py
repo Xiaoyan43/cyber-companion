@@ -39,6 +39,31 @@ def _preserves_original_wording(original: str, tagged: str) -> bool:
     norm_tagged = _WHITESPACE_RE.sub("", _TAG_RE.sub("", tagged))
     return norm_original == norm_tagged
 
+
+def _strip_dangling_trailing_tags(tagged: str) -> str:
+    """Drop any tag that has no taggable text after it — Fish hallucinates over its empty span.
+
+    Fish position semantics: a tag affects text from its position to the next tag or the end of
+    the sentence. A tag stranded at the tail with only punctuation/whitespace after it (the
+    classic "我不知道…[sighing]" — a sigh tag with nothing left to sigh over, or a tag sitting
+    just before a trailing "……") has an *empty* span, and Fish fills that span with hallucinated
+    sound/words (the "省略号幻觉" we keep hearing). Position legality is enforceable in code, not
+    just prompt-able, so we strip every such dangling tag here regardless of what the tagger
+    emitted. A tag is dangling iff the text after it, with all tags removed, has no taggable
+    content; tags with a real word after them are left untouched.
+    """
+    drops: list[tuple[int, int]] = []
+    for match in _TAG_RE.finditer(tagged):
+        after = _TAG_RE.sub("", tagged[match.end() :])
+        if not _has_taggable_content(after):
+            drops.append((match.start(), match.end()))
+    if not drops:
+        return tagged
+    result = tagged
+    for start, end in reversed(drops):
+        result = result[:start] + result[end:]
+    return result.rstrip()
+
 # Expression layer (P8): a dedicated single-purpose call whose only job is inserting Fish
 # Audio tags into already-finalized reply text. Vocab/position rules sourced from
 # docs/FISH_AUDIO_REFERENCE.md §2-4. Deliberately has no persona/memory/signal content —
@@ -152,7 +177,7 @@ def apply_expression_tags(
     if not _preserves_original_wording(stripped, tagged):
         logger.warning("Expression tagger altered the wording (not just tags), falling back to plain text.")
         return text
-    return tagged
+    return _strip_dangling_trailing_tags(tagged)
 
 
 def apply_expression_tags_to_sentence(
@@ -219,4 +244,4 @@ def apply_expression_tags_to_sentence(
     if not _preserves_original_wording(stripped, tagged):
         logger.warning("Sentence tagger altered the wording (not just tags), falling back to plain text.")
         return sentence
-    return tagged
+    return _strip_dangling_trailing_tags(tagged)

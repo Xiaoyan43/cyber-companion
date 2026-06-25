@@ -188,6 +188,64 @@ def test_tagger_instruction_keeps_official_physio_emotion_combo_example() -> Non
     assert "[panting] [tired]" in TAGGER_INSTRUCTION_TEMPLATE
 
 
+# --- dangling trailing tag guardrail (省略号幻觉) ----------------------------------------
+
+
+def test_apply_expression_tags_strips_dangling_trailing_tag_after_ellipsis() -> None:
+    # Fish hallucinates a sound for a tag with no text after it ("我不知道…[sighing]" — a sigh
+    # over an empty span). Such tail tags must be stripped before reaching TTS.
+    router = _FakeRouter(content="我不知道…[sighing]")
+
+    result = apply_expression_tags("我不知道…", _mood(), router=router)  # type: ignore[arg-type]
+
+    assert result == "我不知道…"
+
+
+def test_apply_expression_tags_strips_tag_stranded_before_trailing_ellipsis() -> None:
+    # A tag sitting just before a trailing "……" also has an empty span.
+    router = _FakeRouter(content="我不知道[sighing]……")
+
+    result = apply_expression_tags("我不知道……", _mood(), router=router)  # type: ignore[arg-type]
+
+    assert result == "我不知道……"
+
+
+def test_apply_expression_tags_keeps_tag_with_words_after_it() -> None:
+    # A leading tag whose span still covers real words is legitimate — leave it alone.
+    router = _FakeRouter(content="[sad]我不知道…我也不想这样。")
+
+    result = apply_expression_tags("我不知道…我也不想这样。", _mood(), router=router)  # type: ignore[arg-type]
+
+    assert result == "[sad]我不知道…我也不想这样。"
+
+
+def test_apply_expression_tags_strips_only_trailing_dangling_tag_keeps_inner() -> None:
+    # Strip the dangling tail tag, keep the inner one that still has words after it.
+    router = _FakeRouter(content="[sad]我不知道[sighing]…")
+
+    result = apply_expression_tags("我不知道…", _mood(), router=router)  # type: ignore[arg-type]
+
+    assert result == "[sad]我不知道…"
+
+
+def test_apply_expression_tags_strips_multiple_trailing_dangling_tags() -> None:
+    # A run of back-to-back tags at the tail (all with empty spans) is fully stripped.
+    router = _FakeRouter(content="我不知道…[sad][sighing]")
+
+    result = apply_expression_tags("我不知道…", _mood(), router=router)  # type: ignore[arg-type]
+
+    assert result == "我不知道…"
+
+
+def test_apply_expression_tags_to_sentence_strips_dangling_trailing_tag() -> None:
+    # Same guardrail on the streaming voice path (where the hallucination was heard live).
+    router = _FakeRouter(content="我不知道…[sighing]")
+
+    result = apply_expression_tags_to_sentence("我不知道…", _mood(), router=router)  # type: ignore[arg-type]
+
+    assert result == "我不知道…"
+
+
 # --- streaming per-sentence variant (P14 Phase 4, form B) -------------------------------
 
 
