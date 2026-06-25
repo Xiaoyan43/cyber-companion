@@ -1,6 +1,38 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-25（第六十一轮）**：**语音体验三连修复，全部真机 PASS 并 commit。** ①省略号修复真机确认后
+> commit `a922465`（上一轮代码）。②**自我回声**（commit `c40efda`）：真根因 = half-duplex 在 BotStoppedSpeaking
+> 解除静音，但音箱仍在放缓冲尾音（输出缓冲领先真实播放）→ 外接音箱无 AEC → 麦克风采回 → ASR 在 resume guard
+> 后出 final → Boxi 自问自答。修复 = 新建 `self_echo_filter.py`（内容级兜底：用户 final 若是 Boxi 上句**尾巴**
+> 且在 bot 停说 4s 窗口内 → 丢弃；只认尾巴不误杀真实接话）。③**偏长被砍落在完整句**（commit `6087d31`）：
+> 根因 = max_tokens=200 砍半句 + tagger 收尾 flush 把残尾也念出来。修复 = `VoiceTurnOutcome.truncated`
+> （`output_tokens >= max_tokens` 判定，无需 finish_reason）→ 挂 End 帧 → flush 时 truncated 丢残尾。
+> 132 相关测试绿，未跑全量门禁。**下一步主线 = task 2 标签器放置质量**（本轮真机新攒症状：`[ sighing ]` 畸形空格、
+> `[break]` 句中滥用/紧贴标点冗余、`[calm] [bored]` 堆叠、历史词中插 `那[sighing]股`；prompt 方案历史已证失败 →
+> 走**代码后处理位置/格式守卫**，先 `/architect`）。OPEN：是否抬 `DEFAULT_VOICE_MAX_TOKENS`（截断 fix 后变可选，
+> 默认维持 200；用户试改 .env 512 未生效）。barge-in = 未来独立 epic，核心是 AEC（浏览器/WebRTC 白送）非换 ASR。
+> **2026-06-25（第六十轮）**：**「省略号怪声」真机定位真正根因 + 清理回干净基线，全部未 commit。**
+> ①真机诊断（临时诊断代码已删）**逐一证伪**跨轮 context 竞态 / send 顺序错乱 / `s2.1-pro-free` 模型版本三个猜测；
+> **✅ 真根因 = 流式断句器把「…」当句子终止符**——Grok 把「…」当句中停顿写（「…单纯地…羡慕…？」是一整句），
+> 断句器在「…」切刀 → 给 Fish 喂语法残缺半句「…单纯地。」→ Fish 即兴合成填充音 = 怪声。**文本断句层问题，
+> 非音频/模型/prompt。** ②试 `s2.1-pro-free` 在省略号场景**更差**（持续怪声须强退），已回退 `s2-pro`。③清理：撤掉
+> `run_voice.py` 全部诊断代码（净改动归零）+ 撤掉有害补丁 `normalize_trailing_ellipsis`；**有原则修复 = `SENTENCE_TERMINATORS`
+> 解耦排除「…」**（`tag_stats._TERMINATORS` 保留「…」）；保留两个 guard（连续终止符合并 + `_schedule` 丢无内容碎片）。
+> 13/195 测试绿，未跑全量 `npm run check`。**⚠️ 修复尚未真机验证（改完即交接）。下一步 = 真机听怪声是否进一步减少：
+> 改善则 commit（只 stage expression_tagger_processor.py + test + tts.json + 上轮 P0 两文件，排除 run_voice.py）；
+> 仍差则确认是 Fish 范式天花板 → 启动 TTS 选型 spike。** s2.1-pro-free 别再随手换（memory 已记）。
+> **2026-06-25（第五十九轮）**：**主线转向 = TTS 选型重评（Fish 难驯化根因 → 候选收敛），未 commit。**
+> ①P0「标签器·省略号幻觉」代码护栏做完（`expression_tagger.py` 新增 `_strip_dangling_trailing_tags`：标签后无
+> taggable content 即判悬空、直接 strip；接入两个标签函数；+6 单测，39 passed / tts 全集 142 passed），**但真机
+> 仍幻觉合成 + 原文字句被直接替换 → 护栏不够，问题是结构性的**。②借此停下做 Fish vs 豆包 vs MiniMax vs
+> Qwen3-TTS 横向架构对比：**Fish 行内位置标签范式与 LLM 弱项（精确位置标注 + 内容保真）正面相撞，控制信号和
+> 内容共用一条通道 → 控制出错就改字/幻觉，纯 prompt/护栏治不好**；豆包/MiniMax/Qwen3 走旁路/自然语言指令，
+> 结构上避开这类失败。**候选收敛 = Qwen3-TTS（最低调教压力+97ms+开源）/ 豆包（大库+引入上文）/ MiniMax（枚举+
+> Turbo）三选一**。③用户真机试豆包 playground 三机制（语音标签/语音指令/引入上文），洞见「引入上文=用户上一轮
+> 发言，我们手上就有，调教成本归零」最贴 pipeline。**⚠️ 对比资料是 playground 指南非 API spec，下注前必拉官方 API
+> 文档。下一步 = TTS 选型 spike 前置（拉三家 API 文档 + 查 Pipecat service 现状，不接代码），先 `/architect`。**
+> P0 护栏可独立 commit（净改进，待用户点头，只 stage expression_tagger.py + test）。
 > **2026-06-24（第五十八轮）**：**P0「破音/音频欠载」根因定位 + 修复完成，已 commit `8d5b2fb`，真机
 > Fish+Doubao 双路径 PASS**。真机隔离 + 静态排除逐项证伪（标签器/Phase4/Fish/采样率/P15 tap/探针/设备全部
 > 排除），根因 = pipecat `LocalAudioOutputTransport.start()` 创建 PyAudio **输出**流时没传 `frames_per_buffer`
