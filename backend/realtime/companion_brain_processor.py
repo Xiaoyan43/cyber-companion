@@ -60,6 +60,7 @@ class CompanionBrainProcessor(FrameProcessor):
     async def _handle_turn(self, user_text: str) -> None:
         turn_started = time.monotonic()
         first_delta_at: float | None = None
+        truncated = False
         await self.push_frame(LLMFullResponseStartFrame())
         try:
             async for event in self._brain.stream_turn(user_text):
@@ -74,6 +75,7 @@ class CompanionBrainProcessor(FrameProcessor):
                     await self.push_frame(text_frame)
                 else:
                     outcome = event[1]
+                    truncated = outcome.truncated
                     self._log_turn_latency(
                         user_text=user_text,
                         outcome=outcome,
@@ -89,7 +91,11 @@ class CompanionBrainProcessor(FrameProcessor):
                 exception=error,
             )
         finally:
-            await self.push_frame(LLMFullResponseEndFrame())
+            # Carry the truncation flag on the End frame so the tagger can drop the dangling
+            # tail fragment (Boxi ends on her last complete sentence, not a half-sentence).
+            end_frame = LLMFullResponseEndFrame()
+            end_frame.truncated = truncated
+            await self.push_frame(end_frame)
             self._turn_task = None
 
     def _log_turn_latency(

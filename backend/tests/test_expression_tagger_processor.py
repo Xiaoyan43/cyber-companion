@@ -7,6 +7,13 @@ import pytest
 
 pytest.importorskip("pipecat")
 
+from pipecat.frames.frames import (
+    LLMFullResponseEndFrame,
+    LLMFullResponseStartFrame,
+    LLMTextFrame,
+)
+from pipecat.processors.frame_processor import FrameDirection
+
 import backend.realtime.expression_tagger_processor as proc_mod
 from backend.realtime.expression_tagger_processor import (
     ExpressionTaggerProcessor,
@@ -179,6 +186,78 @@ def test_schedule_drops_content_less_fragment_instead_of_sending_to_tts() -> Non
         monkey.undo()
 
     assert pushed == ["[t] 嗯。", "[t] 还好啦。"]  # "……" dropped entirely, never reaches TTS
+
+
+def test_end_flush_drops_tail_when_truncated() -> None:
+    """Reply cut off by the output-token cap → drop the dangling half-sentence, end on the last complete one."""
+
+    def fake_tagger(sentence, mood, *, prior_context, router, provider_name):  # noqa: ANN001, ANN202
+        return f"[t] {sentence}"
+
+    async def run() -> list[str]:
+        pushed: list[str] = []
+        processor = ExpressionTaggerProcessor(
+            store=_FakeStore(), router=object(), tag_first_sentence=True
+        )
+
+        async def capture(frame, direction=None):  # noqa: ANN001, ANN202
+            text = getattr(frame, "text", None)
+            if text is not None:
+                pushed.append(text)
+
+        processor.push_frame = capture  # type: ignore[assignment]
+
+        await processor.process_frame(LLMFullResponseStartFrame(), FrameDirection.DOWNSTREAM)
+        await processor.process_frame(LLMTextFrame("第一句完整。还没说完的半句"), FrameDirection.DOWNSTREAM)
+        end = LLMFullResponseEndFrame()
+        end.truncated = True
+        await processor.process_frame(end, FrameDirection.DOWNSTREAM)
+        return pushed
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(proc_mod, "apply_expression_tags_to_sentence", fake_tagger)
+    try:
+        pushed = asyncio.run(run())
+    finally:
+        monkey.undo()
+
+    assert pushed == ["[t] 第一句完整。"]  # the half-sentence tail was dropped
+
+
+def test_end_flush_keeps_tail_on_natural_end() -> None:
+    """A reply that ends naturally (not truncated) keeps its final fragment even without punctuation."""
+
+    def fake_tagger(sentence, mood, *, prior_context, router, provider_name):  # noqa: ANN001, ANN202
+        return f"[t] {sentence}"
+
+    async def run() -> list[str]:
+        pushed: list[str] = []
+        processor = ExpressionTaggerProcessor(
+            store=_FakeStore(), router=object(), tag_first_sentence=True
+        )
+
+        async def capture(frame, direction=None):  # noqa: ANN001, ANN202
+            text = getattr(frame, "text", None)
+            if text is not None:
+                pushed.append(text)
+
+        processor.push_frame = capture  # type: ignore[assignment]
+
+        await processor.process_frame(LLMFullResponseStartFrame(), FrameDirection.DOWNSTREAM)
+        await processor.process_frame(LLMTextFrame("第一句完整。结尾没句号"), FrameDirection.DOWNSTREAM)
+        end = LLMFullResponseEndFrame()
+        end.truncated = False
+        await processor.process_frame(end, FrameDirection.DOWNSTREAM)
+        return pushed
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(proc_mod, "apply_expression_tags_to_sentence", fake_tagger)
+    try:
+        pushed = asyncio.run(run())
+    finally:
+        monkey.undo()
+
+    assert pushed == ["[t] 第一句完整。", "[t] 结尾没句号"]  # tail kept on natural end
 
 
 def test_abort_turn_drops_inflight_sentences() -> None:

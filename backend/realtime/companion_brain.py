@@ -59,6 +59,10 @@ class VoiceTurnOutcome:
     raw_reply: str
     reply_signals: dict[str, Any] | None
     result: ChatCompletionResult
+    # True when the LLM stream was cut off by the output-token cap (output_tokens >= max_tokens),
+    # i.e. the reply ends mid-sentence. Lets the downstream tagger drop the dangling tail fragment
+    # so Boxi ends on her last complete sentence instead of speaking a half-sentence.
+    truncated: bool = False
 
 
 class CompanionBrain:
@@ -99,6 +103,7 @@ class CompanionBrain:
         avatar_state = decision.avatar_state
         accumulated_parts: list[str] = []
         result: ChatCompletionResult | None = None
+        truncated = False
 
         if decision.should_call_llm:
             try:
@@ -198,6 +203,8 @@ class CompanionBrain:
                     if parsed.decision:
                         final_decision = parsed.decision
                     called_llm = True
+                    # Cut off by the output-token cap → reply ends mid-sentence.
+                    truncated = stream_usage.output_tokens >= max_tokens
                     result = ChatCompletionResult(
                         provider=provider_status.name,
                         model=provider_status.model,
@@ -224,6 +231,7 @@ class CompanionBrain:
                 raw_reply=result.content,
                 reply_signals=reply_signals,
                 result=result,
+                truncated=truncated,
             ),
         )
 

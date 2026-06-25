@@ -99,3 +99,48 @@ def test_stream_turn_strips_signal_trailer_from_spoken_deltas() -> None:
     assert SIGNALS_SENTINEL not in "".join(deltas)
     assert outcome.called_llm is True
     assert outcome.reply_signals is not None
+
+
+def _run_turn_with_usage(output_tokens: int, max_output_tokens: int):
+    reset_memory_store()
+    reset_provider_router()
+    store = get_memory_store()
+    brain = CompanionBrain(store, max_output_tokens=max_output_tokens)
+
+    class _CapProvider:
+        def status(self):
+            from backend.app.providers.types import ProviderStatus
+
+            return ProviderStatus(
+                name="mock",
+                model="mock-boxi",
+                enabled=True,
+                configured=True,
+                api_key_present=False,
+            )
+
+        def complete_stream(self, request, provider_name=None):
+            from backend.app.providers.types import TokenUsage
+
+            yield ("delta", "讲个故事然后到这里")
+            yield ("usage", TokenUsage(input_tokens=10, output_tokens=output_tokens, total_tokens=10 + output_tokens))
+
+    brain._router.providers["mock"] = _CapProvider()  # type: ignore[assignment]
+    brain._provider_name = "mock"
+
+    events = asyncio.run(_collect_turn_events(brain, "讲个长故事"))
+    return events[-1][1]
+
+
+def test_stream_turn_marks_truncated_when_output_hits_token_cap() -> None:
+    # output_tokens == max_output_tokens → cut off by the cap → truncated.
+    outcome = _run_turn_with_usage(output_tokens=5, max_output_tokens=5)
+    assert outcome.called_llm is True
+    assert outcome.truncated is True
+
+
+def test_stream_turn_not_truncated_when_under_token_cap() -> None:
+    # Stopped naturally before the cap → not truncated.
+    outcome = _run_turn_with_usage(output_tokens=4, max_output_tokens=5)
+    assert outcome.called_llm is True
+    assert outcome.truncated is False

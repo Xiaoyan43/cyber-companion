@@ -181,7 +181,14 @@ class ExpressionTaggerProcessor(FrameProcessor):
         if isinstance(frame, LLMFullResponseEndFrame) and self._collecting:
             tail, self._buffer = self._buffer, ""
             self._collecting = False
-            if tail.strip():
+            # The tail is the in-progress sentence after the last terminator (never terminated).
+            # On a natural end it's the reply's real ending (kept). But when the reply was cut off
+            # by the output-token cap (truncated), the tail is a grammatically-incomplete fragment
+            # — drop it so Boxi ends on her last complete sentence instead of speaking a half one.
+            truncated = getattr(frame, "truncated", False)
+            if tail.strip() and truncated:
+                logger.info(f"✂️  dropped truncated tail fragment (output-token cap): {tail.strip()!r}")
+            elif tail.strip():
                 self._schedule(tail)
             # Flush every queued sentence (in order) before letting the End frame past, so the
             # downstream sees Start → all tagged sentences → End.
