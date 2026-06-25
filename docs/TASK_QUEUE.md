@@ -1,6 +1,19 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-25（第六十三轮）**：**task 3（标签器音效标签语义闭门）已完成并真机验证 PASS，已 commit
+> `70d5c7a`。** `/architect` 确认 scope 收窄到只改 `TAGGER_INSTRUCTION_TEMPLATE` 一个字符串：①规则4
+> A/B 类区分纠正为"独立可分离声音事件 vs 改变音色/语气"（用户指出原"会不会发声"措辞不准）；②新增
+> 子规则——A 类标签只能在文字写到该动作真实发生时用，不能当情绪基调代用记号，给正反例
+> （`[sighing]` vs `[nostalgic]`）；③音效词表每个标签补官方 description 当判断锚点。讨论后明确
+> **排除**整段喂 Fish phoneme 发音文档给 tagger（会撞改字护栏 + 官方情绪文档本身有反例会反向强化
+> bug + 流式按句调用 token 成本）。真机验证：~20 句调用里 A 类标签从旧基线"6+ 次/轮"降到
+> `[sighing]` 1 次 + `[crying loudly]` 1 次（均为语义边界本身模糊的灰色案例），其余惆怅/温柔位置
+> 正确分流到 `[soft tone]`/`[whispering]` 等 B 类标签，判定净正向可结案；副产物确认 task 2 的 P1
+> 守卫（`[break]` 冗余/密度）真机 4 次触发全部行为正确、与本轮改动无冲突。**59 pytest 全绿（21+38），
+> 未跑全量 `npm run check`。task 3 结案，下一步无紧急主线**——建议观察真机稳定性或从沿用未完成项
+> （P12/P9-P2-C/task2 P2-P3）里选，详见 HANDOFF。
+>
 > **2026-06-25（第六十二轮）**：**task 2 位置/格式守卫 P0+P1 已 commit `b07375d`（真机两轮净正向、不误伤）。**
 > `/architect` 把 task 2 拆成四个守卫（畸形归一化 / `[break]` 冗余密度 / 词中插 / 开头堆叠），本轮落地前两个：
 > P0 `_normalize_malformed_tags`（`[ sighing ]`→`[sighing]`、`[soft  tone]`→`[soft tone]`、空标签 `[]`/`[   ]` 剥除）
