@@ -64,6 +64,80 @@ def _strip_dangling_trailing_tags(tagged: str) -> str:
         result = result[:start] + result[end:]
     return result.rstrip()
 
+
+# --- code-level position/format guards (task 2) ----------------------------------------
+# These enforce tag *legality* — format correctness and obviously-wrong placement — never
+# emotion appropriateness, which stays the tagger LLM's job (docs/HANDOFF.md 架构边界:
+# "代码只强制标签格式/位置合法性，情绪恰当性靠 LLM"). Every guard only adds/removes/repairs
+# [tags]; the original wording is never touched (so _preserves_original_wording still holds).
+
+# Pause tags. Fish docs treat these as rhythm controls, not sound events.
+_BREAK_TAG_INNERS = frozenset({"break", "long-break"})
+# Punctuation that already supplies an audible pause, so a [break] glued to it is redundant.
+_PAUSE_PUNCTUATION = frozenset("。！？，、；：…—~,.!?;:\n")
+# Cap on surviving pause tags per tagger call. The streaming voice path tags ONE sentence per
+# call, so this is effectively "≤1 break per sentence" — the exact shape of the observed
+# "[break] 句中滥用" symptom. The offline whole-reply path shares the cap (pauses are meant to
+# be rare; over-capping only ever drops a pause, never changes a word). A lone intentional
+# mid-clause break is left alone — that placement is the LLM's call, not ours.
+_MAX_BREAK_TAGS_PER_CALL = 1
+
+
+def _normalize_malformed_tags(tagged: str) -> str:
+    """Fix malformed tag *formatting* so Fish can recognize the tag at all.
+
+    The tagger occasionally emits inner whitespace (``[ sighing ]``) or doubled spaces
+    (``[soft  tone]``); Fish very likely won't match these against its tag vocabulary. Trim
+    leading/trailing whitespace and collapse internal whitespace runs to a single space. A tag
+    whose inner text is empty after trimming (``[]`` / ``[   ]``) carries no instruction and is
+    dropped. Only the bracketed tokens are touched — wording is untouched.
+    """
+
+    def _replace(match: re.Match[str]) -> str:
+        inner = _WHITESPACE_RE.sub(" ", match.group(0)[1:-1]).strip()
+        return f"[{inner}]" if inner else ""
+
+    return _TAG_RE.sub(_replace, tagged)
+
+
+def _normalize_break_tags(tagged: str) -> str:
+    """Drop redundant / overused pause tags (``[break]`` / ``[long-break]``).
+
+    Two position-legality rules (not emotion judgments):
+    1. Redundant — a pause tag immediately adjacent (ignoring whitespace) to punctuation that
+       already pauses (。，！？… etc.) adds nothing, so drop it.
+    2. Density — keep at most ``_MAX_BREAK_TAGS_PER_CALL`` pause tags per call, in order; drop
+       the rest (the observed "[break] 句中滥用").
+
+    Assumes :func:`_normalize_malformed_tags` already ran so the inner text is exact.
+    """
+    drops: list[tuple[int, int]] = []
+    kept = 0
+    for match in _TAG_RE.finditer(tagged):
+        if match.group(0)[1:-1] not in _BREAK_TAG_INNERS:
+            continue
+        before = tagged[: match.start()].rstrip()
+        after = tagged[match.end() :].lstrip()
+        redundant = before[-1:] in _PAUSE_PUNCTUATION or after[:1] in _PAUSE_PUNCTUATION
+        if redundant or kept >= _MAX_BREAK_TAGS_PER_CALL:
+            drops.append((match.start(), match.end()))
+        else:
+            kept += 1
+    if not drops:
+        return tagged
+    result = tagged
+    for start, end in reversed(drops):
+        result = result[:start] + result[end:]
+    return result
+
+
+def _normalize_tag_placement(tagged: str) -> str:
+    """Run the code-level position/format guards in order over already-tagged text."""
+    tagged = _normalize_malformed_tags(tagged)
+    tagged = _normalize_break_tags(tagged)
+    return tagged
+
+
 # Expression layer (P8): a dedicated single-purpose call whose only job is inserting Fish
 # Audio tags into already-finalized reply text. Vocab/position rules sourced from
 # docs/FISH_AUDIO_REFERENCE.md §2-4. Deliberately has no persona/memory/signal content —
@@ -177,7 +251,11 @@ def apply_expression_tags(
     if not _preserves_original_wording(stripped, tagged):
         logger.warning("Expression tagger altered the wording (not just tags), falling back to plain text.")
         return text
-    return _strip_dangling_trailing_tags(tagged)
+    cleaned = _strip_dangling_trailing_tags(tagged)
+    guarded = _normalize_tag_placement(cleaned)
+    if guarded != cleaned:
+        logger.info(f"🧹 placement guard: {cleaned!r} -> {guarded!r}")
+    return guarded
 
 
 def apply_expression_tags_to_sentence(
@@ -244,4 +322,8 @@ def apply_expression_tags_to_sentence(
     if not _preserves_original_wording(stripped, tagged):
         logger.warning("Sentence tagger altered the wording (not just tags), falling back to plain text.")
         return sentence
-    return _strip_dangling_trailing_tags(tagged)
+    cleaned = _strip_dangling_trailing_tags(tagged)
+    guarded = _normalize_tag_placement(cleaned)
+    if guarded != cleaned:
+        logger.info(f"🧹 placement guard: {cleaned!r} -> {guarded!r}")
+    return guarded
