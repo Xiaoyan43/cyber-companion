@@ -1,6 +1,37 @@
-# HANDOFF — 上下文交接（2026-06-26，第六十六轮 · 跨工具交接给 Cursor/Codex）
+# HANDOFF — 上下文交接（2026-06-26，第六十七轮 · 标签密度双向攻坚）
 
 > 本文件每次「瘦身交接」/「工作流交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
+
+## 第六十七轮已完成（2026-06-26，**未 commit，工作树有改动**）
+
+### ✅ 方向一：Rule 3 重写（Haiku-friendly 明确判断协议）
+- `TAGGER_INSTRUCTION_TEMPLATE` Rule 3 从"软倾向不加"改成"明确条件判断"：
+  - **默认不加标签**；只有满足"条件 A（情绪切换）"或"条件 B（开头突出情绪）"才加一个标签。
+  - 两条 `禁止` 语句针对 Haiku 最常见的两种违规模式（按句分配/循环轮换）。
+  - 旧版 Gemini 可用的"软倾向"措辞已被替换——新措辞对两个模型都有效。
+- 对应测试：`test_tagger_instruction_contains_core_rules` 里的 `"逐句重新判断"` 更新为
+  `"每句话默认不加标签"`。
+
+### ✅ 方向二：代码护栏 `suppress_repeated_leading_tags`
+- 新常量 `_SOUND_EFFECT_TAG_INNERS`（12 个声音事件标签，免疫去重）+
+  `_DEDUP_EXEMPT_TAG_INNERS = _SOUND_EFFECT_TAG_INNERS | _BREAK_TAG_INNERS`。
+- 新导出函数 `suppress_repeated_leading_tags(tagged: str) -> str`（`expression_tagger.py`）：
+  - 分句后，对每句话找第一个非 exempt 标签；
+  - 若与上一句的第一个非 exempt 标签完全相同 → 删除（"继续基调"非新切换，白加）；
+  - 无标签句 → 重置基线（下一次同标签视为新起点，不压制）；
+  - 音效/break 标签不受影响。
+- 接入 `apply_expression_tags`（全文路径，在现有 placement guard 之后）。
+- 接入 `main.py` `_tag_reply_by_sentence`（逐句并发后 join，再过一遍护栏）。
+- 新增 10 个单测（`test_expression_tagger_guards.py`）：去重/链式/不同标签不压/音效豁免/
+  break 豁免/空白间隙重置/单句/无标签/音效跳过找非exempt/wiring 测试。
+- **69 个 tagger 相关测试全绿**（=39 prompt + 30 guard tests，相比上轮 +10）。
+
+### 注意
+- `test_expression_tagger_processor.py` 和 `test_main_tag_reply_by_sentence.py` 等涉及
+  pipecat / FastAPI 的测试文件在本机遇到 numpy macOS `_mac_os_check` 崩溃，与本轮改动无关
+  （预存在环境问题，旧 session 同样无法运行这批测试）。
+- 效果待用 `experiments/tagger_ab.py` 量化验证：分别测 Haiku 和 Gemini，
+  对比 Rule 3 改写前后 `tagged_sentence_ratio` 变化。
 
 ## ⚠️ 本次交接特殊说明（给 Cursor / Codex）
 - **背景**：Claude Code 本周额度即将用完。从现在到下周一额度重置前，开发交给 **Cursor 或 Codex**；
@@ -128,13 +159,17 @@
 
 ## 当前未完成
 
-### 🔴 最高优先 · 标签密度问题（Haiku 上未解决）
-- 选项：①继续打磨 prompt（针对 Haiku"克制类"指令遵循弱的特性换措辞/加格式化约束）；
-  ②加代码护栏（同类情绪/音调标签相邻不堆叠，已有的 `_normalize_break_tags` 模式可参考）；
-  ③回退 Gemini（密度更优但情绪判断糙，会重新引入音效标签语义错误）；④接受当前 Haiku 密度，
-  靠真机多轮听感判断"密但准"是否听起来自然。
-- 建议：先用 `experiments/tagger_ab.py` 继续小范围迭代 prompt，效果通过同一脚本量化复核，
-  避免凭感觉调。
+### 🔴 最高优先 · 标签密度问题（第六十七轮已落两层防御，待量化验证）
+- **第六十七轮已做**：① Rule 3 重写（明确条件判断，Haiku-friendly）；② 代码护栏
+  `suppress_repeated_leading_tags`（连续同标签去重）——两层都**未 commit**，待 `tagger_ab.py`
+  量化确认有效后 commit。
+- **下一步**：用 `experiments/tagger_ab.py` 量化复核（`python experiments/tagger_ab.py 3`），
+  对比 Haiku `tagged_sentence_ratio` 和 `adjacent tag-stack pairs`，看两层防御叠加后密度变化。
+  - 若有效（密度明显下降）→ commit 这次改动，结案或继续调优。
+  - 若 Rule 3 无效（Haiku 仍不遵从）→ 考虑回退 Gemini 或接受当前 Haiku 密度靠听感判断。
+  - 代码护栏不依赖模型，始终保留。
+- **剩余选项**（如果两层都不够）：③ 回退 Gemini（密度更优但情绪判断糙）；
+  ④ 接受 Haiku 密度，靠真机多轮听感判断"密但准"是否听起来自然。
 
 ### 🟡 标签器 provider 命名正名（独立小任务，不紧急）
 - 把 `"gemini"` 这个 provider 名字、`DEFAULT_TAGGER_PROVIDER`、`OPENROUTER_GEMINI_API_KEY`
@@ -166,10 +201,10 @@
 - ❌ 全仓库扫描
 
 ## 推荐下一个最小任务
-- 第六十五轮的改动已 commit（`111c70c`）。**下一步主线 = 攻标签密度问题（Haiku 上未解决）**：
-  用 `experiments/tagger_ab.py` 量化迭代 prompt 或加代码护栏，**不要凭感觉改**，每次用同一脚本复核。
-  四个候选方向见上文「当前未完成 · 🔴 最高优先 · 标签密度问题」。
-- 备选小任务（独立、不紧急）：标签器 provider 命名正名（`"gemini"` → 中性名，消除「代码写 Gemini
+- **立即**：用 `python experiments/tagger_ab.py 3` 量化复核第六十七轮的两层防御效果（Rule 3 重写 +
+  `suppress_repeated_leading_tags`）。若 Haiku `tagged_sentence_ratio` 有明显下降 → commit
+  `backend/app/tts/expression_tagger.py` + `backend/app/main.py` + 两个测试文件。
+- **备选小任务**（独立、不紧急）：标签器 provider 命名正名（`"gemini"` → 中性名，消除「代码写 Gemini
   实际跑 Haiku」的误导，见「当前未完成 · 🟡」）。
 
 ---

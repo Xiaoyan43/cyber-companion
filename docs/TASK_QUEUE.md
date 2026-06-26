@@ -1,12 +1,12 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
-> **2026-06-26（第六十六轮 · 跨工具交接）**：**无新代码改动。** Claude Code 本周额度将尽，开发临时
-> 交给 Cursor/Codex，下周一额度重置后用户回 Claude Code。本轮只做交接收尾：把第六十五轮工作的
-> commit 状态从「未 commit」更正为**已 commit `111c70c`**，并在 HANDOFF 顶部加「给 Cursor/Codex」
-> 跨工具上手指引（git 工作树残留物说明 + 配置位置 + 主线 + 测试入口）。工作树仅剩两类故意不提交的
-> 残留：`run_voice.py` 的 `_LatencySpikeLogger`（P8-C 临时探针）+ untracked 实验/数据/`.mcp.json`。
-> **下一步主线不变 = 标签密度问题（Haiku 上未解决），量化工具 `experiments/tagger_ab.py`。**
+> **2026-06-26（第六十七轮）**：**标签密度双向攻坚，未 commit，待量化验证后 commit。**
+> ① `TAGGER_INSTRUCTION_TEMPLATE` Rule 3 重写——从"软倾向不加"改成"明确条件判断（条件A/B，默认否）"，
+> 针对 Haiku 对"克制类"指令遵循弱的特性；② 新代码护栏 `suppress_repeated_leading_tags`——连续句
+> 首个非exempt标签完全相同时去重，音效/break标签豁免，空白句重置基线；③ 接入 `apply_expression_tags`
+> + `main.py` `_tag_reply_by_sentence`；④ +10 个单测，69 tagger 相关测试全绿。
+> **下一步 = 用 `experiments/tagger_ab.py 3` 量化复核效果，有效则 commit；参见 HANDOFF。**
 > **2026-06-26（第六十五轮）**：**文字路径标签器逐句化（P0+P1）已完成并真机验证 PASS，
 > 已 commit `111c70c`。** `/architect` 拆出 P0（分句/拼回工具从 `expression_tagger_processor.py`
 > 搬到 `expression_tagger.py`，消除 app→realtime 反向依赖）+ P1（`main.py` 两处调用点改

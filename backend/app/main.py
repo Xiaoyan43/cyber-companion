@@ -54,6 +54,7 @@ from backend.app.tts.expression_tagger import (
     apply_expression_tags_to_sentence,
     build_prior_context,
     split_complete_sentences,
+    suppress_repeated_leading_tags,
 )
 from backend.app.tts.router import get_tts_router, reset_tts_router
 from backend.app.tts.translator import translate_to_chinese
@@ -761,7 +762,7 @@ def _tag_reply_by_sentence(text: str, mood: MoodStateRecord, *, router: Provider
                 zip(sentences, priors),
             )
         )
-    return "".join(tagged)
+    return suppress_repeated_leading_tags("".join(tagged))
 
 
 @app.post(
