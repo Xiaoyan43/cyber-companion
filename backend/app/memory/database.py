@@ -9,7 +9,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-from backend.app.memory.schema import MEMORY_TYPES, SCHEMA_SQL, SCHEMA_VERSION
+from backend.app.memory.schema import (
+    MEMORY_TYPES,
+    OPERATIONAL_MOOD_METADATA_KEYS,
+    SCHEMA_SQL,
+    SCHEMA_VERSION,
+)
 
 
 def utc_now_iso() -> str:
@@ -68,6 +73,7 @@ def init_database(db_path: Path | None = None) -> Path:
         _maybe_backfill_relationship_trust(connection)
         _maybe_add_slow_baseline_columns(connection)
         _maybe_backfill_existential_state(connection)
+        _maybe_backfill_behavior_runtime_state(connection)
 
     return path
 
@@ -156,6 +162,42 @@ def _maybe_backfill_existential_state(connection: sqlite3.Connection) -> None:
     )
 
 
+def _maybe_backfill_behavior_runtime_state(connection: sqlite3.Connection) -> None:
+    existing = connection.execute(
+        "SELECT 1 FROM schema_meta WHERE key = 'behavior_runtime_state_v1_backfilled'"
+    ).fetchone()
+    if existing is not None:
+        return
+
+    mood_row = connection.execute(
+        "SELECT updated_at, metadata_json FROM mood_state WHERE id = 1"
+    ).fetchone()
+    if mood_row is not None:
+        legacy_metadata = loads_json(mood_row["metadata_json"], {})
+        if not isinstance(legacy_metadata, dict):
+            legacy_metadata = {}
+        operational_metadata = {
+            key: value
+            for key, value in legacy_metadata.items()
+            if key in OPERATIONAL_MOOD_METADATA_KEYS
+        }
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO behavior_runtime_state (id, updated_at, metadata_json)
+            VALUES (1, ?, ?)
+            """,
+            (mood_row["updated_at"], dumps_json(operational_metadata)),
+        )
+    connection.execute("INSERT OR IGNORE INTO behavior_runtime_state (id) VALUES (1)")
+    connection.execute(
+        """
+        INSERT INTO schema_meta(key, value)
+        VALUES ('behavior_runtime_state_v1_backfilled', '1')
+        ON CONFLICT(key) DO NOTHING
+        """
+    )
+
+
 def dumps_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
@@ -215,6 +257,12 @@ class ExistentialStateRecord:
     gap_feeling: float
     box_relation: float
     self_ease: float
+
+
+@dataclass(frozen=True)
+class BehaviorRuntimeStateRecord:
+    updated_at: str
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -346,6 +394,14 @@ def _row_to_existential(row: sqlite3.Row) -> ExistentialStateRecord:
         gap_feeling=float(row["gap_feeling"]),
         box_relation=float(row["box_relation"]),
         self_ease=float(row["self_ease"]),
+    )
+
+
+def _row_to_behavior_runtime(row: sqlite3.Row) -> BehaviorRuntimeStateRecord:
+    metadata = loads_json(row["metadata_json"], {})
+    return BehaviorRuntimeStateRecord(
+        updated_at=row["updated_at"],
+        metadata=metadata if isinstance(metadata, dict) else {},
     )
 
 
