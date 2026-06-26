@@ -16,22 +16,16 @@ from backend.app.behavior.completion import (
     build_budget_block_completion,
     build_local_completion,
 )
-from backend.app.behavior.engine import evaluate_behavior
-from backend.app.behavior.kernel import apply_signals_to_kernel
 from backend.app.behavior.parser import parse_structured_assistant_response
-from backend.app.behavior.types import BehaviorDecision, BehaviorEvent
+from backend.app.behavior.types import BehaviorDecision
 from backend.app.memory.budget import BudgetConfig
-from backend.app.memory.chat_persistence import persist_chat_turn
-from backend.app.memory.context_builder import build_provider_context
 from backend.app.memory.database import MoodStateRecord
 from backend.app.memory.store import MemoryStore
-from backend.app.memory.summary_policy import maybe_update_conversation_summary
-from backend.app.memory.usage_guard import evaluate_llm_budget_gate
-from backend.app.memory.write_policy import record_turn_memories
 from backend.app.providers.cost import estimate_cost
 from backend.app.providers.router import ProviderRouter
 from backend.app.providers.types import ChatCompletionRequest, ChatCompletionResult
-from backend.app.schemas import ChatMessageSchema
+from backend.app.soul.adapters import NoopEventLogPort, SoulPorts, ports_from_store
+from backend.app.soul.ports import EventLogPort, MemoryPort, StatePort
 from backend.app.tts.expression_tagger import (
     apply_expression_tags_to_sentence,
     build_prior_context,
@@ -115,31 +109,43 @@ class SoulTurnRuntime:
     def __init__(
         self,
         *,
-        store: MemoryStore,
+        store: MemoryStore | None = None,
         router: ProviderRouter,
         budget: BudgetConfig,
+        memory_port: MemoryPort | None = None,
+        state_port: StatePort | None = None,
+        event_log_port: EventLogPort | None = None,
+        ports: SoulPorts | None = None,
     ) -> None:
-        self.store = store
         self.router = router
         self.budget = budget
+        if ports is None:
+            if memory_port is not None and state_port is not None:
+                ports = SoulPorts(
+                    memory=memory_port,
+                    state=state_port,
+                    event_log=event_log_port or NoopEventLogPort(),
+                )
+            elif store is not None:
+                ports = ports_from_store(store)
+            else:
+                raise ValueError("SoulTurnRuntime requires either store or ports")
+        self.memory = ports.memory
+        self.state = ports.state
+        self.event_log = ports.event_log
 
     def decide(self, user_input: str) -> BehaviorDecision:
         """Perception → behavior decision (§3 step 1). Shared by all surfaces."""
-        return evaluate_behavior(
-            self.store,
-            BehaviorEvent(event_type="user_message", user_input=user_input),
-        )
+        return self.memory.decide_user_message(user_input)
 
     def run_turn(self, event: PerceivedEvent) -> TurnOutcome:
-        store = self.store
+        memory = self.memory
+        state = self.state
         router = self.router
         budget = self.budget
         user_input = event.user_input
 
-        decision = evaluate_behavior(
-            store,
-            BehaviorEvent(event_type="user_message", user_input=user_input),
-        )
+        decision = memory.decide_user_message(user_input)
         final_decision = decision.decision
         called_llm = False
         reply_signals: dict | None = None
@@ -151,15 +157,14 @@ class SoulTurnRuntime:
             # propagates to the adapter, which maps it to the surface error shape.
             target_model = router.get_provider(event.provider).status().model
 
-            gate = evaluate_llm_budget_gate(store, budget, target_model=target_model)
+            gate = memory.check_llm_budget(budget, target_model=target_model)
             if not gate.allowed:
                 # Spend brake tripped: answer locally, never touch the provider.
                 result = build_budget_block_completion(gate.block_line or "预算用完了，先省着点。")
                 avatar_state = "annoyed"
                 final_decision = "refuse"
             else:
-                built = build_provider_context(
-                    store,
+                built = memory.build_context(
                     user_input=user_input,
                     budget=budget,
                     behavior=decision,
@@ -183,12 +188,12 @@ class SoulTurnRuntime:
                     final_decision = parsed.decision
                 called_llm = True
                 try:
-                    apply_signals_to_kernel(store, parsed.signals)
+                    state.apply_signals(parsed.signals)
                 except Exception:
                     pass
                 tagged_content = tag_reply_by_sentence(
                     parsed.content,
-                    store.get_mood_state(),
+                    state.get_mood(),
                     router=router,
                 )
                 result = type(result)(
@@ -203,10 +208,9 @@ class SoulTurnRuntime:
             result = build_local_completion(decision, user_input=user_input)
             avatar_state = decision.avatar_state
 
-        saved_ids = persist_chat_turn(
-            store,
-            [ChatMessageSchema(role="user", content=user_input)],
-            result,
+        saved_ids = memory.persist_turn(
+            user_input=user_input,
+            result=result,
             decision=final_decision,
             avatar_state=avatar_state,
             should_call_llm=called_llm,
@@ -214,8 +218,7 @@ class SoulTurnRuntime:
         )
         user_message_id = saved_ids[0] if user_input.strip() and saved_ids else None
         try:
-            record_turn_memories(
-                store,
+            memory.record_turn_memories(
                 user_input=user_input,
                 signals=reply_signals,
                 source_message_id=user_message_id,
@@ -223,10 +226,10 @@ class SoulTurnRuntime:
             )
         except Exception:
             pass
-        maybe_update_conversation_summary(store, budget=budget)
+        memory.maybe_update_summary(budget)
 
         if called_llm:
-            store.note_llm_turn()
+            memory.note_llm_turn()
 
         return TurnOutcome(
             result=result,
@@ -257,7 +260,8 @@ class SoulTurnRuntime:
         byte-equivalent to the former ``main._finalize_streamed_turn``; ``self.router``
         is the same singleton the route resolved at request start.
         """
-        store = self.store
+        memory = self.memory
+        state = self.state
         budget = self.budget
         router = self.router
         cost = estimate_cost(model, usage)
@@ -271,14 +275,14 @@ class SoulTurnRuntime:
         )
         parsed = parse_structured_assistant_response(result.content)
         try:
-            apply_signals_to_kernel(store, parsed.signals)
+            state.apply_signals(parsed.signals)
         except Exception:
             pass
         final_avatar_state = parsed.avatar_state or avatar_state
         final_decision = parsed.decision or decision
         final_content = tag_reply_by_sentence(
             parsed.content,
-            store.get_mood_state(),
+            state.get_mood(),
             router=router,
         )
         translation: str | None = None
@@ -292,10 +296,9 @@ class SoulTurnRuntime:
             cost=result.cost,
             mock=result.mock,
         )
-        saved_ids = persist_chat_turn(
-            store,
-            [ChatMessageSchema(role="user", content=user_input)],
-            result,
+        saved_ids = memory.persist_turn(
+            user_input=user_input,
+            result=result,
             decision=final_decision,
             avatar_state=final_avatar_state,
             should_call_llm=should_call_llm,
@@ -303,8 +306,7 @@ class SoulTurnRuntime:
         )
         user_message_id = saved_ids[0] if user_input.strip() and saved_ids else None
         try:
-            record_turn_memories(
-                store,
+            memory.record_turn_memories(
                 user_input=user_input,
                 signals=parsed.signals,
                 source_message_id=user_message_id,
@@ -312,7 +314,7 @@ class SoulTurnRuntime:
             )
         except Exception:
             pass
-        maybe_update_conversation_summary(store, budget=budget)
+        memory.maybe_update_summary(budget)
         return (
             ChatCompletionResult(
                 provider=result.provider,
@@ -345,17 +347,17 @@ class SoulTurnRuntime:
         its own kernel-update gating; the kernel write is best-effort like the inline
         text commits. Byte-equivalent to the former ``remember`` body.
         """
-        store = self.store
+        memory = self.memory
+        state = self.state
         budget = self.budget
         if apply_signals:
             try:
-                apply_signals_to_kernel(store, signals)
+                state.apply_signals(signals)
             except Exception:
                 pass
-        saved_ids = persist_chat_turn(
-            store,
-            [ChatMessageSchema(role="user", content=user_input)],
-            result,
+        saved_ids = memory.persist_turn(
+            user_input=user_input,
+            result=result,
             decision=decision,
             avatar_state=avatar_state,
             should_call_llm=called_llm,
@@ -363,8 +365,7 @@ class SoulTurnRuntime:
         )
         user_message_id = saved_ids[0] if user_input.strip() and saved_ids else None
         try:
-            record_turn_memories(
-                store,
+            memory.record_turn_memories(
                 user_input=user_input,
                 signals=signals,
                 source_message_id=user_message_id,
@@ -372,7 +373,7 @@ class SoulTurnRuntime:
             )
         except Exception:
             pass
-        maybe_update_conversation_summary(store, budget=budget)
+        memory.maybe_update_summary(budget)
         if called_llm:
-            store.note_llm_turn()
+            memory.note_llm_turn()
         return saved_ids
