@@ -3,6 +3,7 @@
 > 状态：**目标架构 / 重构契约（Phase 0）**。本文件是 `codex/soul-runtime` 分支的源真相。
 > 由 2026-06-27 的「全项目架构盘点 + Shared Soul Layer 重构准备」审查 + 用户 10 项拍板产生。
 > 取代散落在各入口的回合编排；不改人格，只收敛结构。新 session 先读本文件 + `docs/ARCHITECTURE_V2.md`。
+> **▶ 新 session 实施 Phase 1：直接从本文件 §8「Phase 1 启动」开始，只读 §8 列出的目标文件，不要全仓扫描。**
 
 ## 0. 北极星与范围
 
@@ -157,5 +158,36 @@ invariant 测试清单（现有）：`test_tone` · `test_mood` · `test_behavio
 - Phase 1 的 `PerceivedEvent` / `TurnOutcome` 具体字段：在 Phase 1 任务开始前定稿。
 - turn 一致性契约测试如何在不跑真实音频的前提下覆盖 Pipecat 路径（用 fake transport / 直接测 `CompanionBrain` 而非全 pipeline）。
 - RTC off-path 写回与主 runtime `commit` 的复用边界（决策 6）。
+
+## 8. Phase 1 启动（next session · 冷启动自洽）
+
+**状态**：Phase 0 已完成并 commit（`fb053c3`，仅本文档）。当前分支 `codex/soul-runtime`。
+工作树有 32 项 Fish/tagger 实验残留（unstaged，**故意不提交**）——Phase 1 全程不要 stage 它们。
+
+**Phase 1 目标**：抽出 `backend/app/soul/runtime.py` 的 `SoulTurnRuntime.run_turn()`，
+把 §3 契约里重复 4 遍的回合编排收敛成一处，入口改薄壳。**行为逐字节等价。**
+
+**用户拍板的 Phase 1 约束（binding）**：
+1. 不碰 Fish/tagger/Pipecat 参数实验残留；不碰 `.env*`、`data/`、`experiments/`。
+2. 不碰 RTC 主链路；`turn_analyzer` 最多复用 commit helper，**不并入完整 runtime**。
+3. 不做 ports，不改 `MemoryStore`/`schema`——ports 留 Phase 2。
+4. 实施顺序：**先 text non-stream → 再 text stream → 再 Pipecat `CompanionBrain`**。
+5. 每一步跑对应测试，确认行为等价后再继续下一步。
+
+**允许读取**：本文件 · `backend/app/main.py` · `backend/realtime/companion_brain.py` ·
+`backend/app/behavior/{engine,parser,completion}.py` ·
+`backend/app/memory/{context_builder,chat_persistence,write_policy,summary_policy,usage_guard}.py` ·
+对应 `backend/tests/`。（`turn_analyzer.py` 仅为对照 commit 段，约束 2。）
+
+**禁止触碰**：约束 1 的全部残留文件 · `backend/app/rtc/**` · `memory/schema.py` · `memory/store.py` · 前端。
+
+**子步骤（每步独立 commit，测试绿才继续）**：
+1. 定 `PerceivedEvent` / `TurnOutcome` 字段（先够 text 用），建 `backend/app/soul/__init__.py` + `runtime.py` 骨架。
+2. text non-stream：`/chat/complete` 改薄壳调 `run_turn()`；跑 `test_chat_*` + `test_behavior` + `test_memory*`。
+3. text stream：`/chat/stream` 的 `_finalize_streamed_turn` 收敛进 runtime；跑 `test_chat_stream` + `test_user_input_truncation`。
+4. Pipecat：`companion_brain.stream_turn`+`remember` 改薄壳（保留 voice_mode 指令 + `truncated` 逻辑）；跑 `test_companion_brain`。
+5. 新增「同输入 → 同 kernel/memory 副作用」turn 一致性契约测试（§5 缺口）。
+
+**验收**：上述测试全绿 + `pytest backend/tests --co` 仍 668 + diff 不含禁止文件。
 
 > 外部复用结论（详见审查报告 §9）：Pipecat 已采为 base；**Letta 唯一建议 spike（排 ports 之后）**；Generative Agents/Xiaoice/ElizaOS 仅学架构；Mem0 仅对照；Inworld/Convai/Hume EVI 不引入（违背 public/「soul 写每个字」）。
