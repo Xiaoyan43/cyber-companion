@@ -6,6 +6,7 @@ from typing import Any
 
 from backend.app.memory.database import (
     ConversationSummaryRecord,
+    ExistentialStateRecord,
     FileAccessLogRecord,
     MemoryLinkRecord,
     MemoryRecord,
@@ -17,6 +18,7 @@ from backend.app.memory.database import (
     SoulEventRecord,
     _row_to_memory,
     _row_to_message,
+    _row_to_existential,
     _row_to_mood,
     _row_to_open_loop,
     _row_to_relationship,
@@ -689,6 +691,46 @@ class MemoryStore:
         assert row is not None
         return _row_to_mood(row)
 
+    def get_existential_state(self) -> ExistentialStateRecord:
+        with connect(self.db_path) as connection:
+            row = connection.execute("SELECT * FROM existential_state WHERE id = 1").fetchone()
+        assert row is not None
+        return _row_to_existential(row)
+
+    def update_existential_state(
+        self,
+        *,
+        gap_feeling: float | None = None,
+        box_relation: float | None = None,
+        self_ease: float | None = None,
+    ) -> ExistentialStateRecord:
+        current = self.get_existential_state()
+        updated = ExistentialStateRecord(
+            updated_at=utc_now_iso(),
+            gap_feeling=_clamp01(
+                gap_feeling if gap_feeling is not None else current.gap_feeling
+            ),
+            box_relation=_clamp01(
+                box_relation if box_relation is not None else current.box_relation
+            ),
+            self_ease=_clamp01(self_ease if self_ease is not None else current.self_ease),
+        )
+        with connect(self.db_path) as connection:
+            connection.execute(
+                """
+                UPDATE existential_state
+                SET updated_at = ?, gap_feeling = ?, box_relation = ?, self_ease = ?
+                WHERE id = 1
+                """,
+                (
+                    updated.updated_at,
+                    updated.gap_feeling,
+                    updated.box_relation,
+                    updated.self_ease,
+                ),
+            )
+        return updated
+
     def update_mood_state(
         self,
         *,
@@ -699,9 +741,6 @@ class MemoryStore:
         worry: float | None = None,
         trust: float | None = None,
         loneliness: float | None = None,
-        gap_feeling: float | None = None,
-        box_relation: float | None = None,
-        self_ease: float | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> MoodStateRecord:
         current = self.get_mood_state()
@@ -714,9 +753,6 @@ class MemoryStore:
             worry=worry if worry is not None else current.worry,
             trust=trust if trust is not None else current.trust,
             loneliness=loneliness if loneliness is not None else current.loneliness,
-            gap_feeling=gap_feeling if gap_feeling is not None else current.gap_feeling,
-            box_relation=box_relation if box_relation is not None else current.box_relation,
-            self_ease=self_ease if self_ease is not None else current.self_ease,
             metadata=metadata if metadata is not None else current.metadata,
         )
 
@@ -725,8 +761,7 @@ class MemoryStore:
                 """
                 UPDATE mood_state
                 SET updated_at = ?, mood = ?, energy = ?, annoyance = ?, boredom = ?,
-                    worry = ?, trust = ?, loneliness = ?, gap_feeling = ?,
-                    box_relation = ?, self_ease = ?, metadata_json = ?
+                    worry = ?, trust = ?, loneliness = ?, metadata_json = ?
                 WHERE id = 1
                 """,
                 (
@@ -738,9 +773,6 @@ class MemoryStore:
                     updated.worry,
                     updated.trust,
                     updated.loneliness,
-                    updated.gap_feeling,
-                    updated.box_relation,
-                    updated.self_ease,
                     dumps_json(updated.metadata),
                 ),
             )

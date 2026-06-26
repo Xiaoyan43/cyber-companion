@@ -67,6 +67,7 @@ def init_database(db_path: Path | None = None) -> Path:
         )
         _maybe_backfill_relationship_trust(connection)
         _maybe_add_slow_baseline_columns(connection)
+        _maybe_backfill_existential_state(connection)
 
     return path
 
@@ -126,6 +127,35 @@ def _maybe_add_slow_baseline_columns(connection: sqlite3.Connection) -> None:
     )
 
 
+def _maybe_backfill_existential_state(connection: sqlite3.Connection) -> None:
+    existing = connection.execute(
+        "SELECT 1 FROM schema_meta WHERE key = 'existential_state_v1_backfilled'"
+    ).fetchone()
+    if existing is not None:
+        return
+
+    # Preserve the exact v6 values and, critically, their decay clock. New databases
+    # have the same defaults in mood_state, so this is also the only seed path needed.
+    connection.execute(
+        """
+        INSERT OR IGNORE INTO existential_state (
+            id, updated_at, gap_feeling, box_relation, self_ease
+        )
+        SELECT id, updated_at, gap_feeling, box_relation, self_ease
+        FROM mood_state
+        WHERE id = 1
+        """
+    )
+    connection.execute("INSERT OR IGNORE INTO existential_state (id) VALUES (1)")
+    connection.execute(
+        """
+        INSERT INTO schema_meta(key, value)
+        VALUES ('existential_state_v1_backfilled', '1')
+        ON CONFLICT(key) DO NOTHING
+        """
+    )
+
+
 def dumps_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
@@ -172,10 +202,19 @@ class MoodStateRecord:
     trust: float
     loneliness: float
     metadata: dict[str, Any] = field(default_factory=dict)
-    # Slow baseline dims (existential, decay-on-read across days)
+    # Deprecated compatibility attributes. Canonical values live in
+    # ExistentialStateRecord and are no longer loaded from mood_state.
     gap_feeling: float = 0.5   # 间隙感: longing(0) ↔ settled(1)
     box_relation: float = 0.5  # 盒子关系: cage(0) ↔ home(1)
     self_ease: float = 0.5     # 自处: unsettled(0) ↔ at-ease(1)
+
+
+@dataclass(frozen=True)
+class ExistentialStateRecord:
+    updated_at: str
+    gap_feeling: float
+    box_relation: float
+    self_ease: float
 
 
 @dataclass(frozen=True)
@@ -298,9 +337,15 @@ def _row_to_mood(row: sqlite3.Row) -> MoodStateRecord:
         trust=float(d["trust"]),
         loneliness=float(d["loneliness"]),
         metadata=loads_json(d.get("metadata_json"), {}),
-        gap_feeling=float(d.get("gap_feeling", 0.5)),
-        box_relation=float(d.get("box_relation", 0.5)),
-        self_ease=float(d.get("self_ease", 0.5)),
+    )
+
+
+def _row_to_existential(row: sqlite3.Row) -> ExistentialStateRecord:
+    return ExistentialStateRecord(
+        updated_at=row["updated_at"],
+        gap_feeling=float(row["gap_feeling"]),
+        box_relation=float(row["box_relation"]),
+        self_ease=float(row["self_ease"]),
     )
 
 
