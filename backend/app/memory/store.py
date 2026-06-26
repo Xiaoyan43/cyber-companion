@@ -41,6 +41,24 @@ def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
 
 
+def _normalize_aware_timestamp(value: str | None, *, field_name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty ISO 8601 timestamp")
+
+    text = value.strip()
+    if text.endswith("Z"):
+        text = f"{text[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a valid ISO 8601 timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{field_name} must include a timezone offset")
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
 def _clip_link_snippet(content: str, max_len: int = _LINK_SNIPPET_MAX_LEN) -> str:
     trimmed = content.strip()
     if len(trimmed) <= max_len:
@@ -501,6 +519,11 @@ class MemoryStore:
             raise ValueError(f"Unsupported open loop kind: {kind}")
         if status not in OPEN_LOOP_STATUSES:
             raise ValueError(f"Unsupported open loop status: {status}")
+        normalized_due_at = _normalize_aware_timestamp(due_at, field_name="due_at")
+        normalized_last_mentioned_at = _normalize_aware_timestamp(
+            last_mentioned_at,
+            field_name="last_mentioned_at",
+        )
 
         with connect(self.db_path) as connection:
             cursor = connection.execute(
@@ -516,8 +539,8 @@ class MemoryStore:
                     kind,
                     title,
                     summary,
-                    due_at,
-                    last_mentioned_at,
+                    normalized_due_at,
+                    normalized_last_mentioned_at,
                     source_message_id,
                     _clamp01(priority),
                     _clamp01(confidence),
@@ -578,6 +601,11 @@ class MemoryStore:
             raise ValueError(f"Unsupported open loop kind: {kind}")
         if status not in OPEN_LOOP_STATUSES:
             raise ValueError(f"Unsupported open loop status: {status}")
+        normalized_due_at = _normalize_aware_timestamp(due_at, field_name="due_at")
+        normalized_last_mentioned_at = _normalize_aware_timestamp(
+            last_mentioned_at,
+            field_name="last_mentioned_at",
+        )
 
         with connect(self.db_path) as connection:
             connection.execute(
@@ -594,8 +622,8 @@ class MemoryStore:
                     kind,
                     title,
                     summary,
-                    due_at,
-                    last_mentioned_at,
+                    normalized_due_at,
+                    normalized_last_mentioned_at,
                     source_message_id,
                     _clamp01(priority),
                     _clamp01(confidence),
@@ -618,6 +646,10 @@ class MemoryStore:
             return []
         if status is not None and status not in OPEN_LOOP_STATUSES:
             raise ValueError(f"Unsupported open loop status: {status}")
+        normalized_due_before = _normalize_aware_timestamp(
+            due_before,
+            field_name="due_before",
+        )
 
         query = "SELECT * FROM open_loops"
         clauses: list[str] = []
@@ -625,13 +657,16 @@ class MemoryStore:
         if status is not None:
             clauses.append("status = ?")
             params.append(status)
-        if due_before is not None:
-            clauses.append("due_at IS NOT NULL AND due_at <= ?")
-            params.append(due_before)
+        if normalized_due_before is not None:
+            clauses.append("due_at IS NOT NULL AND julianday(due_at) <= julianday(?)")
+            params.append(normalized_due_before)
         if clauses:
             query += " WHERE " + " AND ".join(clauses)
         # Dated loops first (earliest due), then highest priority, then stable by id.
-        query += " ORDER BY (due_at IS NULL), due_at ASC, priority DESC, id ASC LIMIT ?"
+        query += (
+            " ORDER BY (julianday(due_at) IS NULL), julianday(due_at) ASC,"
+            " priority DESC, id ASC LIMIT ?"
+        )
         params.append(limit)
 
         with connect(self.db_path) as connection:
