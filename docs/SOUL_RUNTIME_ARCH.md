@@ -140,6 +140,10 @@ class AgendaPort(Protocol):          # Phase 3：open loops / future events
 invariant 测试清单（现有）：`test_tone` · `test_mood` · `test_behavior` · `test_memory*` · `test_reflection` · `test_relationship_state` · `test_rtc_state_block` · `test_expression_tagger*` · `test_proactive*` · `test_context_builder`。
 **缺口（需新增）**：4 个 surface「同输入 → 同 kernel/memory 副作用」的 turn 一致性契约测试。
 
+**Marker 现状（2026-06-27）**：上述清单尚未实际注册 `invariant` pytest marker，
+`pytest -m invariant` 当前会选中 0 条；Phase 4 使用显式清单运行（351 passed）。后续应把清单
+真正标记后再把 `-m invariant` 作为唯一入口。
+
 ## 6. 迁移阶段（按决策调整后的顺序）
 
 | Phase | scope | touched | risk | tests | rollback |
@@ -149,7 +153,7 @@ invariant 测试清单（现有）：`test_tone` · `test_mood` · `test_behavio
 | **2 ✅** | 定义 `MemoryPort/StatePort/EventLogPort`，SQLite adapter 包裹 `MemoryStore`；**只在 runtime 边界依赖接口**。Phase 2 completed at the SoulTurnRuntime boundary: ports are introduced with SQLite adapters; MemoryStore internals and schema are unchanged. | soul/ + store adapter | 中 | `test_soul_ports` + `test_soul_turn_contract` + 全量 `backend/tests` | 接口默认绑 SQLite |
 | **3A ✅** | `soul_events`（append-only）；runtime commit 写最小 `turn.committed` event | schema(additive) · runtime commit | 低中 | event append/tail + runtime 写入 + 全 backend tests | 表 additive，停写即无副作用 |
 | **3B ✅** | `open_loops` 数据层（additive 表 + `AgendaPort`/`SQLiteAgendaPort`，`SoulPorts.agenda` 默认 `NoopAgendaPort`）；`proactive_reason` 只读 **due/overdue** open_loop 作为新 reason source。**longing/Poisson 仍只是节奏闸**——open_loop 决定「为什么找你」，Poisson 决定「现在是否合适」；motivation/proactive 全链路重构留 Phase 6。open 但未到期的 loop 不触发主动；runtime 暂不写 open_loop。 | schema(additive) · database · store · ports · adapters · proactive_reason | 中 | `test_open_loops` + open_loop reason 选择/回归（703 passed） | 表 additive，空表即天然 kill switch；revert 两个 commit 即回退 |
-| **4** | 拆 `mood_state`：existential/计时器/死字段 `trust` 移出 | schema(additive) · kernel · mood · state_block | 中高 | §5 kernel/mood/tone invariant | **先 deprecate 不删**，旧列只读灰度 |
+| **4 ✅** | **4A**：新增 `existential_state` canonical singleton，v6 精确/幂等 backfill，context builder 改读独立 decay clock；旧 mood 三列保留但停止生产读写。**4B**：新增 `behavior_runtime_state` singleton，迁出 proactive/idle/cooldown operational metadata，内部 writer 改 key-level patch/remove；新表 canonical + legacy mood metadata dual-write；`positive_zone_streak` 留在 mood；`relationship_state.trust` 成为唯一 canonical，mood GET/PUT trust 保留兼容别名，旧列停止写入。 | schema(additive) · database · store · mood/context_builder · behavior metadata writers | 中高 | 4A 定向 59；4B 定向 198；显式 invariant 351；全量 724 passed | 两个独立代码 commit；新表 additive，旧列/legacy metadata 保留；已验证 `4c5bd21` 旧代码可原地打开升级库，timer dual-write 连续 |
 | **5** | `MemoryPort` 后做 Letta（spike）/ Mem0（对照）adapter | memory/adapters/* | 低（隔离） | 契约测试复用 | 删 adapter |
 | **6** | proactive 迁 agenda/motivation，longing 留作节奏闸 | motivation policy · engine proactive 分支 | 中 | proactive 闸门 + agenda 触发 | feature flag 切回 longing |
 | **7** | 清理：合并 turn_analyzer、退役/合并 soul_llm_server、统一语音换件 | main.py · rtc · realtime | 低 | 全 invariant | 单 commit revert |
