@@ -19,7 +19,7 @@ from backend.app.behavior.completion import (
 from backend.app.behavior.engine import evaluate_behavior
 from backend.app.behavior.kernel import apply_signals_to_kernel
 from backend.app.behavior.parser import parse_structured_assistant_response
-from backend.app.behavior.types import BehaviorEvent
+from backend.app.behavior.types import BehaviorDecision, BehaviorEvent
 from backend.app.memory.budget import BudgetConfig
 from backend.app.memory.chat_persistence import persist_chat_turn
 from backend.app.memory.context_builder import build_provider_context
@@ -122,6 +122,13 @@ class SoulTurnRuntime:
         self.store = store
         self.router = router
         self.budget = budget
+
+    def decide(self, user_input: str) -> BehaviorDecision:
+        """Perception → behavior decision (§3 step 1). Shared by all surfaces."""
+        return evaluate_behavior(
+            self.store,
+            BehaviorEvent(event_type="user_message", user_input=user_input),
+        )
 
     def run_turn(self, event: PerceivedEvent) -> TurnOutcome:
         store = self.store
@@ -317,3 +324,55 @@ class SoulTurnRuntime:
             ),
             translation,
         )
+
+    def commit_turn(
+        self,
+        *,
+        user_input: str,
+        result: ChatCompletionResult,
+        decision: str,
+        avatar_state: str,
+        called_llm: bool,
+        signals: dict | None,
+        translation: str | None = None,
+        apply_signals: bool = False,
+    ) -> list[int]:
+        """Off-path commit (§3 step 9) for surfaces whose persist runs outside the
+        spoken/streamed path — currently Pipecat ``CompanionBrain.remember``.
+
+        Persists the turn, writes turn memories, refreshes the summary, and notes the
+        LLM turn (only when ``called_llm``). ``apply_signals`` lets the caller mirror
+        its own kernel-update gating; the kernel write is best-effort like the inline
+        text commits. Byte-equivalent to the former ``remember`` body.
+        """
+        store = self.store
+        budget = self.budget
+        if apply_signals:
+            try:
+                apply_signals_to_kernel(store, signals)
+            except Exception:
+                pass
+        saved_ids = persist_chat_turn(
+            store,
+            [ChatMessageSchema(role="user", content=user_input)],
+            result,
+            decision=decision,
+            avatar_state=avatar_state,
+            should_call_llm=called_llm,
+            translation=translation,
+        )
+        user_message_id = saved_ids[0] if user_input.strip() and saved_ids else None
+        try:
+            record_turn_memories(
+                store,
+                user_input=user_input,
+                signals=signals,
+                source_message_id=user_message_id,
+                budget=budget,
+            )
+        except Exception:
+            pass
+        maybe_update_conversation_summary(store, budget=budget)
+        if called_llm:
+            store.note_llm_turn()
+        return saved_ids

@@ -14,22 +14,17 @@ from typing import Any, Literal
 from loguru import logger
 
 from backend.app.behavior.completion import build_budget_block_completion, build_local_completion
-from backend.app.behavior.engine import evaluate_behavior
-from backend.app.behavior.kernel import apply_signals_to_kernel
 from backend.app.behavior.parser import SignalStreamFilter, parse_structured_assistant_response
-from backend.app.behavior.types import BehaviorDecision, BehaviorEvent
+from backend.app.behavior.types import BehaviorDecision
 from backend.app.memory.budget import BudgetConfig, load_budget_config
-from backend.app.memory.chat_persistence import persist_chat_turn
 from backend.app.memory.context_builder import build_provider_context
 from backend.app.memory.store import MemoryStore
-from backend.app.memory.summary_policy import maybe_update_conversation_summary
 from backend.app.memory.usage_guard import evaluate_llm_budget_gate
-from backend.app.memory.write_policy import record_turn_memories
 from backend.app.providers.cost import estimate_cost
 from backend.app.providers.exceptions import ProviderError
 from backend.app.providers.router import ProviderRouter, get_provider_router
 from backend.app.providers.types import ChatCompletionRequest, ChatCompletionResult, ChatMessage, StreamChunk
-from backend.app.schemas import ChatMessageSchema
+from backend.app.soul import SoulTurnRuntime
 
 # P14 Phase 4 (form B): the brain writes PLAIN spoken text only — a dedicated downstream
 # expression tagger (ExpressionTaggerProcessor → Gemini) adds Fish Audio tags sentence by
@@ -82,12 +77,15 @@ class CompanionBrain:
         self._budget = budget or load_budget_config()
         self._provider_name = provider_name
         self._max_output_tokens = max_output_tokens
+        # Shared soul core (§3): the voice surface keeps its own streaming /
+        # voice-mode / truncation handling but delegates the decision step and the
+        # off-path commit to the runtime so the soul orchestration lives in one place.
+        self._runtime = SoulTurnRuntime(
+            store=store, router=self._router, budget=self._budget
+        )
 
     def decide(self, user_text: str) -> BehaviorDecision:
-        return evaluate_behavior(
-            self._store,
-            BehaviorEvent(event_type="user_message", user_input=user_text),
-        )
+        return self._runtime.decide(user_text)
 
     @staticmethod
     def append_voice_mode_instruction(messages: list[ChatMessage]) -> list[ChatMessage]:
@@ -254,32 +252,18 @@ class CompanionBrain:
             yield chunk
 
     def remember(self, outcome: VoiceTurnOutcome) -> None:
-        """Persist turn memories and kernel updates — off the spoken path."""
-        if outcome.called_llm:
-            try:
-                apply_signals_to_kernel(self._store, outcome.reply_signals)
-            except Exception:
-                pass
+        """Persist turn memories and kernel updates — off the spoken path.
 
-        saved_ids = persist_chat_turn(
-            self._store,
-            [ChatMessageSchema(role="user", content=outcome.user_text)],
-            outcome.result,
+        Thin shell over ``SoulTurnRuntime.commit_turn``; the voice surface writes
+        plain text (no tagger / no translation), so ``translation`` stays unset and
+        ``apply_signals`` only fires when the LLM actually ran.
+        """
+        self._runtime.commit_turn(
+            user_input=outcome.user_text,
+            result=outcome.result,
             decision=outcome.final_decision,
             avatar_state=outcome.avatar_state,
-            should_call_llm=outcome.called_llm,
+            called_llm=outcome.called_llm,
+            signals=outcome.reply_signals,
+            apply_signals=outcome.called_llm,
         )
-        user_message_id = saved_ids[0] if outcome.user_text.strip() and saved_ids else None
-        try:
-            record_turn_memories(
-                self._store,
-                user_input=outcome.user_text,
-                signals=outcome.reply_signals,
-                source_message_id=user_message_id,
-                budget=self._budget,
-            )
-        except Exception:
-            pass
-        maybe_update_conversation_summary(self._store, budget=self._budget)
-        if outcome.called_llm:
-            self._store.note_llm_turn()
