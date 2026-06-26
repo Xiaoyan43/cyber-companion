@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.app.memory.database import connect
 from backend.app.memory.store import MemoryStore
 from backend.app.soul.adapters import NoopAgendaPort, SQLiteAgendaPort, ports_from_store
 from backend.app.soul.ports import OpenLoopDraft
@@ -63,6 +64,33 @@ def test_create_open_loop_persists_all_fields(store: MemoryStore) -> None:
     assert loop.priority == 0.9
     assert loop.confidence == 0.8
     assert loop.metadata == {"topic": "job"}
+
+
+def test_create_open_loop_normalizes_timestamps_to_utc(store: MemoryStore) -> None:
+    loop = store.create_open_loop(
+        kind="future_event",
+        title="跨时区事项",
+        due_at="2026-06-27T13:00:00+12:00",
+        last_mentioned_at="2026-06-27T00:30:00Z",
+    )
+
+    assert loop.due_at == "2026-06-27T01:00:00+00:00"
+    assert loop.last_mentioned_at == "2026-06-27T00:30:00+00:00"
+
+
+@pytest.mark.parametrize("field_name", ["due_at", "last_mentioned_at"])
+@pytest.mark.parametrize("value", ["2026-06-27T12:00:00", "not-a-timestamp", ""])
+def test_create_open_loop_rejects_invalid_or_naive_timestamps(
+    store: MemoryStore,
+    field_name: str,
+    value: str,
+) -> None:
+    with pytest.raises(ValueError):
+        store.create_open_loop(
+            kind="future_event",
+            title="invalid timestamp",
+            **{field_name: value},
+        )
 
 
 def test_create_open_loop_clamps_priority_and_confidence(store: MemoryStore) -> None:
@@ -128,6 +156,43 @@ def test_list_open_loops_due_before_filters_and_orders(store: MemoryStore) -> No
     assert [loop.id for loop in due] == [overdue.id, due_now.id]
 
 
+def test_list_open_loops_compares_offset_timestamps_by_instant(store: MemoryStore) -> None:
+    overdue = store.create_open_loop(
+        kind="future_event",
+        title="overdue local offset",
+    )
+    future = store.create_open_loop(
+        kind="future_event",
+        title="future negative offset",
+    )
+    # Simulate rows written before timestamps were normalized to UTC.
+    with connect(store.db_path) as connection:
+        connection.execute(
+            "UPDATE open_loops SET due_at = ? WHERE id = ?",
+            ("2026-06-27T13:00:00+12:00", overdue.id),  # 2026-06-27 01:00Z
+        )
+        connection.execute(
+            "UPDATE open_loops SET due_at = ? WHERE id = ?",
+            ("2026-06-27T01:00:00-12:00", future.id),  # 2026-06-27 13:00Z
+        )
+
+    due = store.list_open_loops(
+        status="open",
+        due_before="2026-06-27T02:00:00+00:00",
+    )
+
+    assert [loop.id for loop in due] == [overdue.id]
+
+
+@pytest.mark.parametrize("due_before", ["2026-06-27T02:00:00", "invalid", ""])
+def test_list_open_loops_rejects_invalid_or_naive_due_before(
+    store: MemoryStore,
+    due_before: str,
+) -> None:
+    with pytest.raises(ValueError):
+        store.list_open_loops(due_before=due_before)
+
+
 def test_list_open_loops_orders_dated_then_priority(store: MemoryStore) -> None:
     now = _now()
     dated = store.create_open_loop(
@@ -175,12 +240,14 @@ def test_upsert_open_loop_updates_existing_by_id(store: MemoryStore) -> None:
         summary="refined",
         priority=0.8,
         status="snoozed",
+        due_at="2026-06-27T13:00:00+12:00",
     )
     assert updated.id == loop.id
     assert updated.title == "final"
     assert updated.summary == "refined"
     assert updated.priority == 0.8
     assert updated.status == "snoozed"
+    assert updated.due_at == "2026-06-27T01:00:00+00:00"
     # No duplicate row created.
     assert len(store.list_open_loops(status=None)) == 1
 
