@@ -25,7 +25,7 @@ from backend.app.providers.cost import estimate_cost
 from backend.app.providers.router import ProviderRouter
 from backend.app.providers.types import ChatCompletionRequest, ChatCompletionResult
 from backend.app.soul.adapters import NoopEventLogPort, SoulPorts, ports_from_store
-from backend.app.soul.ports import EventLogPort, MemoryPort, StatePort
+from backend.app.soul.ports import EventLogPort, MemoryPort, SoulEvent, StatePort
 from backend.app.tts.expression_tagger import (
     apply_expression_tags_to_sentence,
     build_prior_context,
@@ -231,6 +231,20 @@ class SoulTurnRuntime:
         if called_llm:
             memory.note_llm_turn()
 
+        self._append_turn_event(
+            surface=event.surface,
+            event_type=event.event_type,
+            user_input=user_input,
+            result=result,
+            decision=final_decision,
+            avatar_state=avatar_state,
+            called_llm=called_llm,
+            signals=reply_signals,
+            message_ids=saved_ids,
+            translation=translation,
+            metadata=event.metadata,
+        )
+
         return TurnOutcome(
             result=result,
             avatar_state=avatar_state,
@@ -315,6 +329,18 @@ class SoulTurnRuntime:
         except Exception:
             pass
         memory.maybe_update_summary(budget)
+        self._append_turn_event(
+            surface="text_stream",
+            event_type="user_message",
+            user_input=user_input,
+            result=result,
+            decision=final_decision,
+            avatar_state=final_avatar_state,
+            called_llm=should_call_llm,
+            signals=parsed.signals,
+            message_ids=saved_ids,
+            translation=translation,
+        )
         return (
             ChatCompletionResult(
                 provider=result.provider,
@@ -376,4 +402,52 @@ class SoulTurnRuntime:
         memory.maybe_update_summary(budget)
         if called_llm:
             memory.note_llm_turn()
+        self._append_turn_event(
+            surface="pipecat",
+            event_type="user_message",
+            user_input=user_input,
+            result=result,
+            decision=decision,
+            avatar_state=avatar_state,
+            called_llm=called_llm,
+            signals=signals,
+            message_ids=saved_ids,
+            translation=translation,
+        )
         return saved_ids
+
+    def _append_turn_event(
+        self,
+        *,
+        surface: str,
+        event_type: str,
+        user_input: str,
+        result: ChatCompletionResult,
+        decision: str,
+        avatar_state: str,
+        called_llm: bool,
+        signals: dict | None,
+        message_ids: list[int],
+        translation: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        payload: dict[str, Any] = {
+            "surface": surface,
+            "event_type": event_type,
+            "decision": decision,
+            "avatar_state": avatar_state,
+            "called_llm": called_llm,
+            "message_ids": message_ids,
+            "provider": result.provider,
+            "model": result.model,
+            "mock": result.mock,
+            "has_user_input": bool(user_input.strip()),
+            "has_signals": bool(signals),
+            "translated": translation is not None,
+        }
+        if metadata:
+            payload["metadata"] = metadata
+        try:
+            self.event_log.append(SoulEvent(kind="turn.committed", payload=payload))
+        except Exception:
+            pass

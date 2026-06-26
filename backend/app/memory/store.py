@@ -13,10 +13,12 @@ from backend.app.memory.database import (
     MoodStateRecord,
     RelationshipStateRecord,
     ReminderRecord,
+    SoulEventRecord,
     _row_to_memory,
     _row_to_message,
     _row_to_mood,
     _row_to_relationship,
+    _row_to_soul_event,
     connect,
     dumps_json,
     init_database,
@@ -424,6 +426,52 @@ class MemoryStore:
             )
             for row in rows
         ]
+
+    def append_soul_event(
+        self,
+        *,
+        kind: str,
+        payload: dict[str, Any] | None = None,
+    ) -> SoulEventRecord:
+        with connect(self.db_path) as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO soul_events (kind, payload_json)
+                VALUES (?, ?)
+                """,
+                (kind, dumps_json(payload or {})),
+            )
+            event_id = int(cursor.lastrowid)
+            row = connection.execute(
+                "SELECT * FROM soul_events WHERE id = ?",
+                (event_id,),
+            ).fetchone()
+        assert row is not None
+        return _row_to_soul_event(row)
+
+    def tail_soul_events(
+        self,
+        *,
+        kinds: set[str] | None = None,
+        limit: int = 50,
+    ) -> list[SoulEventRecord]:
+        if limit <= 0:
+            return []
+        if kinds is not None and not kinds:
+            return []
+
+        query = "SELECT * FROM soul_events"
+        params: list[Any] = []
+        if kinds is not None:
+            placeholders = ",".join("?" for _ in kinds)
+            query += f" WHERE kind IN ({placeholders})"
+            params.extend(sorted(kinds))
+        query += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+
+        with connect(self.db_path) as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [_row_to_soul_event(row) for row in reversed(rows)]
 
     def get_mood_state(self) -> MoodStateRecord:
         with connect(self.db_path) as connection:

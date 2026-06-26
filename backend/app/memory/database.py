@@ -234,6 +234,14 @@ class FileAccessLogRecord:
     reason: str
 
 
+@dataclass(frozen=True)
+class SoulEventRecord:
+    id: int
+    created_at: str
+    kind: str
+    payload: dict[str, Any]
+
+
 def _row_to_message(row: sqlite3.Row) -> MessageRecord:
     return MessageRecord(
         id=row["id"],
@@ -288,4 +296,13 @@ def _row_to_relationship(row: sqlite3.Row) -> RelationshipStateRecord:
         tension=float(row["tension"]),
         last_meaningful_interaction_at=row["last_meaningful_interaction_at"],
         metadata=loads_json(row["metadata_json"], {}),
+    )
+
+
+def _row_to_soul_event(row: sqlite3.Row) -> SoulEventRecord:
+    return SoulEventRecord(
+        id=int(row["id"]),
+        created_at=str(row["created_at"]),
+        kind=str(row["kind"]),
+        payload=loads_json(row["payload_json"], {}),
     )

@@ -18,7 +18,7 @@ from backend.app.memory.usage_guard import BudgetGate
 from backend.app.providers.cost import estimate_cost, estimate_usage
 from backend.app.providers.router import get_provider_router, reset_provider_router
 from backend.app.providers.types import ChatCompletionResult
-from backend.app.soul.adapters import SoulPorts, NoopEventLogPort, ports_from_store
+from backend.app.soul.adapters import SoulPorts, ports_from_store
 from backend.app.soul.ports import SoulEvent
 from backend.app.soul.runtime import PerceivedEvent, SoulTurnRuntime
 
@@ -139,6 +139,25 @@ class _FakeMemoryPort:
         return None
 
 
+class _FakeEventLogPort:
+    def __init__(self) -> None:
+        self.events: list[SoulEvent] = []
+
+    def append(self, event: SoulEvent) -> None:
+        self.events.append(event)
+
+    def tail(
+        self,
+        *,
+        kinds: set[str] | None = None,
+        limit: int = 50,
+    ) -> list[SoulEvent]:
+        events = self.events
+        if kinds is not None:
+            events = [event for event in events if event.kind in kinds]
+        return events[-limit:]
+
+
 @pytest.fixture(autouse=True)
 def _router_env(monkeypatch: pytest.MonkeyPatch):
     repo_root = Path(__file__).resolve().parents[2]
@@ -152,11 +171,12 @@ def _router_env(monkeypatch: pytest.MonkeyPatch):
 def test_runtime_accepts_fake_ports_without_memorystore() -> None:
     memory = _FakeMemoryPort()
     state = _FakeStatePort()
+    event_log = _FakeEventLogPort()
     runtime = SoulTurnRuntime(
         ports=SoulPorts(
             memory=memory,
             state=state,
-            event_log=NoopEventLogPort(),
+            event_log=event_log,
         ),
         router=get_provider_router(),
         budget=BudgetConfig(),
@@ -185,9 +205,17 @@ def test_runtime_accepts_fake_ports_without_memorystore() -> None:
     assert memory.updated_summary is True
     assert memory.llm_turns == 0
     assert state.applied_signals == []
+    assert len(event_log.events) == 1
+    event = event_log.events[0]
+    assert event.kind == "turn.committed"
+    assert event.payload["surface"] == "text"
+    assert event.payload["decision"] == "mutter"
+    assert event.payload["called_llm"] is False
+    assert event.payload["message_ids"] == [1, 2]
+    assert event.payload["has_user_input"] is True
 
 
-def test_sqlite_ports_wrap_memorystore_without_new_tables(tmp_path: Path) -> None:
+def test_sqlite_ports_wrap_memorystore_and_event_log(tmp_path: Path) -> None:
     store = MemoryStore(db_path=tmp_path / "ports.db")
     ports = ports_from_store(store)
     usage = estimate_usage(["记住 我叫小明"], "记下了。")
@@ -215,7 +243,7 @@ def test_sqlite_ports_wrap_memorystore_without_new_tables(tmp_path: Path) -> Non
     )
     ports.memory.maybe_update_summary(BudgetConfig())
     ports.memory.note_llm_turn()
-    ports.event_log.append(SoulEvent(kind="turn.persisted"))
+    ports.event_log.append(SoulEvent(kind="turn.persisted", payload={"surface": "test"}))
 
     assert saved_ids == [1, 2]
     assert store.count_chat_messages() == 2
@@ -224,4 +252,9 @@ def test_sqlite_ports_wrap_memorystore_without_new_tables(tmp_path: Path) -> Non
         "User profile: 小明",
         "我叫小明",
     ]
-    assert ports.event_log.tail() == []
+    events = ports.event_log.tail()
+    assert len(events) == 1
+    assert events[0].id == 1
+    assert events[0].created_at
+    assert events[0].kind == "turn.persisted"
+    assert events[0].payload == {"surface": "test"}

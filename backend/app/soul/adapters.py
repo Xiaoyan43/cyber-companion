@@ -141,10 +141,33 @@ class NoopEventLogPort:
         return []
 
 
+class SQLiteEventLogPort:
+    def __init__(self, store: MemoryStore) -> None:
+        self._store = store
+
+    def append(self, event: SoulEvent) -> None:
+        self._store.append_soul_event(kind=event.kind, payload=event.payload)
+
+    def tail(
+        self,
+        *,
+        kinds: set[str] | None = None,
+        limit: int = 50,
+    ) -> list[SoulEvent]:
+        return [
+            SoulEvent(
+                kind=record.kind,
+                payload=record.payload,
+                id=record.id,
+                created_at=record.created_at,
+            )
+            for record in self._store.tail_soul_events(kinds=kinds, limit=limit)
+        ]
+
+
 def ports_from_store(store: MemoryStore) -> SoulPorts:
     return SoulPorts(
         memory=SQLiteMemoryPort(store),
         state=SQLiteStatePort(store),
-        event_log=NoopEventLogPort(),
+        event_log=SQLiteEventLogPort(store),
     )
-
