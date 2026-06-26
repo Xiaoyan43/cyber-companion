@@ -48,6 +48,7 @@ def test_init_database_creates_all_tables(store: MemoryStore) -> None:
         "conversation_summaries",
         "memories",
         "mood_state",
+        "existential_state",
         "reminders",
         "file_access_log",
         "schema_meta",

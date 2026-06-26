@@ -19,7 +19,7 @@ from backend.app.memory.context_builder import (
     _relative_time,
     build_provider_context,
 )
-from backend.app.memory.database import MoodStateRecord
+from backend.app.memory.database import ExistentialStateRecord, MoodStateRecord
 from backend.app.memory.holidays import get_holiday_window
 from backend.app.memory.persona import OUTPUT_PROTOCOL, load_persona_system_prompt
 from backend.app.memory.retrieval import rank_memories, score_memory
@@ -424,16 +424,15 @@ def test_summary_policy_ignores_behavior_tick_lines(store: MemoryStore) -> None:
     assert store.get_latest_conversation_summary() is None
 
 
-def _mood_at(now: datetime, *, gap: float, box: float, ease: float) -> MoodStateRecord:
-    return MoodStateRecord(
+def _existential_at(
+    now: datetime,
+    *,
+    gap: float,
+    box: float,
+    ease: float,
+) -> ExistentialStateRecord:
+    return ExistentialStateRecord(
         updated_at=now.isoformat(),
-        mood="idle",
-        energy=0.5,
-        annoyance=0.0,
-        boredom=0.0,
-        worry=0.0,
-        trust=0.5,
-        loneliness=0.0,
         gap_feeling=gap,
         box_relation=box,
         self_ease=ease,
@@ -451,8 +450,8 @@ def test_exist_band_thresholds() -> None:
 
 def test_existential_block_phrasing_matches_decayed_bands() -> None:
     now = datetime.now(timezone.utc)
-    mood = _mood_at(now, gap=0.1, box=0.5, ease=0.9)
-    block = _format_existential_block(mood, now=now)
+    state = _existential_at(now, gap=0.1, box=0.5, ease=0.9)
+    block = _format_existential_block(state, now=now)
 
     assert "[存在状态" in block
     assert "不要直接复述给用户" in block
@@ -464,9 +463,9 @@ def test_existential_block_phrasing_matches_decayed_bands() -> None:
 def test_existential_block_reflects_decay_over_time() -> None:
     stored = datetime(2026, 1, 1, tzinfo=timezone.utc)
     # Start all three at mid; after ~20 days gap_feeling decays 0.04*20=0.8 → floors to low.
-    mood = _mood_at(stored, gap=0.5, box=0.5, ease=0.5)
+    state = _existential_at(stored, gap=0.5, box=0.5, ease=0.5)
     later = datetime(2026, 1, 21, tzinfo=timezone.utc)
-    block = _format_existential_block(mood, now=later)
+    block = _format_existential_block(state, now=later)
 
     assert _GAP_PHRASES["low"] in block  # fastest decay drops out of mid
     assert _SELF_PHRASES["mid"] in block  # slowest decay (0.005/day) stays mid

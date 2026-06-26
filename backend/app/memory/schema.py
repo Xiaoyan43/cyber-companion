@@ -1,4 +1,4 @@
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 MEMORY_TYPES = (
     "stable_profile",
@@ -99,6 +99,14 @@ CREATE TABLE IF NOT EXISTS mood_state (
   box_relation REAL NOT NULL DEFAULT 0.5,
   self_ease REAL NOT NULL DEFAULT 0.5,
   metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS existential_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  gap_feeling REAL NOT NULL DEFAULT 0.5,
+  box_relation REAL NOT NULL DEFAULT 0.5,
+  self_ease REAL NOT NULL DEFAULT 0.5
 );
 
 CREATE TABLE IF NOT EXISTS relationship_state (
