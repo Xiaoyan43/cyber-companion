@@ -1,4 +1,23 @@
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
+
+OPERATIONAL_MOOD_METADATA_KEYS = frozenset(
+    {
+        "last_proactive_check_at",
+        "last_proactive_fired_at",
+        "proactive_pending_since",
+        "proactive_daily_date",
+        "proactive_daily_count",
+        "last_local_line_at",
+        "proactive_llm_daily_date",
+        "proactive_llm_daily_count",
+        "idle_experience_last_at",
+        "idle_experience_daily_date",
+        "idle_experience_daily_count",
+        "proactive_recent_fingerprints",
+        "share_recent_memory_ids",
+        "idle_experience_recent_material_ids",
+    }
+)
 
 MEMORY_TYPES = (
     "stable_profile",
@@ -107,6 +126,12 @@ CREATE TABLE IF NOT EXISTS existential_state (
   gap_feeling REAL NOT NULL DEFAULT 0.5,
   box_relation REAL NOT NULL DEFAULT 0.5,
   self_ease REAL NOT NULL DEFAULT 0.5
+);
+
+CREATE TABLE IF NOT EXISTS behavior_runtime_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  metadata_json TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS relationship_state (

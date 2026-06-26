@@ -19,7 +19,12 @@ from backend.app.behavior.mood import (
     apply_user_message_mood_delta,
     find_stale_job_memory,
 )
-from backend.app.behavior.tone import in_positive_zone, next_positive_streak, project_tone
+from backend.app.behavior.tone import (
+    POSITIVE_STREAK_KEY,
+    in_positive_zone,
+    next_positive_streak,
+    project_tone,
+)
 from backend.app.behavior.tick_policy import mark_local_line_spoken, recently_spoke_locally
 from backend.app.behavior.rules import (
     is_empty_input,
@@ -71,7 +76,7 @@ def _evaluate_user_message(store: MemoryStore, user_input: str) -> BehaviorDecis
     relationship = store.get_relationship_state()
     cleared_metadata = clear_proactive_pending(mood.metadata)
     if cleared_metadata is not mood.metadata:
-        store.update_mood_state(metadata=cleared_metadata)
+        store.patch_behavior_runtime_metadata(remove=("proactive_pending_since",))
         mood = store.get_mood_state()
     empty = is_empty_input(user_input)
     low_value = is_low_value_input(user_input)
@@ -112,7 +117,9 @@ def _evaluate_user_message(store: MemoryStore, user_input: str) -> BehaviorDecis
         boredom=updated_mood.boredom,
         worry=updated_mood.worry,
         loneliness=updated_mood.loneliness,
-        metadata=streak_metadata,
+    )
+    store.patch_mood_metadata(
+        updates={POSITIVE_STREAK_KEY: streak_metadata[POSITIVE_STREAK_KEY]}
     )
 
     if empty:
@@ -236,7 +243,9 @@ def _evaluate_proactive_check(
 
     aware_now = now if now is not None else datetime.now().astimezone()
     check_metadata = mark_proactive_check(mood.metadata, now=aware_now)
-    store.update_mood_state(metadata=check_metadata)
+    store.patch_behavior_runtime_metadata(
+        updates={"last_proactive_check_at": check_metadata["last_proactive_check_at"]}
+    )
 
     fired = force_proactive or should_fire_longing(longing, rng=rng)
     if not fired:
@@ -250,7 +259,19 @@ def _evaluate_proactive_check(
     stale_job = find_stale_job_memory(store.list_memories(limit=100))
     fired_metadata = mark_proactive_fired(check_metadata, now=aware_now)
     fired_metadata = mark_local_line_spoken(fired_metadata)
-    store.update_mood_state(metadata=fired_metadata)
+    store.patch_behavior_runtime_metadata(
+        updates={
+            key: fired_metadata[key]
+            for key in (
+                "last_proactive_check_at",
+                "last_proactive_fired_at",
+                "proactive_pending_since",
+                "proactive_daily_date",
+                "proactive_daily_count",
+                "last_local_line_at",
+            )
+        }
+    )
 
     longing_tier = compute_longing_tier(
         last_meaningful_interaction_at=relationship.last_meaningful_interaction_at,
@@ -284,7 +305,6 @@ def _evaluate_idle_tick(store: MemoryStore) -> BehaviorDecision:
         energy=updated_mood.energy,
         boredom=updated_mood.boredom,
         loneliness=updated_mood.loneliness,
-        metadata=updated_mood.metadata,
     )
 
     if recently_spoke_locally(updated_mood):

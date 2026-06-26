@@ -49,6 +49,7 @@ def test_init_database_creates_all_tables(store: MemoryStore) -> None:
         "memories",
         "mood_state",
         "existential_state",
+        "behavior_runtime_state",
         "reminders",
         "file_access_log",
         "schema_meta",
@@ -95,6 +96,74 @@ def test_mood_state_defaults_and_update(store: MemoryStore) -> None:
     updated = store.update_mood_state(mood="annoyed", annoyance=0.7)
     assert updated.mood == "annoyed"
     assert updated.annoyance == 0.7
+
+
+def test_mood_api_trust_is_relationship_compatibility_alias(client: TestClient) -> None:
+    from backend.app.memory.database import connect
+    from backend.app.memory.store import get_memory_store
+
+    store = get_memory_store()
+    with connect(store.db_path) as connection:
+        connection.execute("UPDATE mood_state SET trust = 0.17 WHERE id = 1")
+
+    assert client.get("/memory/mood").json()["trust"] == pytest.approx(0.5)
+    response = client.put("/memory/mood", json={"trust": 0.73})
+    assert response.status_code == 200
+    assert response.json()["trust"] == pytest.approx(0.73)
+    assert client.get("/memory/relationship").json()["trust"] == pytest.approx(0.73)
+
+    with connect(store.db_path) as connection:
+        legacy_trust = connection.execute(
+            "SELECT trust FROM mood_state WHERE id = 1"
+        ).fetchone()["trust"]
+    assert legacy_trust == pytest.approx(0.17)
+
+
+def test_mood_api_metadata_replace_clears_missing_operational_keys(
+    client: TestClient,
+) -> None:
+    from backend.app.memory.database import connect, loads_json
+    from backend.app.memory.store import get_memory_store
+
+    first = client.put(
+        "/memory/mood",
+        json={
+            "metadata": {
+                "positive_zone_streak": 2,
+                "last_proactive_check_at": "old-check",
+                "last_proactive_fired_at": "old-fire",
+            }
+        },
+    )
+    assert first.status_code == 200
+
+    second = client.put(
+        "/memory/mood",
+        json={
+            "metadata": {
+                "positive_zone_streak": 1,
+                "last_proactive_check_at": "new-check",
+            }
+        },
+    )
+    assert second.status_code == 200
+    assert second.json()["metadata"] == {
+        "positive_zone_streak": 1,
+        "last_proactive_check_at": "new-check",
+    }
+
+    store = get_memory_store()
+    assert store.get_behavior_runtime_state().metadata == {
+        "last_proactive_check_at": "new-check"
+    }
+    with connect(store.db_path) as connection:
+        legacy = loads_json(
+            connection.execute(
+                "SELECT metadata_json FROM mood_state WHERE id = 1"
+            ).fetchone()["metadata_json"],
+            {},
+        )
+    assert "last_proactive_fired_at" not in legacy
 
 
 def test_chat_complete_empty_submit_skips_blank_user_row(client: TestClient) -> None:

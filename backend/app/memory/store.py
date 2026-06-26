@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from backend.app.memory.database import (
+    BehaviorRuntimeStateRecord,
     ConversationSummaryRecord,
     ExistentialStateRecord,
     FileAccessLogRecord,
@@ -18,6 +20,7 @@ from backend.app.memory.database import (
     SoulEventRecord,
     _row_to_memory,
     _row_to_message,
+    _row_to_behavior_runtime,
     _row_to_existential,
     _row_to_mood,
     _row_to_open_loop,
@@ -34,6 +37,7 @@ from backend.app.memory.schema import (
     MEMORY_TYPES,
     OPEN_LOOP_KINDS,
     OPEN_LOOP_STATUSES,
+    OPERATIONAL_MOOD_METADATA_KEYS,
 )
 
 _LINK_SNIPPET_MAX_LEN = 80
@@ -687,9 +691,145 @@ class MemoryStore:
 
     def get_mood_state(self) -> MoodStateRecord:
         with connect(self.db_path) as connection:
-            row = connection.execute("SELECT * FROM mood_state WHERE id = 1").fetchone()
+            mood_row = connection.execute("SELECT * FROM mood_state WHERE id = 1").fetchone()
+            relationship_row = connection.execute(
+                "SELECT trust FROM relationship_state WHERE id = 1"
+            ).fetchone()
+            runtime_row = connection.execute(
+                "SELECT * FROM behavior_runtime_state WHERE id = 1"
+            ).fetchone()
+        assert mood_row is not None
+        assert relationship_row is not None
+        assert runtime_row is not None
+        mood = _row_to_mood(mood_row)
+        runtime = _row_to_behavior_runtime(runtime_row)
+        merged_metadata = {
+            key: value
+            for key, value in mood.metadata.items()
+            if key not in OPERATIONAL_MOOD_METADATA_KEYS
+        }
+        merged_metadata.update(runtime.metadata)
+        return replace(
+            mood,
+            trust=float(relationship_row["trust"]),
+            metadata=merged_metadata,
+        )
+
+    def get_behavior_runtime_state(self) -> BehaviorRuntimeStateRecord:
+        with connect(self.db_path) as connection:
+            row = connection.execute(
+                "SELECT * FROM behavior_runtime_state WHERE id = 1"
+            ).fetchone()
         assert row is not None
-        return _row_to_mood(row)
+        return _row_to_behavior_runtime(row)
+
+    def patch_behavior_runtime_metadata(
+        self,
+        *,
+        updates: dict[str, Any] | None = None,
+        remove: tuple[str, ...] = (),
+    ) -> BehaviorRuntimeStateRecord:
+        patch = updates or {}
+        invalid = (set(patch) | set(remove)) - OPERATIONAL_MOOD_METADATA_KEYS
+        if invalid:
+            raise ValueError(f"Non-operational behavior runtime keys: {sorted(invalid)}")
+
+        updated_at = utc_now_iso()
+        with connect(self.db_path) as connection:
+            runtime_row = connection.execute(
+                "SELECT metadata_json FROM behavior_runtime_state WHERE id = 1"
+            ).fetchone()
+            mood_row = connection.execute(
+                "SELECT metadata_json FROM mood_state WHERE id = 1"
+            ).fetchone()
+            assert runtime_row is not None
+            assert mood_row is not None
+
+            runtime_metadata = loads_json(runtime_row["metadata_json"], {})
+            if not isinstance(runtime_metadata, dict):
+                runtime_metadata = {}
+            runtime_metadata.update(patch)
+            for key in remove:
+                runtime_metadata.pop(key, None)
+
+            legacy_metadata = loads_json(mood_row["metadata_json"], {})
+            if not isinstance(legacy_metadata, dict):
+                legacy_metadata = {}
+            for key in OPERATIONAL_MOOD_METADATA_KEYS:
+                legacy_metadata.pop(key, None)
+            legacy_metadata.update(runtime_metadata)
+
+            connection.execute(
+                """
+                UPDATE behavior_runtime_state
+                SET updated_at = ?, metadata_json = ?
+                WHERE id = 1
+                """,
+                (updated_at, dumps_json(runtime_metadata)),
+            )
+            connection.execute(
+                """
+                UPDATE mood_state
+                SET updated_at = ?, metadata_json = ?
+                WHERE id = 1
+                """,
+                (updated_at, dumps_json(legacy_metadata)),
+            )
+        return BehaviorRuntimeStateRecord(updated_at=updated_at, metadata=runtime_metadata)
+
+    def patch_mood_metadata(
+        self,
+        *,
+        updates: dict[str, Any] | None = None,
+        remove: tuple[str, ...] = (),
+    ) -> MoodStateRecord:
+        patch = updates or {}
+        invalid = (set(patch) | set(remove)) & OPERATIONAL_MOOD_METADATA_KEYS
+        if invalid:
+            raise ValueError(f"Operational keys require runtime patch API: {sorted(invalid)}")
+
+        updated_at = utc_now_iso()
+        with connect(self.db_path) as connection:
+            row = connection.execute(
+                "SELECT metadata_json FROM mood_state WHERE id = 1"
+            ).fetchone()
+            assert row is not None
+            metadata = loads_json(row["metadata_json"], {})
+            if not isinstance(metadata, dict):
+                metadata = {}
+            metadata.update(patch)
+            for key in remove:
+                metadata.pop(key, None)
+            connection.execute(
+                "UPDATE mood_state SET updated_at = ?, metadata_json = ? WHERE id = 1",
+                (updated_at, dumps_json(metadata)),
+            )
+        return self.get_mood_state()
+
+    def replace_mood_metadata(self, metadata: dict[str, Any]) -> MoodStateRecord:
+        runtime_metadata = {
+            key: value
+            for key, value in metadata.items()
+            if key in OPERATIONAL_MOOD_METADATA_KEYS
+        }
+        updated_at = utc_now_iso()
+        with connect(self.db_path) as connection:
+            connection.execute(
+                """
+                UPDATE behavior_runtime_state
+                SET updated_at = ?, metadata_json = ?
+                WHERE id = 1
+                """,
+                (updated_at, dumps_json(runtime_metadata)),
+            )
+            # Keep the complete compatibility view in the legacy column. This is the
+            # rollback copy; canonical reads filter operational keys back through the
+            # behavior_runtime_state row above.
+            connection.execute(
+                "UPDATE mood_state SET updated_at = ?, metadata_json = ? WHERE id = 1",
+                (updated_at, dumps_json(metadata)),
+            )
+        return self.get_mood_state()
 
     def get_existential_state(self) -> ExistentialStateRecord:
         with connect(self.db_path) as connection:
@@ -743,6 +883,10 @@ class MemoryStore:
         loneliness: float | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> MoodStateRecord:
+        if trust is not None:
+            self.update_relationship_state(trust=trust)
+        if metadata is not None:
+            self.replace_mood_metadata(metadata)
         current = self.get_mood_state()
         updated = MoodStateRecord(
             updated_at=utc_now_iso(),
@@ -751,9 +895,9 @@ class MemoryStore:
             annoyance=annoyance if annoyance is not None else current.annoyance,
             boredom=boredom if boredom is not None else current.boredom,
             worry=worry if worry is not None else current.worry,
-            trust=trust if trust is not None else current.trust,
+            trust=current.trust,
             loneliness=loneliness if loneliness is not None else current.loneliness,
-            metadata=metadata if metadata is not None else current.metadata,
+            metadata=current.metadata,
         )
 
         with connect(self.db_path) as connection:
@@ -761,7 +905,7 @@ class MemoryStore:
                 """
                 UPDATE mood_state
                 SET updated_at = ?, mood = ?, energy = ?, annoyance = ?, boredom = ?,
-                    worry = ?, trust = ?, loneliness = ?, metadata_json = ?
+                    worry = ?, loneliness = ?
                 WHERE id = 1
                 """,
                 (
@@ -771,9 +915,7 @@ class MemoryStore:
                     updated.annoyance,
                     updated.boredom,
                     updated.worry,
-                    updated.trust,
                     updated.loneliness,
-                    dumps_json(updated.metadata),
                 ),
             )
         return updated
