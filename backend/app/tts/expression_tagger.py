@@ -8,8 +8,19 @@ from backend.app.memory.database import MoodStateRecord
 from backend.app.providers.exceptions import ProviderError
 from backend.app.providers.router import ProviderRouter
 from backend.app.providers.types import ChatCompletionRequest, ChatMessage
+from backend.app.tts.tag_stats import _TERMINATORS as _STATS_TERMINATORS
 
 DEFAULT_TAGGER_PROVIDER = "gemini"
+
+# Streaming-splitter sentence terminators. Derived from the offline tag_stats yardstick but
+# WITH "…" removed: in conversational Chinese an ellipsis is almost always a *mid-utterance
+# pause*, not an end of sentence (the brain writes "还是只是单纯地…羡慕那个时候的自己？" as one
+# thought). Splitting on it fragments that single sentence into a grammatically-incomplete
+# standalone Fish request ("……单纯地" with nothing after it), which is what makes Fish improvise
+# filler audio over the broken fragment (real-machine repro, 2026-06-25). The tag_stats set keeps
+# "…" — over-splitting only ever lowers its degradation false-positives — so the two are
+# deliberately decoupled here for their different purposes.
+SENTENCE_TERMINATORS = _STATS_TERMINATORS - {"…"}
 
 # A "sentence" that is only punctuation/whitespace (e.g. a bare "…" left over from splitting
 # "……") has nothing to tag. Sending it to the tagger makes the LLM *hallucinate* content to
@@ -160,8 +171,10 @@ TAGGER_INSTRUCTION_TEMPLATE = (
     "1. 不改变原文一个字——不重写、不增删句子、不调整措辞，只在合适的位置插入 [标签]。\n"
     "2. 标签影响从它出现的位置开始、到下一个标签或句末为止的文字——位置就是语义范围，"
     "不要把只想影响半句话的标签放在整段开头。\n"
-    "3. 逐句重新判断这句话此刻在说什么、怎么说——不要照搬上一句或整体情绪状态机械地贴同一组标签，"
-    "同样的 mood 下不同的句子应该有不同的标签选择，没有明显情绪转折的句子可以不加标签。\n"
+    "3. 逐句重新判断这句话此刻在说什么、怎么说——不要照搬上一句或整体情绪状态机械地贴同一组标签。"
+    "默认倾向于不加标签：只有当这一句相对前文出现明确的情绪或语气变化时才加；平稳的叙述、讲故事或铺垫，"
+    "大多数句子不需要任何标签。如果前文已经是某个情绪基调、这一句只是延续它，就不要再重复贴同一类标签。"
+    "情绪变化贴得太密（几乎每句都贴）反而会让每个标签都显得突兀不自然——宁可少贴、只贴在真正的转折点上。\n"
     "4. 两类标签精度要求不同：\n"
     "   - 音效/生理反应类（词表里的「音效标签」一类）会插入一段独立可分离的非语言声音事件"
     "（一声叹气、一次喘息、一阵笑声本身），必须紧贴它实际发生的那个词，位置错了就是一声突兀的怪声。\n"
@@ -227,6 +240,55 @@ def _format_mood_block(mood: MoodStateRecord) -> str:
         f"mood={mood.mood}, energy={mood.energy:.2f}, annoyance={mood.annoyance:.2f}, "
         f"boredom={mood.boredom:.2f}, worry={mood.worry:.2f}, loneliness={mood.loneliness:.2f}"
     )
+
+
+def split_complete_sentences(buffer: str) -> tuple[list[str], str]:
+    """Split ``buffer`` into (complete sentences, trailing remainder).
+
+    A sentence runs up to and including a *run* of consecutive terminator chars (e.g. "。\n" or
+    "！？") so they stay attached to the sentence they end instead of each char cutting its own
+    boundary — a naive per-char cut would strand a content-less fragment that still gets sent to
+    Fish as its own flushed request. Note ``SENTENCE_TERMINATORS`` excludes "…" (see its comment),
+    so a mid-utterance ellipsis does not split a sentence. The remainder is whatever follows the
+    last terminator run (an in-progress sentence with no terminator yet). Pure + side-effect free
+    so it can be unit-tested without a pipeline.
+    """
+    sentences: list[str] = []
+    start = 0
+    index = 0
+    length = len(buffer)
+    while index < length:
+        if buffer[index] in SENTENCE_TERMINATORS:
+            end = index
+            while end < length and buffer[end] in SENTENCE_TERMINATORS:
+                end += 1
+            sentences.append(buffer[start:end])
+            start = end
+            index = end
+        else:
+            index += 1
+    return sentences, buffer[start:]
+
+
+def build_prior_context(spoken_sentences: list[str], char_cap: int) -> str:
+    """Join already-spoken sentences for ``prior_context``, keeping the most recent within cap.
+
+    "整段已说" (OQ2) with a length guard: if the full prefix fits in ``char_cap`` use all of it,
+    otherwise fall back to the most recent sentences that fit. Pure + unit-testable.
+    """
+    if not spoken_sentences:
+        return ""
+    joined = "".join(spoken_sentences)
+    if len(joined) <= char_cap:
+        return joined
+    kept: list[str] = []
+    total = 0
+    for sentence in reversed(spoken_sentences):
+        kept.append(sentence)
+        total += len(sentence)
+        if total >= char_cap:
+            break
+    return "".join(reversed(kept))
 
 
 def apply_expression_tags(

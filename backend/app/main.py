@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 import base64
 import json
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,12 +50,16 @@ from backend.app.stt.exceptions import STTError
 from backend.app.stt.router import get_stt_router, reset_stt_router
 from backend.app.stt.types import TranscriptionRequest
 from backend.app.tts.exceptions import TTSError
-from backend.app.tts.expression_tagger import apply_expression_tags
+from backend.app.tts.expression_tagger import (
+    apply_expression_tags_to_sentence,
+    build_prior_context,
+    split_complete_sentences,
+)
 from backend.app.tts.router import get_tts_router, reset_tts_router
 from backend.app.tts.translator import translate_to_chinese
 from backend.app.tts.types import SynthesisRequest
 from backend.app.providers.exceptions import ProviderError
-from backend.app.providers.router import get_provider_router, reset_provider_router
+from backend.app.providers.router import ProviderRouter, get_provider_router, reset_provider_router
 from backend.app.providers.cost import estimate_cost
 from backend.app.providers.types import ChatCompletionRequest, ChatCompletionResult, ChatMessage
 from backend.app.rtc.routes import router as rtc_router
@@ -720,6 +725,45 @@ def evaluate_behavior_route(request: BehaviorEvaluateRequest) -> BehaviorDecisio
     return _decision_to_schema(decision, saved_message_id=saved_message_id)
 
 
+_TAGGER_PRIOR_CONTEXT_CHAR_CAP = 800
+
+
+def _tag_reply_by_sentence(text: str, mood: MoodStateRecord, *, router: ProviderRouter) -> str:
+    """Tag ``text`` sentence-by-sentence instead of as one whole-text call.
+
+    Mirrors the voice pipeline's per-sentence tagging (``ExpressionTaggerProcessor``): a single
+    sentence's tagger failure (truncation/altered wording/dropped clause) only degrades that
+    sentence, not the entire reply — the failure mode that made long text-chat replies lose
+    every tag at once (see docs/HANDOFF.md 第六十四轮). Sentences are tagged concurrently via a
+    thread pool (``router.complete`` is blocking I/O) so latency tracks the slowest sentence
+    rather than the sum of all of them, then rejoined in original order.
+    """
+    if not text.strip():
+        return text
+    sentences, remainder = split_complete_sentences(text)
+    if remainder.strip():
+        sentences.append(remainder)
+    if not sentences:
+        return text
+    if len(sentences) == 1:
+        return apply_expression_tags_to_sentence(sentences[0], mood, router=router)
+
+    priors = [
+        build_prior_context(sentences[:index], _TAGGER_PRIOR_CONTEXT_CHAR_CAP)
+        for index in range(len(sentences))
+    ]
+    with ThreadPoolExecutor(max_workers=len(sentences)) as executor:
+        tagged = list(
+            executor.map(
+                lambda pair: apply_expression_tags_to_sentence(
+                    pair[0], mood, prior_context=pair[1], router=router
+                ),
+                zip(sentences, priors),
+            )
+        )
+    return "".join(tagged)
+
+
 @app.post(
     "/chat/complete",
     response_model=ChatCompleteResponse,
@@ -804,7 +848,7 @@ def chat_complete(
                 apply_signals_to_kernel(store, parsed.signals)
             except Exception:
                 pass
-            tagged_content = apply_expression_tags(
+            tagged_content = _tag_reply_by_sentence(
                 parsed.content,
                 store.get_mood_state(),
                 router=router,
@@ -935,7 +979,7 @@ def _finalize_streamed_turn(
         pass
     final_avatar_state = parsed.avatar_state or avatar_state
     final_decision = parsed.decision or decision
-    final_content = apply_expression_tags(
+    final_content = _tag_reply_by_sentence(
         parsed.content,
         store.get_mood_state(),
         router=get_provider_router(),

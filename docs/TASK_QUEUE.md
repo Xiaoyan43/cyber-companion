@@ -1,6 +1,20 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-26（第六十五轮）**：**文字路径标签器逐句化（P0+P1）已完成并真机验证 PASS，
+> 全部未 commit。** `/architect` 拆出 P0（分句/拼回工具从 `expression_tagger_processor.py`
+> 搬到 `expression_tagger.py`，消除 app→realtime 反向依赖）+ P1（`main.py` 两处调用点改
+> `ThreadPoolExecutor` 并发逐句标签，单句失败只退化那一句，不再整段作废）。新增 5 个测试，
+> 655 pytest 全绿。随后做了大量标签质量调优 + 模型 A/B：① prompt 规则3 加密度克制措辞，对
+> Gemini 2.5 Flash Lite 有效（密度降明显）、对 Claude Haiku 4.5 几乎无效（它对"克制类"指令
+> 遵循弱于格式类规则）；②自建 `experiments/tagger_ab.py` 量化对比 Gemini/Haiku/MiniMax-M3——
+> **MiniMax-M3 出局**（延迟~9.5s/句、几乎不贴标签）；Gemini vs Haiku 是质量(Haiku更准) vs
+> 密度/延迟/成本(Gemini更优) 的真实权衡，当前生产配置（`config/providers.json`，gitignored）
+> 临时停在 Haiku，密度问题未解决，**下一步主线**。③真机复核排除了"嘉岚音色情绪响应弱"的猜测
+> （已撤回，无官方依据，问题在标签密度不在音色）。④调研 Fish Audio 克隆/Voice Design，发现
+> 这两个功能需要 Plus 套餐（用户当前 Free 套餐锁住），用户决定暂不升级、维持嘉岚为主音色。
+> 详见 HANDOFF。
+>
 > **2026-06-26（第六十四轮）**：**TTS 模型切换 + 两个配置 bug 修复 + 标签器 token 预算修正，
 > 已 commit `982a168`**。①用户带来 Fish 官方博客确认 S2.1 Pro / S2.1 Pro Free 同一套模型权重，
 > 切 `config/tts.json` 到 `s2.1-pro-free`；过程中发现并修复两处独立 bug——`registry.py` 的

@@ -50,70 +50,11 @@ from backend.app.tts.expression_tagger import (
     DEFAULT_TAGGER_PROVIDER,
     _has_taggable_content,
     apply_expression_tags_to_sentence,
+    build_prior_context,
+    split_complete_sentences,
 )
 
-# Streaming-splitter sentence terminators. Derived from the offline tag_stats yardstick but
-# WITH "…" removed: in conversational Chinese an ellipsis is almost always a *mid-utterance
-# pause*, not an end of sentence (the brain writes "还是只是单纯地…羡慕那个时候的自己？" as one
-# thought). Splitting on it fragments that single sentence into a grammatically-incomplete
-# standalone Fish request ("……单纯地" with nothing after it), which is what makes Fish improvise
-# filler audio over the broken fragment (real-machine repro, 2026-06-25). The tag_stats set keeps
-# "…" — over-splitting only ever lowers its degradation false-positives — so the two are
-# deliberately decoupled here for their different purposes.
-from backend.app.tts.tag_stats import _TERMINATORS as _STATS_TERMINATORS
-
-SENTENCE_TERMINATORS = _STATS_TERMINATORS - {"…"}
-
 _DEFAULT_PRIOR_CONTEXT_CHAR_CAP = 800
-
-
-def split_complete_sentences(buffer: str) -> tuple[list[str], str]:
-    """Split ``buffer`` into (complete sentences, trailing remainder).
-
-    A sentence runs up to and including a *run* of consecutive terminator chars (e.g. "。\n" or
-    "！？") so they stay attached to the sentence they end instead of each char cutting its own
-    boundary — a naive per-char cut would strand a content-less fragment that still gets sent to
-    Fish as its own flushed request. Note ``SENTENCE_TERMINATORS`` excludes "…" (see its comment),
-    so a mid-utterance ellipsis does not split a sentence. The remainder is whatever follows the
-    last terminator run (an in-progress sentence with no terminator yet). Pure + side-effect free
-    so it can be unit-tested without a pipeline.
-    """
-    sentences: list[str] = []
-    start = 0
-    index = 0
-    length = len(buffer)
-    while index < length:
-        if buffer[index] in SENTENCE_TERMINATORS:
-            end = index
-            while end < length and buffer[end] in SENTENCE_TERMINATORS:
-                end += 1
-            sentences.append(buffer[start:end])
-            start = end
-            index = end
-        else:
-            index += 1
-    return sentences, buffer[start:]
-
-
-def build_prior_context(spoken_sentences: list[str], char_cap: int) -> str:
-    """Join already-spoken sentences for ``prior_context``, keeping the most recent within cap.
-
-    "整段已说" (OQ2) with a length guard: if the full prefix fits in ``char_cap`` use all of it,
-    otherwise fall back to the most recent sentences that fit. Pure + unit-testable.
-    """
-    if not spoken_sentences:
-        return ""
-    joined = "".join(spoken_sentences)
-    if len(joined) <= char_cap:
-        return joined
-    kept: list[str] = []
-    total = 0
-    for sentence in reversed(spoken_sentences):
-        kept.append(sentence)
-        total += len(sentence)
-        if total >= char_cap:
-            break
-    return "".join(reversed(kept))
 
 
 _DRAIN_SENTINEL = object()
