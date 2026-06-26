@@ -110,10 +110,93 @@ def test_reason_picker_default_tier_is_bored(store: MemoryStore) -> None:
     assert reason.longing_tier == "bored"
 
 
+def test_reason_picker_open_loop_when_due(store: MemoryStore) -> None:
+    store.create_open_loop(
+        kind="follow_up",
+        title="收尾报税",
+        summary="补交材料",
+        due_at=(_now() - timedelta(hours=1)).isoformat(),
+    )
+    reason = pick_proactive_reason(store, now=_now())
+    assert reason.kind == "open_loop"
+    assert reason.summary == "收尾报税"
+    assert reason.detail == "补交材料"
+    assert reason.open_loop_id is not None
+
+
+def test_reason_picker_due_reminder_beats_open_loop(store: MemoryStore) -> None:
+    store.create_reminder(
+        title="周四面试",
+        due_at=(_now() - timedelta(hours=1)).isoformat(),
+    )
+    store.create_open_loop(
+        kind="follow_up",
+        title="收尾报税",
+        due_at=(_now() - timedelta(hours=2)).isoformat(),
+    )
+    reason = pick_proactive_reason(store, now=_now())
+    assert reason.kind == "due_reminder"
+
+
+def test_reason_picker_open_loop_beats_commitment(store: MemoryStore) -> None:
+    memory = store.create_memory(
+        type="job_progress",
+        content="Applied to two backend roles.",
+        importance=0.8,
+    )
+    from backend.app.memory.database import connect
+
+    with connect(store.db_path) as connection:
+        connection.execute(
+            "UPDATE memories SET updated_at = ? WHERE id = ?",
+            ("2020-01-01T00:00:00+00:00", memory.id),
+        )
+    store.create_open_loop(
+        kind="commitment",
+        title="还书",
+        due_at=(_now() - timedelta(hours=1)).isoformat(),
+    )
+    reason = pick_proactive_reason(store, now=_now())
+    assert reason.kind == "open_loop"
+
+
+def test_reason_picker_open_loop_not_due_does_not_trigger(store: MemoryStore) -> None:
+    store.create_open_loop(kind="user_goal", title="学日语")  # no due_at
+    store.create_open_loop(
+        kind="future_event",
+        title="下月旅行",
+        due_at=(_now() + timedelta(days=30)).isoformat(),
+    )
+    reason = pick_proactive_reason(store, longing_intensity=0.5, now=_now())
+    assert reason.kind == "check_in"
+
+
+def test_open_loop_reason_carries_longing_tier(store: MemoryStore) -> None:
+    store.create_open_loop(
+        kind="follow_up",
+        title="收尾报税",
+        due_at=(_now() - timedelta(hours=1)).isoformat(),
+    )
+    reason = pick_proactive_reason(store, longing_tier="sulk", now=_now())
+    assert reason.kind == "open_loop"
+    assert reason.longing_tier == "sulk"
+
+
+def test_fallback_line_for_open_loop_mentions_title() -> None:
+    reason = ProactiveReason(
+        kind="open_loop",
+        avatar_state="worried",
+        summary="报税",
+        detail="补交材料",
+    )
+    line = fallback_line_for_reason(reason)
+    assert "报税" in line
+
+
 @pytest.mark.parametrize("tier", ["bored", "longing", "sulk"])
 @pytest.mark.parametrize(
     "kind",
-    ["due_reminder", "commitment_followup", "share", "memory_callback", "check_in"],
+    ["due_reminder", "open_loop", "commitment_followup", "share", "memory_callback", "check_in"],
 )
 def test_format_reason_block_includes_tier_voice_for_every_kind(kind: str, tier: str) -> None:
     reason = ProactiveReason(
@@ -133,6 +216,7 @@ def test_format_reason_block_includes_tier_voice_for_every_kind(kind: str, tier:
     ("kind", "needle"),
     [
         ("due_reminder", "due reminder"),
+        ("open_loop", "open loop"),
         ("commitment_followup", "commitment"),
         ("share", "share"),
         ("memory_callback", "memory callback"),
