@@ -2,7 +2,7 @@
 
 > 本文件每次「瘦身交接」/「工作流交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
 
-## 第六十七轮已完成（2026-06-26，**未 commit，工作树有改动**）
+## 第六十七轮已完成（2026-06-26，**已 commit `08bf0ec`**）
 
 ### ✅ 方向一：Rule 3 重写（Haiku-friendly 明确判断协议）
 - `TAGGER_INSTRUCTION_TEMPLATE` Rule 3 从"软倾向不加"改成"明确条件判断"：
@@ -160,16 +160,16 @@
 ## 当前未完成
 
 ### 🔴 最高优先 · 标签密度问题（第六十七轮已落两层防御，待量化验证）
-- **第六十七轮已做**：① Rule 3 重写（明确条件判断，Haiku-friendly）；② 代码护栏
-  `suppress_repeated_leading_tags`（连续同标签去重）——两层都**未 commit**，待 `tagger_ab.py`
-  量化确认有效后 commit。
-- **下一步**：用 `experiments/tagger_ab.py` 量化复核（`python experiments/tagger_ab.py 3`），
-  对比 Haiku `tagged_sentence_ratio` 和 `adjacent tag-stack pairs`，看两层防御叠加后密度变化。
-  - 若有效（密度明显下降）→ commit 这次改动，结案或继续调优。
-  - 若 Rule 3 无效（Haiku 仍不遵从）→ 考虑回退 Gemini 或接受当前 Haiku 密度靠听感判断。
-  - 代码护栏不依赖模型，始终保留。
-- **剩余选项**（如果两层都不够）：③ 回退 Gemini（密度更优但情绪判断糙）；
-  ④ 接受 Haiku 密度，靠真机多轮听感判断"密但准"是否听起来自然。
+- **第六十七轮已做并 commit `08bf0ec`**：① Rule 3 重写（明确条件判断，Haiku-friendly）；
+  ② 代码护栏 `suppress_repeated_leading_tags`（连续同标签去重）。
+- **量化验证结果**（`tagger_ab.py` N=3，production-path 含护栏）：
+  - Haiku long_story density: **~1.00 → 0.67**（主目标达成）
+  - Haiku short_chat density: **~1.00 → 0.56**
+  - Gemini long_story density: **0.43**（稳定，无回归）
+- **当前状态**：已 commit，密度问题显著改善。剩余路径：
+  ① 真机多轮听感验证——确认"密度 0.67"的标签分布听起来是否自然；
+  ② 如听感仍嫌密，再打磨 prompt 或接受当前水平；
+  ③ 若想进一步优化，可以考虑回退 Gemini（密度 0.43，代价是情绪判断稍糙）。
 
 ### 🟡 标签器 provider 命名正名（独立小任务，不紧急）
 - 把 `"gemini"` 这个 provider 名字、`DEFAULT_TAGGER_PROVIDER`、`OPENROUTER_GEMINI_API_KEY`
@@ -201,11 +201,11 @@
 - ❌ 全仓库扫描
 
 ## 推荐下一个最小任务
-- **立即**：用 `python experiments/tagger_ab.py 3` 量化复核第六十七轮的两层防御效果（Rule 3 重写 +
-  `suppress_repeated_leading_tags`）。若 Haiku `tagged_sentence_ratio` 有明显下降 → commit
-  `backend/app/tts/expression_tagger.py` + `backend/app/main.py` + 两个测试文件。
-- **备选小任务**（独立、不紧急）：标签器 provider 命名正名（`"gemini"` → 中性名，消除「代码写 Gemini
-  实际跑 Haiku」的误导，见「当前未完成 · 🟡」）。
+- **主线**：真机多轮听感验证——跑几轮对话（文字路径 + Pipecat 路径各几轮），确认 Haiku density 0.67
+  的标签分布听起来是否自然，还是仍嫌密。听感 OK → 密度问题结案；听感仍密 → 考虑以下选项。
+- **备选调优方向**（听感验证后再决定）：继续打磨 prompt / 接受当前 Haiku 密度 / 回退 Gemini（密度更优
+  但情绪判断稍糙）。
+- **备选独立小任务**（不紧急）：标签器 provider 命名正名（`"gemini"` → 中性名，见「当前未完成 · 🟡」）。
 
 ---
 
