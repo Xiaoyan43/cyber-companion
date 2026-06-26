@@ -3,7 +3,7 @@
 > 状态：**目标架构 / 重构契约（Phase 0）**。本文件是 `codex/soul-runtime` 分支的源真相。
 > 由 2026-06-27 的「全项目架构盘点 + Shared Soul Layer 重构准备」审查 + 用户 10 项拍板产生。
 > 取代散落在各入口的回合编排；不改人格，只收敛结构。新 session 先读本文件 + `docs/ARCHITECTURE_V2.md`。
-> **▶ 新 session 实施 Phase 1：直接从本文件 §8「Phase 1 启动」开始，只读 §8 列出的目标文件，不要全仓扫描。**
+> **▶ Phase 1 已完成（text + Pipecat surfaces）。新 session 实施 Phase 2：见 §6 Phase 2 行 + §4 Ports 草案，只读 runtime 边界相关文件，不要全仓扫描。**
 
 ## 0. 北极星与范围
 
@@ -143,7 +143,7 @@ invariant 测试清单（现有）：`test_tone` · `test_mood` · `test_behavio
 | Phase | scope | touched | risk | tests | rollback |
 |---|---|---|---|---|---|
 | **0 ✅** | 本文档 + invariants 标记 | docs | 无 | 标 `-m invariant` | 删 doc |
-| **1** | 抽 `backend/app/soul/runtime.py`，4 入口改薄壳 | main.py · companion_brain · turn_analyzer · 新 soul/ | 中（须等价） | 现有 4 路测试 + 新 turn 一致性契约 | runtime 是新增文件，壳层 revert |
+| **1 ✅** | 抽 `backend/app/soul/runtime.py`，3 个主链路入口改薄壳（text 非流式/流式 + Pipecat；turn_analyzer 按决策6延后） | main.py · companion_brain · 新 soul/ | 中（须等价） | 现有 4 路测试 + 新 turn 一致性契约 `test_soul_turn_contract` | runtime 是新增文件，壳层 revert |
 | **2** | 定义 `MemoryPort/StatePort/EventLogPort`，SQLite adapter 包裹 `MemoryStore`；**只在 runtime 边界依赖接口** | soul/ + store adapter | 中 | 契约测试跑 `InMemoryFakeStore` | 接口默认绑 SQLite |
 | **3** | `soul_events`（append-only）+ `open_loops`（reminders 升级） | schema(additive) · runtime commit · proactive_reason | 中 | event 写入 + open-loop 触发 | 表 additive，停写即无副作用 |
 | **4** | 拆 `mood_state`：existential/计时器/死字段 `trust` 移出 | schema(additive) · kernel · mood · state_block | 中高 | §5 kernel/mood/tone invariant | **先 deprecate 不删**，旧列只读灰度 |
@@ -160,6 +160,11 @@ invariant 测试清单（现有）：`test_tone` · `test_mood` · `test_behavio
 - RTC off-path 写回与主 runtime `commit` 的复用边界（决策 6）。
 
 ## 8. Phase 1 启动（next session · 冷启动自洽）
+
+> **✅ Phase 1 COMPLETED**（commits `3562c33` · `7c263c1` · `17daf62` · `d69290e`）。
+> Phase 1 completed for text + Pipecat surfaces; RTC pure E2E off-path analyzer
+> intentionally deferred per decision 6. 子步骤 1-5 全绿，`backend/tests` 670 passed。
+> 本 §8 以下内容保留作为 Phase 1 的实施记录；新 session 请转 Phase 2（§6 + §4）。
 
 **状态**：Phase 0 已完成并 commit（`fb053c3`，仅本文档）。当前分支 `codex/soul-runtime`。
 工作树有 32 项 Fish/tagger 实验残留（unstaged，**故意不提交**）——Phase 1 全程不要 stage 它们。
