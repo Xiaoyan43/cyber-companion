@@ -1,8 +1,14 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-26（第六十六轮 · 跨工具交接）**：**无新代码改动。** Claude Code 本周额度将尽，开发临时
+> 交给 Cursor/Codex，下周一额度重置后用户回 Claude Code。本轮只做交接收尾：把第六十五轮工作的
+> commit 状态从「未 commit」更正为**已 commit `111c70c`**，并在 HANDOFF 顶部加「给 Cursor/Codex」
+> 跨工具上手指引（git 工作树残留物说明 + 配置位置 + 主线 + 测试入口）。工作树仅剩两类故意不提交的
+> 残留：`run_voice.py` 的 `_LatencySpikeLogger`（P8-C 临时探针）+ untracked 实验/数据/`.mcp.json`。
+> **下一步主线不变 = 标签密度问题（Haiku 上未解决），量化工具 `experiments/tagger_ab.py`。**
 > **2026-06-26（第六十五轮）**：**文字路径标签器逐句化（P0+P1）已完成并真机验证 PASS，
-> 全部未 commit。** `/architect` 拆出 P0（分句/拼回工具从 `expression_tagger_processor.py`
+> 已 commit `111c70c`。** `/architect` 拆出 P0（分句/拼回工具从 `expression_tagger_processor.py`
 > 搬到 `expression_tagger.py`，消除 app→realtime 反向依赖）+ P1（`main.py` 两处调用点改
 > `ThreadPoolExecutor` 并发逐句标签，单句失败只退化那一句，不再整段作废）。新增 5 个测试，
 > 655 pytest 全绿。随后做了大量标签质量调优 + 模型 A/B：① prompt 规则3 加密度克制措辞，对

@@ -1,6 +1,24 @@
-# HANDOFF — 上下文交接（2026-06-26，第六十五轮）
+# HANDOFF — 上下文交接（2026-06-26，第六十六轮 · 跨工具交接给 Cursor/Codex）
 
 > 本文件每次「瘦身交接」/「工作流交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
+
+## ⚠️ 本次交接特殊说明（给 Cursor / Codex）
+- **背景**：Claude Code 本周额度即将用完。从现在到下周一额度重置前，开发交给 **Cursor 或 Codex**；
+  重置后用户会回到 Claude Code 继续。本次 session **没有任何新代码改动**——第六十五轮的工作（下文）
+  已在 commit `111c70c` 落地，工作树现在是干净的「已交付」状态，只剩两类**故意不提交**的残留物。
+- **当前 git 工作树状态（交接基线 = HEAD `111c70c`）**：
+  - `backend/realtime/run_voice.py`（+44 行，**未提交，故意保留**）：`_LatencySpikeLogger`——P8-C
+    前置的临时延迟探针（量「用户停说→第一帧 TTS 音频」），跨多轮一直按用户要求留在工作区不提交。
+    **不要 commit 它**；继续开发时按需保留或本地临时禁用即可。
+  - untracked 文件（`.mcp.json`、`experiments/*`、`data/ja_voice_audition/`、`data/tagger_eval/`）：
+    全是**故意不提交**的实验脚本 / A-B 音频 / MCP 配置。`.mcp.json` 是 Fish Audio 官方文档 MCP
+    （project scope，Claude Code 专用；Cursor/Codex 不一定能用这个 server，可忽略）。
+- **给 Cursor/Codex 的最小上手指引**：
+  1. 先读本文件 + `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`，**不要全仓库扫描**。
+  2. 生效配置在 `config/providers.json` 和 `config/tts.json`（**均 gitignored**，不在 git 里）——
+     当前 tagger 实际跑 `anthropic/claude-haiku-4.5`（经 OpenRouter），见下文「已知 bug / 风险」。
+  3. 主线 = 标签密度问题（Haiku 上未解决），量化工具是 `experiments/tagger_ab.py`，**不要凭感觉调**。
+  4. 改动遵循本仓库 small-diff 习惯；测试入口见 `backend/tests/`，TTS 切片 `pytest backend/tests/test_*tag*`。
 
 ## 当前项目目标
 赛博伴侣 / Boxi：一个「被困盒子里的存在」——有人格、记忆、情绪、会主动找你的 AI 陪伴。
@@ -8,9 +26,9 @@
 
 ## 当前阶段目标
 **标签器架构升级——文字路径逐句化已完成并真机验证；当前主线转向标签质量调优（密度/堆叠/情绪判断）+ TTS 引擎/账号层探索。**
-本轮（第六十五轮）完成了上一轮立项的「文字路径标签器逐句化」（P0+P1），随后围绕标签质量做了多轮真机实测和模型 A/B，并研究了 Fish Audio 的音色克隆/Voice Design 能力——**均未 commit**，工作区是一个完整待提交的检查点。
+第六十五轮完成了上一轮立项的「文字路径标签器逐句化」（P0+P1），随后围绕标签质量做了多轮真机实测和模型 A/B，并研究了 Fish Audio 的音色克隆/Voice Design 能力——**已在 commit `111c70c` 落地**（含本文件 + TASK_QUEUE 当时版本；`config/providers.json` 因 gitignored 未进 commit，仍是本地生效配置）。
 
-## 本轮已完成（2026-06-26，第六十五轮，**全部未 commit**）
+## 第六十五轮已完成（2026-06-26，**已 commit `111c70c`**）
 
 ### ✅ P0：分句/拼回工具搬到 `expression_tagger.py`（纯重构）
 - `split_complete_sentences()` / `build_prior_context()` / `SENTENCE_TERMINATORS` 从
@@ -80,7 +98,7 @@
   详见 memory `fish-voice-creation-plan`。
 - **用户决定**：当前仍维持「嘉岚」为主音色，**暂不**执行克隆/设计，记录留作以后参考。
 
-## 已修改文件（本轮，均未 commit）
+## 已修改文件（第六十五轮，已随 `111c70c` 提交）
 - `backend/app/tts/expression_tagger.py`：+分句/拼回工具（P0）+ prompt 规则3密度调优。
 - `backend/realtime/expression_tagger_processor.py`：改 import 复用 P0 搬出的工具（P0）。
 - `backend/app/main.py`：新增 `_tag_reply_by_sentence()` + 两处调用点改用它（P1）。
@@ -148,11 +166,14 @@
 - ❌ 全仓库扫描
 
 ## 推荐下一个最小任务
-- **先 commit 本轮已验证的改动**（P0+P1+prompt密度调优+新测试，`config/providers.json` 因
-  gitignored 不会进 commit，本地保留即可），再决定密度问题往哪个方向继续——建议在新 session
-  里用 `experiments/tagger_ab.py` 量化迭代 prompt 或护栏，不要凭感觉改。
+- 第六十五轮的改动已 commit（`111c70c`）。**下一步主线 = 攻标签密度问题（Haiku 上未解决）**：
+  用 `experiments/tagger_ab.py` 量化迭代 prompt 或加代码护栏，**不要凭感觉改**，每次用同一脚本复核。
+  四个候选方向见上文「当前未完成 · 🔴 最高优先 · 标签密度问题」。
+- 备选小任务（独立、不紧急）：标签器 provider 命名正名（`"gemini"` → 中性名，消除「代码写 Gemini
+  实际跑 Haiku」的误导，见「当前未完成 · 🟡」）。
 
 ---
 
-> 建议执行 `/clear` 或新开 session。下一 session 只需读取
+> **给 Cursor/Codex**：本周接手开发，先读本文件顶部「⚠️ 本次交接特殊说明」。
+> **给 Claude Code（下周回归）**：执行 `/clear` 或新开 session，只需读取
 > `docs/HANDOFF.md`、`docs/TASK_QUEUE.md`、`docs/ARCHITECTURE_SNAPSHOT.md`。
