@@ -11,12 +11,14 @@ from backend.app.memory.database import (
     MemoryRecord,
     MessageRecord,
     MoodStateRecord,
+    OpenLoopRecord,
     RelationshipStateRecord,
     ReminderRecord,
     SoulEventRecord,
     _row_to_memory,
     _row_to_message,
     _row_to_mood,
+    _row_to_open_loop,
     _row_to_relationship,
     _row_to_soul_event,
     connect,
@@ -26,9 +28,17 @@ from backend.app.memory.database import (
     resolve_db_path,
     utc_now_iso,
 )
-from backend.app.memory.schema import MEMORY_TYPES
+from backend.app.memory.schema import (
+    MEMORY_TYPES,
+    OPEN_LOOP_KINDS,
+    OPEN_LOOP_STATUSES,
+)
 
 _LINK_SNIPPET_MAX_LEN = 80
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
 
 
 def _clip_link_snippet(content: str, max_len: int = _LINK_SNIPPET_MAX_LEN) -> str:
@@ -472,6 +482,171 @@ class MemoryStore:
         with connect(self.db_path) as connection:
             rows = connection.execute(query, params).fetchall()
         return [_row_to_soul_event(row) for row in reversed(rows)]
+
+    def create_open_loop(
+        self,
+        *,
+        kind: str,
+        title: str,
+        summary: str = "",
+        status: str = "open",
+        due_at: str | None = None,
+        last_mentioned_at: str | None = None,
+        source_message_id: int | None = None,
+        priority: float = 0.5,
+        confidence: float = 0.5,
+        metadata: dict[str, Any] | None = None,
+    ) -> OpenLoopRecord:
+        if kind not in OPEN_LOOP_KINDS:
+            raise ValueError(f"Unsupported open loop kind: {kind}")
+        if status not in OPEN_LOOP_STATUSES:
+            raise ValueError(f"Unsupported open loop status: {status}")
+
+        with connect(self.db_path) as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO open_loops (
+                  status, kind, title, summary, due_at, last_mentioned_at,
+                  source_message_id, priority, confidence, metadata_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    status,
+                    kind,
+                    title,
+                    summary,
+                    due_at,
+                    last_mentioned_at,
+                    source_message_id,
+                    _clamp01(priority),
+                    _clamp01(confidence),
+                    dumps_json(metadata or {}),
+                ),
+            )
+            loop_id = int(cursor.lastrowid)
+            row = connection.execute(
+                "SELECT * FROM open_loops WHERE id = ?",
+                (loop_id,),
+            ).fetchone()
+        assert row is not None
+        return _row_to_open_loop(row)
+
+    def get_open_loop(self, loop_id: int) -> OpenLoopRecord | None:
+        with connect(self.db_path) as connection:
+            row = connection.execute(
+                "SELECT * FROM open_loops WHERE id = ?",
+                (loop_id,),
+            ).fetchone()
+        return _row_to_open_loop(row) if row else None
+
+    def upsert_open_loop(
+        self,
+        *,
+        loop_id: int | None = None,
+        kind: str,
+        title: str,
+        summary: str = "",
+        status: str = "open",
+        due_at: str | None = None,
+        last_mentioned_at: str | None = None,
+        source_message_id: int | None = None,
+        priority: float = 0.5,
+        confidence: float = 0.5,
+        metadata: dict[str, Any] | None = None,
+    ) -> OpenLoopRecord:
+        """Update an existing loop by ``loop_id`` if it exists, else create one.
+
+        Phase 3B-1 keeps the dedup key as the explicit ``id``; a natural-key
+        fingerprint can be added additively when an off-path writer lands (Phase 6).
+        """
+        if loop_id is None or self.get_open_loop(loop_id) is None:
+            return self.create_open_loop(
+                kind=kind,
+                title=title,
+                summary=summary,
+                status=status,
+                due_at=due_at,
+                last_mentioned_at=last_mentioned_at,
+                source_message_id=source_message_id,
+                priority=priority,
+                confidence=confidence,
+                metadata=metadata,
+            )
+
+        if kind not in OPEN_LOOP_KINDS:
+            raise ValueError(f"Unsupported open loop kind: {kind}")
+        if status not in OPEN_LOOP_STATUSES:
+            raise ValueError(f"Unsupported open loop status: {status}")
+
+        with connect(self.db_path) as connection:
+            connection.execute(
+                """
+                UPDATE open_loops
+                SET updated_at = ?, status = ?, kind = ?, title = ?, summary = ?,
+                    due_at = ?, last_mentioned_at = ?, source_message_id = ?,
+                    priority = ?, confidence = ?, metadata_json = ?
+                WHERE id = ?
+                """,
+                (
+                    utc_now_iso(),
+                    status,
+                    kind,
+                    title,
+                    summary,
+                    due_at,
+                    last_mentioned_at,
+                    source_message_id,
+                    _clamp01(priority),
+                    _clamp01(confidence),
+                    dumps_json(metadata or {}),
+                    loop_id,
+                ),
+            )
+        record = self.get_open_loop(loop_id)
+        assert record is not None
+        return record
+
+    def list_open_loops(
+        self,
+        *,
+        status: str | None = "open",
+        due_before: str | None = None,
+        limit: int = 50,
+    ) -> list[OpenLoopRecord]:
+        if limit <= 0:
+            return []
+        if status is not None and status not in OPEN_LOOP_STATUSES:
+            raise ValueError(f"Unsupported open loop status: {status}")
+
+        query = "SELECT * FROM open_loops"
+        clauses: list[str] = []
+        params: list[Any] = []
+        if status is not None:
+            clauses.append("status = ?")
+            params.append(status)
+        if due_before is not None:
+            clauses.append("due_at IS NOT NULL AND due_at <= ?")
+            params.append(due_before)
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        # Dated loops first (earliest due), then highest priority, then stable by id.
+        query += " ORDER BY (due_at IS NULL), due_at ASC, priority DESC, id ASC LIMIT ?"
+        params.append(limit)
+
+        with connect(self.db_path) as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [_row_to_open_loop(row) for row in rows]
+
+    def close_open_loop(self, loop_id: int) -> OpenLoopRecord | None:
+        if self.get_open_loop(loop_id) is None:
+            return None
+        with connect(self.db_path) as connection:
+            connection.execute(
+                "UPDATE open_loops SET status = 'closed', updated_at = ? WHERE id = ?",
+                (utc_now_iso(), loop_id),
+            )
+        return self.get_open_loop(loop_id)
 
     def get_mood_state(self) -> MoodStateRecord:
         with connect(self.db_path) as connection:

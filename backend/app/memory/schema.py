@@ -1,4 +1,4 @@
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 MEMORY_TYPES = (
     "stable_profile",
@@ -24,6 +24,22 @@ FACTUAL_MEMORY_TYPES = (
     "job_progress",
     "reminder",
     "behavior_preference",
+)
+
+# Agenda / open-loops (Phase 3B). Validated in Python at write time, mirroring
+# MEMORY_TYPES — no SQL CHECK constraint, so new kinds stay additive.
+OPEN_LOOP_KINDS = (
+    "future_event",
+    "commitment",
+    "follow_up",
+    "user_goal",
+    "emotional_thread",
+)
+
+OPEN_LOOP_STATUSES = (
+    "open",
+    "closed",
+    "snoozed",
 )
 
 SCHEMA_SQL = """
@@ -135,6 +151,23 @@ CREATE TABLE IF NOT EXISTS soul_events (
   payload_json TEXT NOT NULL DEFAULT '{}'
 );
 
+CREATE TABLE IF NOT EXISTS open_loops (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  status TEXT NOT NULL DEFAULT 'open',
+  kind TEXT NOT NULL,
+  title TEXT NOT NULL,
+  summary TEXT NOT NULL DEFAULT '',
+  due_at TEXT,
+  last_mentioned_at TEXT,
+  source_message_id INTEGER,
+  priority REAL NOT NULL DEFAULT 0.5,
+  confidence REAL NOT NULL DEFAULT 0.5,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  FOREIGN KEY (source_message_id) REFERENCES messages(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
 CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type);
 CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at);
@@ -142,4 +175,6 @@ CREATE INDEX IF NOT EXISTS idx_reminders_status ON reminders(status);
 CREATE INDEX IF NOT EXISTS idx_memory_links_memory_id ON memory_links(memory_id);
 CREATE INDEX IF NOT EXISTS idx_soul_events_kind_id ON soul_events(kind, id);
 CREATE INDEX IF NOT EXISTS idx_soul_events_created_at ON soul_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_open_loops_status ON open_loops(status);
+CREATE INDEX IF NOT EXISTS idx_open_loops_status_due ON open_loops(status, due_at);
 """

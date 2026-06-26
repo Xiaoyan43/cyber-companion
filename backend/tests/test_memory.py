@@ -52,6 +52,7 @@ def test_init_database_creates_all_tables(store: MemoryStore) -> None:
         "file_access_log",
         "schema_meta",
         "soul_events",
+        "open_loops",
     }.issubset(tables)
 
 

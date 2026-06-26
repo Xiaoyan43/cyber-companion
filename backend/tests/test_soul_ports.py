@@ -18,7 +18,12 @@ from backend.app.memory.usage_guard import BudgetGate
 from backend.app.providers.cost import estimate_cost, estimate_usage
 from backend.app.providers.router import get_provider_router, reset_provider_router
 from backend.app.providers.types import ChatCompletionResult
-from backend.app.soul.adapters import SoulPorts, ports_from_store
+from backend.app.soul.adapters import (
+    NoopAgendaPort,
+    SQLiteAgendaPort,
+    SoulPorts,
+    ports_from_store,
+)
 from backend.app.soul.ports import SoulEvent
 from backend.app.soul.runtime import PerceivedEvent, SoulTurnRuntime
 
@@ -166,6 +171,22 @@ def _router_env(monkeypatch: pytest.MonkeyPatch):
     reset_provider_router()
     yield
     reset_provider_router()
+
+
+def test_soul_ports_default_agenda_is_noop() -> None:
+    ports = SoulPorts(
+        memory=_FakeMemoryPort(),
+        state=_FakeStatePort(),
+        event_log=_FakeEventLogPort(),
+    )
+    assert isinstance(ports.agenda, NoopAgendaPort)
+    assert ports.agenda.open_loops() == []
+
+
+def test_ports_from_store_includes_sqlite_agenda(tmp_path: Path) -> None:
+    store = MemoryStore(db_path=tmp_path / "agenda.db")
+    ports = ports_from_store(store)
+    assert isinstance(ports.agenda, SQLiteAgendaPort)
 
 
 def test_runtime_accepts_fake_ports_without_memorystore() -> None:
