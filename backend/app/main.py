@@ -13,7 +13,6 @@ from backend.app.behavior.completion import build_budget_block_completion, build
 from backend.app.behavior.engine import evaluate_behavior
 from backend.app.behavior.idle_experience import resolve_idle_experience_write
 from backend.app.behavior.proactive_opener import resolve_proactive_opener
-from backend.app.behavior.kernel import apply_signals_to_kernel
 from backend.app.behavior.parser import SignalStreamFilter, parse_structured_assistant_response
 from backend.app.behavior.tone import (
     contains_tone_marker_tag,
@@ -36,7 +35,7 @@ from backend.app.memory.chat_persistence import (
 )
 from backend.app.memory.summary_policy import maybe_update_conversation_summary
 from backend.app.reflection.runner import run_reflection_if_due
-from backend.app.memory.write_policy import maybe_write_memories_from_turn, record_turn_memories
+from backend.app.memory.write_policy import maybe_write_memories_from_turn
 from backend.app.memory.usage_guard import evaluate_llm_budget_gate
 from backend.app.memory.database import (
     MemoryLinkRecord,
@@ -51,11 +50,9 @@ from backend.app.stt.router import get_stt_router, reset_stt_router
 from backend.app.stt.types import TranscriptionRequest
 from backend.app.tts.exceptions import TTSError
 from backend.app.tts.router import get_tts_router, reset_tts_router
-from backend.app.tts.translator import translate_to_chinese
 from backend.app.tts.types import SynthesisRequest
 from backend.app.providers.exceptions import ProviderError
 from backend.app.providers.router import get_provider_router, reset_provider_router
-from backend.app.providers.cost import estimate_cost
 from backend.app.providers.types import ChatCompletionRequest, ChatCompletionResult, ChatMessage
 from backend.app.rtc.routes import router as rtc_router
 from backend.realtime.pipeline_router import router as pipecat_router
@@ -828,87 +825,6 @@ def _chat_stream_done_meta(
     }
 
 
-def _finalize_streamed_turn(
-    store,
-    budget,
-    *,
-    user_input: str,
-    accumulated_text: str,
-    provider_name: str,
-    model: str,
-    usage,
-    mock: bool,
-    decision: str,
-    avatar_state: str,
-    should_call_llm: bool,
-    target_language: str | None = None,
-) -> tuple[ChatCompletionResult, str | None]:
-    cost = estimate_cost(model, usage)
-    result = ChatCompletionResult(
-        provider=provider_name,
-        model=model,
-        content=accumulated_text,
-        usage=usage,
-        cost=cost,
-        mock=mock,
-    )
-    parsed = parse_structured_assistant_response(result.content)
-    try:
-        apply_signals_to_kernel(store, parsed.signals)
-    except Exception:
-        pass
-    final_avatar_state = parsed.avatar_state or avatar_state
-    final_decision = parsed.decision or decision
-    final_content = _tag_reply_by_sentence(
-        parsed.content,
-        store.get_mood_state(),
-        router=get_provider_router(),
-    )
-    translation: str | None = None
-    if target_language:
-        translation = translate_to_chinese(parsed.content, router=get_provider_router())
-    result = ChatCompletionResult(
-        provider=result.provider,
-        model=result.model,
-        content=final_content,
-        usage=result.usage,
-        cost=result.cost,
-        mock=result.mock,
-    )
-    saved_ids = persist_chat_turn(
-        store,
-        [ChatMessageSchema(role="user", content=user_input)],
-        result,
-        decision=final_decision,
-        avatar_state=final_avatar_state,
-        should_call_llm=should_call_llm,
-        translation=translation,
-    )
-    user_message_id = saved_ids[0] if user_input.strip() and saved_ids else None
-    try:
-        record_turn_memories(
-            store,
-            user_input=user_input,
-            signals=parsed.signals,
-            source_message_id=user_message_id,
-            budget=budget,
-        )
-    except Exception:
-        pass
-    maybe_update_conversation_summary(store, budget=budget)
-    return (
-        ChatCompletionResult(
-            provider=result.provider,
-            model=result.model,
-            content=result.content,
-            usage=result.usage,
-            cost=result.cost,
-            mock=result.mock,
-        ),
-        translation,
-    )
-
-
 @app.post(
     "/chat/stream",
     response_model=None,
@@ -922,6 +838,7 @@ def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
     router = get_provider_router()
     store = get_memory_store()
     budget = load_budget_config()
+    runtime = SoulTurnRuntime(store=store, router=router, budget=budget)
 
     try:
         user_input = extract_latest_user_input(
@@ -1024,9 +941,7 @@ def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
                     return
 
                 accumulated_text = "".join(accumulated_parts)
-                result, translation = _finalize_streamed_turn(
-                    store,
-                    budget,
+                result, translation = runtime.finalize_streamed_turn(
                     user_input=user_input,
                     accumulated_text=accumulated_text,
                     provider_name=provider_status.name,

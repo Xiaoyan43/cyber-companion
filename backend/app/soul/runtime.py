@@ -28,6 +28,7 @@ from backend.app.memory.store import MemoryStore
 from backend.app.memory.summary_policy import maybe_update_conversation_summary
 from backend.app.memory.usage_guard import evaluate_llm_budget_gate
 from backend.app.memory.write_policy import record_turn_memories
+from backend.app.providers.cost import estimate_cost
 from backend.app.providers.router import ProviderRouter
 from backend.app.providers.types import ChatCompletionRequest, ChatCompletionResult
 from backend.app.schemas import ChatMessageSchema
@@ -226,4 +227,93 @@ class SoulTurnRuntime:
             decision=final_decision,
             called_llm=called_llm,
             translation=translation,
+        )
+
+    def finalize_streamed_turn(
+        self,
+        *,
+        user_input: str,
+        accumulated_text: str,
+        provider_name: str,
+        model: str,
+        usage,
+        mock: bool,
+        decision: str,
+        avatar_state: str,
+        should_call_llm: bool,
+        target_language: str | None = None,
+    ) -> tuple[ChatCompletionResult, str | None]:
+        """Commit segment (§3 step 7-9) for the streaming text surface.
+
+        The adapter streams deltas itself, then hands the accumulated raw text here
+        to parse → apply signals → tag → persist → record memories → summarize. Kept
+        byte-equivalent to the former ``main._finalize_streamed_turn``; ``self.router``
+        is the same singleton the route resolved at request start.
+        """
+        store = self.store
+        budget = self.budget
+        router = self.router
+        cost = estimate_cost(model, usage)
+        result = ChatCompletionResult(
+            provider=provider_name,
+            model=model,
+            content=accumulated_text,
+            usage=usage,
+            cost=cost,
+            mock=mock,
+        )
+        parsed = parse_structured_assistant_response(result.content)
+        try:
+            apply_signals_to_kernel(store, parsed.signals)
+        except Exception:
+            pass
+        final_avatar_state = parsed.avatar_state or avatar_state
+        final_decision = parsed.decision or decision
+        final_content = tag_reply_by_sentence(
+            parsed.content,
+            store.get_mood_state(),
+            router=router,
+        )
+        translation: str | None = None
+        if target_language:
+            translation = translate_to_chinese(parsed.content, router=router)
+        result = ChatCompletionResult(
+            provider=result.provider,
+            model=result.model,
+            content=final_content,
+            usage=result.usage,
+            cost=result.cost,
+            mock=result.mock,
+        )
+        saved_ids = persist_chat_turn(
+            store,
+            [ChatMessageSchema(role="user", content=user_input)],
+            result,
+            decision=final_decision,
+            avatar_state=final_avatar_state,
+            should_call_llm=should_call_llm,
+            translation=translation,
+        )
+        user_message_id = saved_ids[0] if user_input.strip() and saved_ids else None
+        try:
+            record_turn_memories(
+                store,
+                user_input=user_input,
+                signals=parsed.signals,
+                source_message_id=user_message_id,
+                budget=budget,
+            )
+        except Exception:
+            pass
+        maybe_update_conversation_summary(store, budget=budget)
+        return (
+            ChatCompletionResult(
+                provider=result.provider,
+                model=result.model,
+                content=result.content,
+                usage=result.usage,
+                cost=result.cost,
+                mock=result.mock,
+            ),
+            translation,
         )
