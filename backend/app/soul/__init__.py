@@ -6,7 +6,9 @@ docs/SOUL_RUNTIME_ARCH.md §3 for the contract.
 """
 
 from backend.app.soul.adapters import (
+    NoopAgendaPort,
     NoopEventLogPort,
+    SQLiteAgendaPort,
     SQLiteEventLogPort,
     SQLiteMemoryPort,
     SQLiteStatePort,
@@ -14,8 +16,10 @@ from backend.app.soul.adapters import (
     ports_from_store,
 )
 from backend.app.soul.ports import (
+    AgendaPort,
     EventLogPort,
     MemoryPort,
+    OpenLoopDraft,
     SoulEvent,
     StatePort,
 )
@@ -35,10 +39,14 @@ __all__ = [
     "MemoryPort",
     "StatePort",
     "EventLogPort",
+    "AgendaPort",
+    "OpenLoopDraft",
     "SQLiteMemoryPort",
     "SQLiteStatePort",
     "SQLiteEventLogPort",
+    "SQLiteAgendaPort",
     "NoopEventLogPort",
+    "NoopAgendaPort",
     "ports_from_store",
     "tag_reply_by_sentence",
 ]

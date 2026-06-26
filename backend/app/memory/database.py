@@ -214,6 +214,23 @@ class ReminderRecord:
 
 
 @dataclass(frozen=True)
+class OpenLoopRecord:
+    id: int
+    created_at: str
+    updated_at: str
+    status: str
+    kind: str
+    title: str
+    summary: str
+    due_at: str | None
+    last_mentioned_at: str | None
+    source_message_id: int | None
+    priority: float
+    confidence: float
+    metadata: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class ConversationSummaryRecord:
     id: int
     created_at: str
@@ -305,4 +322,22 @@ def _row_to_soul_event(row: sqlite3.Row) -> SoulEventRecord:
         created_at=str(row["created_at"]),
         kind=str(row["kind"]),
         payload=loads_json(row["payload_json"], {}),
+    )
+
+
+def _row_to_open_loop(row: sqlite3.Row) -> OpenLoopRecord:
+    return OpenLoopRecord(
+        id=int(row["id"]),
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"]),
+        status=str(row["status"]),
+        kind=str(row["kind"]),
+        title=str(row["title"]),
+        summary=str(row["summary"]),
+        due_at=row["due_at"],
+        last_mentioned_at=row["last_mentioned_at"],
+        source_message_id=row["source_message_id"],
+        priority=float(row["priority"]),
+        confidence=float(row["confidence"]),
+        metadata=loads_json(row["metadata_json"], {}),
     )

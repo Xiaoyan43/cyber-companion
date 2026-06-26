@@ -10,6 +10,7 @@ from backend.app.memory.database import (
     ConversationSummaryRecord,
     MemoryRecord,
     MoodStateRecord,
+    OpenLoopRecord,
     RelationshipStateRecord,
 )
 from backend.app.memory.usage_guard import BudgetGate
@@ -87,3 +88,42 @@ class EventLogPort(Protocol):
         kinds: set[str] | None = None,
         limit: int = 50,
     ) -> list[SoulEvent]: ...
+
+
+@dataclass(frozen=True)
+class OpenLoopDraft:
+    """Write payload for ``AgendaPort.upsert`` (§4 ``upsert(loop)``).
+
+    ``loop_id`` is the dedup key: set it to update an existing loop, leave it
+    ``None`` to create. Mirrors ``MemoryStore.upsert_open_loop`` kwargs.
+    """
+
+    kind: str
+    title: str
+    summary: str = ""
+    status: str = "open"
+    due_at: str | None = None
+    last_mentioned_at: str | None = None
+    source_message_id: int | None = None
+    priority: float = 0.5
+    confidence: float = 0.5
+    metadata: dict[str, Any] = field(default_factory=dict)
+    loop_id: int | None = None
+
+
+class AgendaPort(Protocol):
+    """Open loops / future events / agenda (§4). Phase 3B reads only; the
+    runtime does not write through it yet.
+    """
+
+    def open_loops(
+        self,
+        *,
+        status: str | None = "open",
+        due_before: str | None = None,
+        limit: int = 50,
+    ) -> list[OpenLoopRecord]: ...
+
+    def upsert(self, draft: OpenLoopDraft) -> OpenLoopRecord | None: ...
+
+    def close(self, loop_id: int) -> OpenLoopRecord | None: ...

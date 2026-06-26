@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from backend.app.behavior.engine import evaluate_behavior
 from backend.app.behavior.kernel import apply_signals_to_kernel
@@ -12,6 +12,7 @@ from backend.app.memory.database import (
     ConversationSummaryRecord,
     MemoryRecord,
     MoodStateRecord,
+    OpenLoopRecord,
     RelationshipStateRecord,
 )
 from backend.app.memory.store import MemoryStore
@@ -20,7 +21,34 @@ from backend.app.memory.usage_guard import BudgetGate, evaluate_llm_budget_gate
 from backend.app.memory.write_policy import record_turn_memories
 from backend.app.providers.types import ChatCompletionResult
 from backend.app.schemas import ChatMessageSchema
-from backend.app.soul.ports import EventLogPort, MemoryPort, SoulEvent, StatePort
+from backend.app.soul.ports import (
+    AgendaPort,
+    EventLogPort,
+    MemoryPort,
+    OpenLoopDraft,
+    SoulEvent,
+    StatePort,
+)
+
+
+class NoopAgendaPort:
+    """Default agenda port: no open loops. Lets ``SoulPorts`` stay constructible
+    without an agenda backend (the runtime does not read agenda in Phase 3B)."""
+
+    def open_loops(
+        self,
+        *,
+        status: str | None = "open",
+        due_before: str | None = None,
+        limit: int = 50,
+    ) -> list[OpenLoopRecord]:
+        return []
+
+    def upsert(self, draft: OpenLoopDraft) -> OpenLoopRecord | None:
+        return None
+
+    def close(self, loop_id: int) -> OpenLoopRecord | None:
+        return None
 
 
 @dataclass(frozen=True)
@@ -28,6 +56,7 @@ class SoulPorts:
     memory: MemoryPort
     state: StatePort
     event_log: EventLogPort
+    agenda: AgendaPort = field(default_factory=NoopAgendaPort)
 
 
 class SQLiteStatePort:
@@ -165,9 +194,46 @@ class SQLiteEventLogPort:
         ]
 
 
+class SQLiteAgendaPort:
+    def __init__(self, store: MemoryStore) -> None:
+        self._store = store
+
+    def open_loops(
+        self,
+        *,
+        status: str | None = "open",
+        due_before: str | None = None,
+        limit: int = 50,
+    ) -> list[OpenLoopRecord]:
+        return self._store.list_open_loops(
+            status=status,
+            due_before=due_before,
+            limit=limit,
+        )
+
+    def upsert(self, draft: OpenLoopDraft) -> OpenLoopRecord | None:
+        return self._store.upsert_open_loop(
+            loop_id=draft.loop_id,
+            kind=draft.kind,
+            title=draft.title,
+            summary=draft.summary,
+            status=draft.status,
+            due_at=draft.due_at,
+            last_mentioned_at=draft.last_mentioned_at,
+            source_message_id=draft.source_message_id,
+            priority=draft.priority,
+            confidence=draft.confidence,
+            metadata=draft.metadata,
+        )
+
+    def close(self, loop_id: int) -> OpenLoopRecord | None:
+        return self._store.close_open_loop(loop_id)
+
+
 def ports_from_store(store: MemoryStore) -> SoulPorts:
     return SoulPorts(
         memory=SQLiteMemoryPort(store),
         state=SQLiteStatePort(store),
         event_log=SQLiteEventLogPort(store),
+        agenda=SQLiteAgendaPort(store),
     )
