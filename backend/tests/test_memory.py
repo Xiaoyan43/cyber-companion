@@ -51,6 +51,7 @@ def test_init_database_creates_all_tables(store: MemoryStore) -> None:
         "reminders",
         "file_access_log",
         "schema_meta",
+        "soul_events",
     }.issubset(tables)
 
 

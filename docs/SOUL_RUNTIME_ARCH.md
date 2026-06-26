@@ -3,7 +3,7 @@
 > 状态：**目标架构 / 重构契约（Phase 0）**。本文件是 `codex/soul-runtime` 分支的源真相。
 > 由 2026-06-27 的「全项目架构盘点 + Shared Soul Layer 重构准备」审查 + 用户 10 项拍板产生。
 > 取代散落在各入口的回合编排；不改人格，只收敛结构。新 session 先读本文件 + `docs/ARCHITECTURE_V2.md`。
-> **▶ Phase 1 已完成（text + Pipecat surfaces）。Phase 2 已完成（ports at `SoulTurnRuntime` boundary）。新 session 实施 Phase 3 前先读 §6 Phase 3 行。**
+> **▶ Phase 1 已完成（text + Pipecat surfaces）。Phase 2 已完成（ports at `SoulTurnRuntime` boundary）。Phase 3A 已完成（append-only `soul_events`）。Phase 3B 待做（open-loops / agenda）。**
 
 ## 0. 北极星与范围
 
@@ -146,7 +146,8 @@ invariant 测试清单（现有）：`test_tone` · `test_mood` · `test_behavio
 | **0 ✅** | 本文档 + invariants 标记 | docs | 无 | 标 `-m invariant` | 删 doc |
 | **1 ✅** | 抽 `backend/app/soul/runtime.py`，3 个主链路入口改薄壳（text 非流式/流式 + Pipecat；turn_analyzer 按决策6延后） | main.py · companion_brain · 新 soul/ | 中（须等价） | 现有 4 路测试 + 新 turn 一致性契约 `test_soul_turn_contract` | runtime 是新增文件，壳层 revert |
 | **2 ✅** | 定义 `MemoryPort/StatePort/EventLogPort`，SQLite adapter 包裹 `MemoryStore`；**只在 runtime 边界依赖接口**。Phase 2 completed at the SoulTurnRuntime boundary: ports are introduced with SQLite adapters; MemoryStore internals and schema are unchanged. | soul/ + store adapter | 中 | `test_soul_ports` + `test_soul_turn_contract` + 全量 `backend/tests` | 接口默认绑 SQLite |
-| **3** | `soul_events`（append-only）+ `open_loops`（reminders 升级） | schema(additive) · runtime commit · proactive_reason | 中 | event 写入 + open-loop 触发 | 表 additive，停写即无副作用 |
+| **3A ✅** | `soul_events`（append-only）；runtime commit 写最小 `turn.committed` event | schema(additive) · runtime commit | 低中 | event append/tail + runtime 写入 + 全 backend tests | 表 additive，停写即无副作用 |
+| **3B** | `open_loops` / future events / agenda（reminders 升级）；proactive reason 迁读 agenda/open-loops | schema(additive) · proactive_reason | 中 | open-loop 触发 + proactive reason 回归 | feature flag 或停读 agenda 回退 |
 | **4** | 拆 `mood_state`：existential/计时器/死字段 `trust` 移出 | schema(additive) · kernel · mood · state_block | 中高 | §5 kernel/mood/tone invariant | **先 deprecate 不删**，旧列只读灰度 |
 | **5** | `MemoryPort` 后做 Letta（spike）/ Mem0（对照）adapter | memory/adapters/* | 低（隔离） | 契约测试复用 | 删 adapter |
 | **6** | proactive 迁 agenda/motivation，longing 留作节奏闸 | motivation policy · engine proactive 分支 | 中 | proactive 闸门 + agenda 触发 | feature flag 切回 longing |

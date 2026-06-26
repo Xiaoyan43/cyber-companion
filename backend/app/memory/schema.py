@@ -1,4 +1,4 @@
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 MEMORY_TYPES = (
     "stable_profile",
@@ -128,9 +128,18 @@ CREATE TABLE IF NOT EXISTS memory_links (
   UNIQUE (memory_id, related_memory_id)
 );
 
+CREATE TABLE IF NOT EXISTS soul_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  kind TEXT NOT NULL,
+  payload_json TEXT NOT NULL DEFAULT '{}'
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
 CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type);
 CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at);
 CREATE INDEX IF NOT EXISTS idx_reminders_status ON reminders(status);
 CREATE INDEX IF NOT EXISTS idx_memory_links_memory_id ON memory_links(memory_id);
+CREATE INDEX IF NOT EXISTS idx_soul_events_kind_id ON soul_events(kind, id);
+CREATE INDEX IF NOT EXISTS idx_soul_events_created_at ON soul_events(created_at);
 """

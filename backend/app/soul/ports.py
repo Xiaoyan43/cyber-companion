@@ -20,6 +20,8 @@ from backend.app.providers.types import ChatCompletionResult
 class SoulEvent:
     kind: str
     payload: dict[str, Any] = field(default_factory=dict)
+    id: int | None = None
+    created_at: str | None = None
 
 
 class StatePort(Protocol):
@@ -85,4 +87,3 @@ class EventLogPort(Protocol):
         kinds: set[str] | None = None,
         limit: int = 50,
     ) -> list[SoulEvent]: ...
-
