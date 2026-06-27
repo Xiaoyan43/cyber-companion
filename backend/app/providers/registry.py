@@ -1,3 +1,5 @@
+import os
+
 from backend.app.providers.base import ChatProvider
 from backend.app.providers.claude import ClaudeProvider
 from backend.app.providers.config import ProviderConfigEntry, ProvidersConfig
@@ -7,6 +9,22 @@ from backend.app.providers.mock import MockProvider
 from backend.app.providers.openai import OpenAIProvider
 from backend.app.providers.openrouter import OpenRouterProvider
 from backend.app.providers.venice import VeniceProvider
+
+
+TAGGER_API_KEY_ENV = "OPENROUTER_TAGGER_API_KEY"
+LEGACY_TAGGER_API_KEY_ENV = "OPENROUTER_GEMINI_API_KEY"
+
+
+def _tagger_api_key_env(configured: str | None) -> str:
+    """Prefer the neutral env name while keeping existing local setups working."""
+    selected = configured or TAGGER_API_KEY_ENV
+    if (
+        selected == TAGGER_API_KEY_ENV
+        and not os.getenv(TAGGER_API_KEY_ENV, "").strip()
+        and os.getenv(LEGACY_TAGGER_API_KEY_ENV, "").strip()
+    ):
+        return LEGACY_TAGGER_API_KEY_ENV
+    return selected
 
 
 def build_provider(entry: ProviderConfigEntry) -> ChatProvider:
@@ -59,13 +77,14 @@ def build_provider(entry: ProviderConfigEntry) -> ChatProvider:
             enabled=entry.enabled,
         )
 
-    if entry.name == "gemini":
-        # Routed through OpenRouter (same API, different model) — separate config key so
-        # it doesn't collide with the "openrouter" entry that powers the main chat LLM.
+    if entry.name in {"tagger", "gemini"}:
+        # Dedicated auxiliary model routed through OpenRouter. "gemini" remains a config
+        # alias for backward compatibility with local deployments created before the
+        # provider stopped being tied to a specific model family.
         return OpenRouterProvider(
             model=entry.model,
             base_url=entry.base_url or "https://openrouter.ai/api/v1",
-            api_key_env=entry.api_key_env or "OPENROUTER_GEMINI_API_KEY",
+            api_key_env=_tagger_api_key_env(entry.api_key_env),
             enabled=entry.enabled,
         )
 

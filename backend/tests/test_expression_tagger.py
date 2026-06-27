@@ -120,7 +120,7 @@ def test_apply_expression_tags_uses_default_provider_name() -> None:
 
     apply_expression_tags("原文", _mood(), router=router)  # type: ignore[arg-type]
 
-    assert router.captured_provider_name == DEFAULT_TAGGER_PROVIDER == "gemini"
+    assert router.captured_provider_name == DEFAULT_TAGGER_PROVIDER == "tagger"
 
 
 def test_apply_expression_tags_allows_provider_override() -> None:
@@ -260,7 +260,7 @@ def test_apply_expression_tags_to_sentence_returns_tagged_sentence() -> None:
 
 
 def test_apply_expression_tags_to_sentence_falls_back_on_provider_error() -> None:
-    router = _FakeRouter(error=ProviderError("boom", provider="gemini"))
+    router = _FakeRouter(error=ProviderError("boom", provider="tagger"))
 
     result = apply_expression_tags_to_sentence("原句不变。", _mood(), router=router)  # type: ignore[arg-type]
 
@@ -315,12 +315,12 @@ def test_apply_expression_tags_to_sentence_skips_punctuation_only_fragments(frag
     assert router.captured_request is None
 
 
-def test_apply_expression_tags_to_sentence_uses_gemini_by_default() -> None:
+def test_apply_expression_tags_to_sentence_uses_tagger_by_default() -> None:
     router = _FakeRouter(content="带标签的句子")
 
     apply_expression_tags_to_sentence("一句话", _mood(), router=router)  # type: ignore[arg-type]
 
-    assert router.captured_provider_name == DEFAULT_TAGGER_PROVIDER == "gemini"
+    assert router.captured_provider_name == DEFAULT_TAGGER_PROVIDER == "tagger"
 
 
 def test_apply_expression_tags_to_sentence_omits_prior_context_message_when_empty() -> None:

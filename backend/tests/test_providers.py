@@ -380,6 +380,59 @@ def test_openrouter_missing_key_raises_error(monkeypatch: pytest.MonkeyPatch) ->
         )
 
 
+def test_tagger_provider_prefers_neutral_api_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.app.providers.config import ProviderConfigEntry
+    from backend.app.providers.registry import build_provider
+
+    monkeypatch.setenv("OPENROUTER_TAGGER_API_KEY", "neutral-key")
+    monkeypatch.setenv("OPENROUTER_GEMINI_API_KEY", "legacy-key")
+    provider = build_provider(
+        ProviderConfigEntry(
+            name="tagger",
+            enabled=True,
+            model="anthropic/claude-haiku-4.5",
+            api_key_env="OPENROUTER_TAGGER_API_KEY",
+        )
+    )
+
+    assert provider.api_key == "neutral-key"  # type: ignore[attr-defined]
+
+
+def test_tagger_provider_accepts_legacy_api_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.app.providers.config import ProviderConfigEntry
+    from backend.app.providers.registry import build_provider
+
+    monkeypatch.delenv("OPENROUTER_TAGGER_API_KEY", raising=False)
+    monkeypatch.setenv("OPENROUTER_GEMINI_API_KEY", "legacy-key")
+    provider = build_provider(
+        ProviderConfigEntry(
+            name="tagger",
+            enabled=True,
+            model="anthropic/claude-haiku-4.5",
+            api_key_env="OPENROUTER_TAGGER_API_KEY",
+        )
+    )
+
+    assert provider.api_key == "legacy-key"  # type: ignore[attr-defined]
+
+
+def test_legacy_gemini_provider_alias_still_builds(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.app.providers.config import ProviderConfigEntry
+    from backend.app.providers.registry import build_provider
+
+    monkeypatch.setenv("OPENROUTER_GEMINI_API_KEY", "legacy-key")
+    provider = build_provider(
+        ProviderConfigEntry(
+            name="gemini",
+            enabled=True,
+            model="google/gemini-2.5-flash-lite",
+            api_key_env="OPENROUTER_GEMINI_API_KEY",
+        )
+    )
+
+    assert provider.api_key == "legacy-key"  # type: ignore[attr-defined]
+
+
 def test_chat_complete_unknown_provider_returns_error(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
