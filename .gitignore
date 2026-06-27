@@ -39,6 +39,11 @@ data/*.sqlite3
 data/runtime/
 data/backups/
 data/pipecat_spike/
+data/fish_model_ab/
+data/fish_rhythm_ab/
+data/tagger_eval/
+data/tagger_position_listen/
+data/ja_voice_audition/
 logs/
 
 # Generated media
@@ -51,6 +56,11 @@ recordings/
 # Scratch / tooling — never publish (vendor doc scrapes, local agent config)
 .firecrawl/
 .claude/
+.mcp.json
+.cursor/mcp.json
+.cursor/skills/
+.agents/
+skills-lock.json
 
 # Reference drop — vendor/API docs the user hands to Claude; never publish (copyright)
 reference/
