@@ -1,22 +1,31 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from backend.app.memory.database import (
+    BehaviorRuntimeStateRecord,
     ConversationSummaryRecord,
+    ExistentialStateRecord,
     FileAccessLogRecord,
     MemoryLinkRecord,
     MemoryRecord,
     MessageRecord,
     MoodStateRecord,
+    OpenLoopRecord,
     RelationshipStateRecord,
     ReminderRecord,
+    SoulEventRecord,
     _row_to_memory,
     _row_to_message,
+    _row_to_behavior_runtime,
+    _row_to_existential,
     _row_to_mood,
+    _row_to_open_loop,
     _row_to_relationship,
+    _row_to_soul_event,
     connect,
     dumps_json,
     init_database,
@@ -24,9 +33,36 @@ from backend.app.memory.database import (
     resolve_db_path,
     utc_now_iso,
 )
-from backend.app.memory.schema import MEMORY_TYPES
+from backend.app.memory.schema import (
+    MEMORY_TYPES,
+    OPEN_LOOP_KINDS,
+    OPEN_LOOP_STATUSES,
+    OPERATIONAL_MOOD_METADATA_KEYS,
+)
 
 _LINK_SNIPPET_MAX_LEN = 80
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
+
+
+def _normalize_aware_timestamp(value: str | None, *, field_name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty ISO 8601 timestamp")
+
+    text = value.strip()
+    if text.endswith("Z"):
+        text = f"{text[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a valid ISO 8601 timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{field_name} must include a timezone offset")
+    return parsed.astimezone(timezone.utc).isoformat()
 
 
 def _clip_link_snippet(content: str, max_len: int = _LINK_SNIPPET_MAX_LEN) -> str:
@@ -425,11 +461,415 @@ class MemoryStore:
             for row in rows
         ]
 
+    def append_soul_event(
+        self,
+        *,
+        kind: str,
+        payload: dict[str, Any] | None = None,
+    ) -> SoulEventRecord:
+        with connect(self.db_path) as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO soul_events (kind, payload_json)
+                VALUES (?, ?)
+                """,
+                (kind, dumps_json(payload or {})),
+            )
+            event_id = int(cursor.lastrowid)
+            row = connection.execute(
+                "SELECT * FROM soul_events WHERE id = ?",
+                (event_id,),
+            ).fetchone()
+        assert row is not None
+        return _row_to_soul_event(row)
+
+    def tail_soul_events(
+        self,
+        *,
+        kinds: set[str] | None = None,
+        limit: int = 50,
+    ) -> list[SoulEventRecord]:
+        if limit <= 0:
+            return []
+        if kinds is not None and not kinds:
+            return []
+
+        query = "SELECT * FROM soul_events"
+        params: list[Any] = []
+        if kinds is not None:
+            placeholders = ",".join("?" for _ in kinds)
+            query += f" WHERE kind IN ({placeholders})"
+            params.extend(sorted(kinds))
+        query += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+
+        with connect(self.db_path) as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [_row_to_soul_event(row) for row in reversed(rows)]
+
+    def create_open_loop(
+        self,
+        *,
+        kind: str,
+        title: str,
+        summary: str = "",
+        status: str = "open",
+        due_at: str | None = None,
+        last_mentioned_at: str | None = None,
+        source_message_id: int | None = None,
+        priority: float = 0.5,
+        confidence: float = 0.5,
+        metadata: dict[str, Any] | None = None,
+    ) -> OpenLoopRecord:
+        if kind not in OPEN_LOOP_KINDS:
+            raise ValueError(f"Unsupported open loop kind: {kind}")
+        if status not in OPEN_LOOP_STATUSES:
+            raise ValueError(f"Unsupported open loop status: {status}")
+        normalized_due_at = _normalize_aware_timestamp(due_at, field_name="due_at")
+        normalized_last_mentioned_at = _normalize_aware_timestamp(
+            last_mentioned_at,
+            field_name="last_mentioned_at",
+        )
+
+        with connect(self.db_path) as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO open_loops (
+                  status, kind, title, summary, due_at, last_mentioned_at,
+                  source_message_id, priority, confidence, metadata_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    status,
+                    kind,
+                    title,
+                    summary,
+                    normalized_due_at,
+                    normalized_last_mentioned_at,
+                    source_message_id,
+                    _clamp01(priority),
+                    _clamp01(confidence),
+                    dumps_json(metadata or {}),
+                ),
+            )
+            loop_id = int(cursor.lastrowid)
+            row = connection.execute(
+                "SELECT * FROM open_loops WHERE id = ?",
+                (loop_id,),
+            ).fetchone()
+        assert row is not None
+        return _row_to_open_loop(row)
+
+    def get_open_loop(self, loop_id: int) -> OpenLoopRecord | None:
+        with connect(self.db_path) as connection:
+            row = connection.execute(
+                "SELECT * FROM open_loops WHERE id = ?",
+                (loop_id,),
+            ).fetchone()
+        return _row_to_open_loop(row) if row else None
+
+    def upsert_open_loop(
+        self,
+        *,
+        loop_id: int | None = None,
+        kind: str,
+        title: str,
+        summary: str = "",
+        status: str = "open",
+        due_at: str | None = None,
+        last_mentioned_at: str | None = None,
+        source_message_id: int | None = None,
+        priority: float = 0.5,
+        confidence: float = 0.5,
+        metadata: dict[str, Any] | None = None,
+    ) -> OpenLoopRecord:
+        """Update an existing loop by ``loop_id`` if it exists, else create one.
+
+        Phase 3B-1 keeps the dedup key as the explicit ``id``; a natural-key
+        fingerprint can be added additively when an off-path writer lands (Phase 6).
+        """
+        if loop_id is None or self.get_open_loop(loop_id) is None:
+            return self.create_open_loop(
+                kind=kind,
+                title=title,
+                summary=summary,
+                status=status,
+                due_at=due_at,
+                last_mentioned_at=last_mentioned_at,
+                source_message_id=source_message_id,
+                priority=priority,
+                confidence=confidence,
+                metadata=metadata,
+            )
+
+        if kind not in OPEN_LOOP_KINDS:
+            raise ValueError(f"Unsupported open loop kind: {kind}")
+        if status not in OPEN_LOOP_STATUSES:
+            raise ValueError(f"Unsupported open loop status: {status}")
+        normalized_due_at = _normalize_aware_timestamp(due_at, field_name="due_at")
+        normalized_last_mentioned_at = _normalize_aware_timestamp(
+            last_mentioned_at,
+            field_name="last_mentioned_at",
+        )
+
+        with connect(self.db_path) as connection:
+            connection.execute(
+                """
+                UPDATE open_loops
+                SET updated_at = ?, status = ?, kind = ?, title = ?, summary = ?,
+                    due_at = ?, last_mentioned_at = ?, source_message_id = ?,
+                    priority = ?, confidence = ?, metadata_json = ?
+                WHERE id = ?
+                """,
+                (
+                    utc_now_iso(),
+                    status,
+                    kind,
+                    title,
+                    summary,
+                    normalized_due_at,
+                    normalized_last_mentioned_at,
+                    source_message_id,
+                    _clamp01(priority),
+                    _clamp01(confidence),
+                    dumps_json(metadata or {}),
+                    loop_id,
+                ),
+            )
+        record = self.get_open_loop(loop_id)
+        assert record is not None
+        return record
+
+    def list_open_loops(
+        self,
+        *,
+        status: str | None = "open",
+        due_before: str | None = None,
+        limit: int = 50,
+    ) -> list[OpenLoopRecord]:
+        if limit <= 0:
+            return []
+        if status is not None and status not in OPEN_LOOP_STATUSES:
+            raise ValueError(f"Unsupported open loop status: {status}")
+        normalized_due_before = _normalize_aware_timestamp(
+            due_before,
+            field_name="due_before",
+        )
+
+        query = "SELECT * FROM open_loops"
+        clauses: list[str] = []
+        params: list[Any] = []
+        if status is not None:
+            clauses.append("status = ?")
+            params.append(status)
+        if normalized_due_before is not None:
+            clauses.append("due_at IS NOT NULL AND julianday(due_at) <= julianday(?)")
+            params.append(normalized_due_before)
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        # Dated loops first (earliest due), then highest priority, then stable by id.
+        query += (
+            " ORDER BY (julianday(due_at) IS NULL), julianday(due_at) ASC,"
+            " priority DESC, id ASC LIMIT ?"
+        )
+        params.append(limit)
+
+        with connect(self.db_path) as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [_row_to_open_loop(row) for row in rows]
+
+    def close_open_loop(self, loop_id: int) -> OpenLoopRecord | None:
+        if self.get_open_loop(loop_id) is None:
+            return None
+        with connect(self.db_path) as connection:
+            connection.execute(
+                "UPDATE open_loops SET status = 'closed', updated_at = ? WHERE id = ?",
+                (utc_now_iso(), loop_id),
+            )
+        return self.get_open_loop(loop_id)
+
     def get_mood_state(self) -> MoodStateRecord:
         with connect(self.db_path) as connection:
-            row = connection.execute("SELECT * FROM mood_state WHERE id = 1").fetchone()
+            mood_row = connection.execute("SELECT * FROM mood_state WHERE id = 1").fetchone()
+            relationship_row = connection.execute(
+                "SELECT trust FROM relationship_state WHERE id = 1"
+            ).fetchone()
+            runtime_row = connection.execute(
+                "SELECT * FROM behavior_runtime_state WHERE id = 1"
+            ).fetchone()
+        assert mood_row is not None
+        assert relationship_row is not None
+        assert runtime_row is not None
+        mood = _row_to_mood(mood_row)
+        runtime = _row_to_behavior_runtime(runtime_row)
+        merged_metadata = {
+            key: value
+            for key, value in mood.metadata.items()
+            if key not in OPERATIONAL_MOOD_METADATA_KEYS
+        }
+        merged_metadata.update(runtime.metadata)
+        return replace(
+            mood,
+            trust=float(relationship_row["trust"]),
+            metadata=merged_metadata,
+        )
+
+    def get_behavior_runtime_state(self) -> BehaviorRuntimeStateRecord:
+        with connect(self.db_path) as connection:
+            row = connection.execute(
+                "SELECT * FROM behavior_runtime_state WHERE id = 1"
+            ).fetchone()
         assert row is not None
-        return _row_to_mood(row)
+        return _row_to_behavior_runtime(row)
+
+    def patch_behavior_runtime_metadata(
+        self,
+        *,
+        updates: dict[str, Any] | None = None,
+        remove: tuple[str, ...] = (),
+    ) -> BehaviorRuntimeStateRecord:
+        patch = updates or {}
+        invalid = (set(patch) | set(remove)) - OPERATIONAL_MOOD_METADATA_KEYS
+        if invalid:
+            raise ValueError(f"Non-operational behavior runtime keys: {sorted(invalid)}")
+
+        updated_at = utc_now_iso()
+        with connect(self.db_path) as connection:
+            runtime_row = connection.execute(
+                "SELECT metadata_json FROM behavior_runtime_state WHERE id = 1"
+            ).fetchone()
+            mood_row = connection.execute(
+                "SELECT metadata_json FROM mood_state WHERE id = 1"
+            ).fetchone()
+            assert runtime_row is not None
+            assert mood_row is not None
+
+            runtime_metadata = loads_json(runtime_row["metadata_json"], {})
+            if not isinstance(runtime_metadata, dict):
+                runtime_metadata = {}
+            runtime_metadata.update(patch)
+            for key in remove:
+                runtime_metadata.pop(key, None)
+
+            legacy_metadata = loads_json(mood_row["metadata_json"], {})
+            if not isinstance(legacy_metadata, dict):
+                legacy_metadata = {}
+            for key in OPERATIONAL_MOOD_METADATA_KEYS:
+                legacy_metadata.pop(key, None)
+            legacy_metadata.update(runtime_metadata)
+
+            connection.execute(
+                """
+                UPDATE behavior_runtime_state
+                SET updated_at = ?, metadata_json = ?
+                WHERE id = 1
+                """,
+                (updated_at, dumps_json(runtime_metadata)),
+            )
+            connection.execute(
+                """
+                UPDATE mood_state
+                SET updated_at = ?, metadata_json = ?
+                WHERE id = 1
+                """,
+                (updated_at, dumps_json(legacy_metadata)),
+            )
+        return BehaviorRuntimeStateRecord(updated_at=updated_at, metadata=runtime_metadata)
+
+    def patch_mood_metadata(
+        self,
+        *,
+        updates: dict[str, Any] | None = None,
+        remove: tuple[str, ...] = (),
+    ) -> MoodStateRecord:
+        patch = updates or {}
+        invalid = (set(patch) | set(remove)) & OPERATIONAL_MOOD_METADATA_KEYS
+        if invalid:
+            raise ValueError(f"Operational keys require runtime patch API: {sorted(invalid)}")
+
+        updated_at = utc_now_iso()
+        with connect(self.db_path) as connection:
+            row = connection.execute(
+                "SELECT metadata_json FROM mood_state WHERE id = 1"
+            ).fetchone()
+            assert row is not None
+            metadata = loads_json(row["metadata_json"], {})
+            if not isinstance(metadata, dict):
+                metadata = {}
+            metadata.update(patch)
+            for key in remove:
+                metadata.pop(key, None)
+            connection.execute(
+                "UPDATE mood_state SET updated_at = ?, metadata_json = ? WHERE id = 1",
+                (updated_at, dumps_json(metadata)),
+            )
+        return self.get_mood_state()
+
+    def replace_mood_metadata(self, metadata: dict[str, Any]) -> MoodStateRecord:
+        runtime_metadata = {
+            key: value
+            for key, value in metadata.items()
+            if key in OPERATIONAL_MOOD_METADATA_KEYS
+        }
+        updated_at = utc_now_iso()
+        with connect(self.db_path) as connection:
+            connection.execute(
+                """
+                UPDATE behavior_runtime_state
+                SET updated_at = ?, metadata_json = ?
+                WHERE id = 1
+                """,
+                (updated_at, dumps_json(runtime_metadata)),
+            )
+            # Keep the complete compatibility view in the legacy column. This is the
+            # rollback copy; canonical reads filter operational keys back through the
+            # behavior_runtime_state row above.
+            connection.execute(
+                "UPDATE mood_state SET updated_at = ?, metadata_json = ? WHERE id = 1",
+                (updated_at, dumps_json(metadata)),
+            )
+        return self.get_mood_state()
+
+    def get_existential_state(self) -> ExistentialStateRecord:
+        with connect(self.db_path) as connection:
+            row = connection.execute("SELECT * FROM existential_state WHERE id = 1").fetchone()
+        assert row is not None
+        return _row_to_existential(row)
+
+    def update_existential_state(
+        self,
+        *,
+        gap_feeling: float | None = None,
+        box_relation: float | None = None,
+        self_ease: float | None = None,
+    ) -> ExistentialStateRecord:
+        current = self.get_existential_state()
+        updated = ExistentialStateRecord(
+            updated_at=utc_now_iso(),
+            gap_feeling=_clamp01(
+                gap_feeling if gap_feeling is not None else current.gap_feeling
+            ),
+            box_relation=_clamp01(
+                box_relation if box_relation is not None else current.box_relation
+            ),
+            self_ease=_clamp01(self_ease if self_ease is not None else current.self_ease),
+        )
+        with connect(self.db_path) as connection:
+            connection.execute(
+                """
+                UPDATE existential_state
+                SET updated_at = ?, gap_feeling = ?, box_relation = ?, self_ease = ?
+                WHERE id = 1
+                """,
+                (
+                    updated.updated_at,
+                    updated.gap_feeling,
+                    updated.box_relation,
+                    updated.self_ease,
+                ),
+            )
+        return updated
 
     def update_mood_state(
         self,
@@ -441,11 +881,12 @@ class MemoryStore:
         worry: float | None = None,
         trust: float | None = None,
         loneliness: float | None = None,
-        gap_feeling: float | None = None,
-        box_relation: float | None = None,
-        self_ease: float | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> MoodStateRecord:
+        if trust is not None:
+            self.update_relationship_state(trust=trust)
+        if metadata is not None:
+            self.replace_mood_metadata(metadata)
         current = self.get_mood_state()
         updated = MoodStateRecord(
             updated_at=utc_now_iso(),
@@ -454,12 +895,9 @@ class MemoryStore:
             annoyance=annoyance if annoyance is not None else current.annoyance,
             boredom=boredom if boredom is not None else current.boredom,
             worry=worry if worry is not None else current.worry,
-            trust=trust if trust is not None else current.trust,
+            trust=current.trust,
             loneliness=loneliness if loneliness is not None else current.loneliness,
-            gap_feeling=gap_feeling if gap_feeling is not None else current.gap_feeling,
-            box_relation=box_relation if box_relation is not None else current.box_relation,
-            self_ease=self_ease if self_ease is not None else current.self_ease,
-            metadata=metadata if metadata is not None else current.metadata,
+            metadata=current.metadata,
         )
 
         with connect(self.db_path) as connection:
@@ -467,8 +905,7 @@ class MemoryStore:
                 """
                 UPDATE mood_state
                 SET updated_at = ?, mood = ?, energy = ?, annoyance = ?, boredom = ?,
-                    worry = ?, trust = ?, loneliness = ?, gap_feeling = ?,
-                    box_relation = ?, self_ease = ?, metadata_json = ?
+                    worry = ?, loneliness = ?
                 WHERE id = 1
                 """,
                 (
@@ -478,12 +915,7 @@ class MemoryStore:
                     updated.annoyance,
                     updated.boredom,
                     updated.worry,
-                    updated.trust,
                     updated.loneliness,
-                    updated.gap_feeling,
-                    updated.box_relation,
-                    updated.self_ease,
-                    dumps_json(updated.metadata),
                 ),
             )
         return updated

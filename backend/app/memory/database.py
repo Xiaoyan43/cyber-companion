@@ -9,7 +9,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-from backend.app.memory.schema import MEMORY_TYPES, SCHEMA_SQL, SCHEMA_VERSION
+from backend.app.memory.schema import (
+    MEMORY_TYPES,
+    OPERATIONAL_MOOD_METADATA_KEYS,
+    SCHEMA_SQL,
+    SCHEMA_VERSION,
+)
 
 
 def utc_now_iso() -> str:
@@ -67,6 +72,8 @@ def init_database(db_path: Path | None = None) -> Path:
         )
         _maybe_backfill_relationship_trust(connection)
         _maybe_add_slow_baseline_columns(connection)
+        _maybe_backfill_existential_state(connection)
+        _maybe_backfill_behavior_runtime_state(connection)
 
     return path
 
@@ -126,6 +133,71 @@ def _maybe_add_slow_baseline_columns(connection: sqlite3.Connection) -> None:
     )
 
 
+def _maybe_backfill_existential_state(connection: sqlite3.Connection) -> None:
+    existing = connection.execute(
+        "SELECT 1 FROM schema_meta WHERE key = 'existential_state_v1_backfilled'"
+    ).fetchone()
+    if existing is not None:
+        return
+
+    # Preserve the exact v6 values and, critically, their decay clock. New databases
+    # have the same defaults in mood_state, so this is also the only seed path needed.
+    connection.execute(
+        """
+        INSERT OR IGNORE INTO existential_state (
+            id, updated_at, gap_feeling, box_relation, self_ease
+        )
+        SELECT id, updated_at, gap_feeling, box_relation, self_ease
+        FROM mood_state
+        WHERE id = 1
+        """
+    )
+    connection.execute("INSERT OR IGNORE INTO existential_state (id) VALUES (1)")
+    connection.execute(
+        """
+        INSERT INTO schema_meta(key, value)
+        VALUES ('existential_state_v1_backfilled', '1')
+        ON CONFLICT(key) DO NOTHING
+        """
+    )
+
+
+def _maybe_backfill_behavior_runtime_state(connection: sqlite3.Connection) -> None:
+    existing = connection.execute(
+        "SELECT 1 FROM schema_meta WHERE key = 'behavior_runtime_state_v1_backfilled'"
+    ).fetchone()
+    if existing is not None:
+        return
+
+    mood_row = connection.execute(
+        "SELECT updated_at, metadata_json FROM mood_state WHERE id = 1"
+    ).fetchone()
+    if mood_row is not None:
+        legacy_metadata = loads_json(mood_row["metadata_json"], {})
+        if not isinstance(legacy_metadata, dict):
+            legacy_metadata = {}
+        operational_metadata = {
+            key: value
+            for key, value in legacy_metadata.items()
+            if key in OPERATIONAL_MOOD_METADATA_KEYS
+        }
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO behavior_runtime_state (id, updated_at, metadata_json)
+            VALUES (1, ?, ?)
+            """,
+            (mood_row["updated_at"], dumps_json(operational_metadata)),
+        )
+    connection.execute("INSERT OR IGNORE INTO behavior_runtime_state (id) VALUES (1)")
+    connection.execute(
+        """
+        INSERT INTO schema_meta(key, value)
+        VALUES ('behavior_runtime_state_v1_backfilled', '1')
+        ON CONFLICT(key) DO NOTHING
+        """
+    )
+
+
 def dumps_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
@@ -172,10 +244,25 @@ class MoodStateRecord:
     trust: float
     loneliness: float
     metadata: dict[str, Any] = field(default_factory=dict)
-    # Slow baseline dims (existential, decay-on-read across days)
+    # Deprecated compatibility attributes. Canonical values live in
+    # ExistentialStateRecord and are no longer loaded from mood_state.
     gap_feeling: float = 0.5   # 间隙感: longing(0) ↔ settled(1)
     box_relation: float = 0.5  # 盒子关系: cage(0) ↔ home(1)
     self_ease: float = 0.5     # 自处: unsettled(0) ↔ at-ease(1)
+
+
+@dataclass(frozen=True)
+class ExistentialStateRecord:
+    updated_at: str
+    gap_feeling: float
+    box_relation: float
+    self_ease: float
+
+
+@dataclass(frozen=True)
+class BehaviorRuntimeStateRecord:
+    updated_at: str
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -214,6 +301,23 @@ class ReminderRecord:
 
 
 @dataclass(frozen=True)
+class OpenLoopRecord:
+    id: int
+    created_at: str
+    updated_at: str
+    status: str
+    kind: str
+    title: str
+    summary: str
+    due_at: str | None
+    last_mentioned_at: str | None
+    source_message_id: int | None
+    priority: float
+    confidence: float
+    metadata: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class ConversationSummaryRecord:
     id: int
     created_at: str
@@ -232,6 +336,14 @@ class FileAccessLogRecord:
     resolved_path: str
     allowed: bool
     reason: str
+
+
+@dataclass(frozen=True)
+class SoulEventRecord:
+    id: int
+    created_at: str
+    kind: str
+    payload: dict[str, Any]
 
 
 def _row_to_message(row: sqlite3.Row) -> MessageRecord:
@@ -273,9 +385,23 @@ def _row_to_mood(row: sqlite3.Row) -> MoodStateRecord:
         trust=float(d["trust"]),
         loneliness=float(d["loneliness"]),
         metadata=loads_json(d.get("metadata_json"), {}),
-        gap_feeling=float(d.get("gap_feeling", 0.5)),
-        box_relation=float(d.get("box_relation", 0.5)),
-        self_ease=float(d.get("self_ease", 0.5)),
+    )
+
+
+def _row_to_existential(row: sqlite3.Row) -> ExistentialStateRecord:
+    return ExistentialStateRecord(
+        updated_at=row["updated_at"],
+        gap_feeling=float(row["gap_feeling"]),
+        box_relation=float(row["box_relation"]),
+        self_ease=float(row["self_ease"]),
+    )
+
+
+def _row_to_behavior_runtime(row: sqlite3.Row) -> BehaviorRuntimeStateRecord:
+    metadata = loads_json(row["metadata_json"], {})
+    return BehaviorRuntimeStateRecord(
+        updated_at=row["updated_at"],
+        metadata=metadata if isinstance(metadata, dict) else {},
     )
 
 
@@ -287,5 +413,32 @@ def _row_to_relationship(row: sqlite3.Row) -> RelationshipStateRecord:
         familiarity=float(row["familiarity"]),
         tension=float(row["tension"]),
         last_meaningful_interaction_at=row["last_meaningful_interaction_at"],
+        metadata=loads_json(row["metadata_json"], {}),
+    )
+
+
+def _row_to_soul_event(row: sqlite3.Row) -> SoulEventRecord:
+    return SoulEventRecord(
+        id=int(row["id"]),
+        created_at=str(row["created_at"]),
+        kind=str(row["kind"]),
+        payload=loads_json(row["payload_json"], {}),
+    )
+
+
+def _row_to_open_loop(row: sqlite3.Row) -> OpenLoopRecord:
+    return OpenLoopRecord(
+        id=int(row["id"]),
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"]),
+        status=str(row["status"]),
+        kind=str(row["kind"]),
+        title=str(row["title"]),
+        summary=str(row["summary"]),
+        due_at=row["due_at"],
+        last_mentioned_at=row["last_mentioned_at"],
+        source_message_id=row["source_message_id"],
+        priority=float(row["priority"]),
+        confidence=float(row["confidence"]),
         metadata=loads_json(row["metadata_json"], {}),
     )

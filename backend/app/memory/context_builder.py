@@ -11,6 +11,7 @@ from backend.app.memory.budget import BudgetConfig
 from backend.app.memory.holidays import get_holiday_window
 from backend.app.memory.database import (
     ConversationSummaryRecord,
+    ExistentialStateRecord,
     MemoryRecord,
     MessageRecord,
     MoodStateRecord,
@@ -105,8 +106,8 @@ def _exist_band(value: float) -> str:
     return "high"
 
 
-def _format_existential_block(mood: MoodStateRecord, *, now: datetime) -> str:
-    decayed = apply_slow_baseline_decay(mood, now=now)
+def _format_existential_block(state: ExistentialStateRecord, *, now: datetime) -> str:
+    decayed = apply_slow_baseline_decay(state, now=now)
     return (
         "[存在状态（慢底色，仅作内在基调，不要直接复述给用户）]\n"
         f"- 间隙感：{_GAP_PHRASES[_exist_band(decayed.gap_feeling)]}\n"
@@ -246,6 +247,7 @@ def build_provider_context(
 ) -> BuiltContext:
     config = budget or BudgetConfig()
     mood = store.get_mood_state()
+    existential = store.get_existential_state()
     relationship = store.get_relationship_state()
     latest_summary = store.get_latest_conversation_summary()
     now_iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -295,7 +297,11 @@ def build_provider_context(
         load_persona_system_prompt(),
         _format_time_block(),
         _format_mood_block(mood),
-        *([_format_existential_block(mood, now=now_nz)] if not load_persona().get("disable_existential_block") else []),
+        *(
+            [_format_existential_block(existential, now=now_nz)]
+            if not load_persona().get("disable_existential_block")
+            else []
+        ),
         _format_relationship_block(relationship),
     ]
     impression_block = _format_impression_block(store)

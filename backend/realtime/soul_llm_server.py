@@ -1,7 +1,9 @@
-"""OpenAI-compatible streaming LLM shim for AIGC-RTC OutputMode 1 (V2 RTC Stage 1).
+"""OpenAI-compatible transport adapter for AIGC-RTC hybrid mode (OutputMode 1).
 
-Wraps ``CompanionBrain`` so Volcengine's custom-LLM slot can call our soul without
-touching ``backend/app/main.py``.
+This is **not** a second soul orchestrator: it only exposes ``CompanionBrain`` (which
+delegates turn commit to ``SoulTurnRuntime``) over ``POST /v1/chat/completions`` so
+Volcengine's custom-LLM slot can call our soul without touching ``backend/app/main.py``.
+RTC pure-E2E off-path analysis lives in ``reflection.turn_analyzer`` instead.
 """
 
 from __future__ import annotations

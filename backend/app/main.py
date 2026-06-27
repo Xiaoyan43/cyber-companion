@@ -2,7 +2,6 @@ from contextlib import asynccontextmanager
 import base64
 import json
 from collections.abc import Iterator
-from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,7 +13,6 @@ from backend.app.behavior.completion import build_budget_block_completion, build
 from backend.app.behavior.engine import evaluate_behavior
 from backend.app.behavior.idle_experience import resolve_idle_experience_write
 from backend.app.behavior.proactive_opener import resolve_proactive_opener
-from backend.app.behavior.kernel import apply_signals_to_kernel
 from backend.app.behavior.parser import SignalStreamFilter, parse_structured_assistant_response
 from backend.app.behavior.tone import (
     contains_tone_marker_tag,
@@ -24,6 +22,7 @@ from backend.app.behavior.tone import (
     tts_emotion_directive,
 )
 from backend.app.behavior.types import BehaviorEvent
+from backend.app.soul import PerceivedEvent, SoulTurnRuntime, tag_reply_by_sentence
 from backend.app.cors import load_cors_origins
 from backend.app.files.config import load_permissions_config
 from backend.app.files.gateway import get_file_gateway, reset_file_gateway
@@ -36,7 +35,7 @@ from backend.app.memory.chat_persistence import (
 )
 from backend.app.memory.summary_policy import maybe_update_conversation_summary
 from backend.app.reflection.runner import run_reflection_if_due
-from backend.app.memory.write_policy import maybe_write_memories_from_turn, record_turn_memories
+from backend.app.memory.write_policy import maybe_write_memories_from_turn
 from backend.app.memory.usage_guard import evaluate_llm_budget_gate
 from backend.app.memory.database import (
     MemoryLinkRecord,
@@ -50,17 +49,10 @@ from backend.app.stt.exceptions import STTError
 from backend.app.stt.router import get_stt_router, reset_stt_router
 from backend.app.stt.types import TranscriptionRequest
 from backend.app.tts.exceptions import TTSError
-from backend.app.tts.expression_tagger import (
-    apply_expression_tags_to_sentence,
-    build_prior_context,
-    split_complete_sentences,
-)
 from backend.app.tts.router import get_tts_router, reset_tts_router
-from backend.app.tts.translator import translate_to_chinese
 from backend.app.tts.types import SynthesisRequest
 from backend.app.providers.exceptions import ProviderError
-from backend.app.providers.router import ProviderRouter, get_provider_router, reset_provider_router
-from backend.app.providers.cost import estimate_cost
+from backend.app.providers.router import get_provider_router, reset_provider_router
 from backend.app.providers.types import ChatCompletionRequest, ChatCompletionResult, ChatMessage
 from backend.app.rtc.routes import router as rtc_router
 from backend.realtime.pipeline_router import router as pipecat_router
@@ -725,43 +717,10 @@ def evaluate_behavior_route(request: BehaviorEvaluateRequest) -> BehaviorDecisio
     return _decision_to_schema(decision, saved_message_id=saved_message_id)
 
 
-_TAGGER_PRIOR_CONTEXT_CHAR_CAP = 800
-
-
-def _tag_reply_by_sentence(text: str, mood: MoodStateRecord, *, router: ProviderRouter) -> str:
-    """Tag ``text`` sentence-by-sentence instead of as one whole-text call.
-
-    Mirrors the voice pipeline's per-sentence tagging (``ExpressionTaggerProcessor``): a single
-    sentence's tagger failure (truncation/altered wording/dropped clause) only degrades that
-    sentence, not the entire reply — the failure mode that made long text-chat replies lose
-    every tag at once (see docs/HANDOFF.md 第六十四轮). Sentences are tagged concurrently via a
-    thread pool (``router.complete`` is blocking I/O) so latency tracks the slowest sentence
-    rather than the sum of all of them, then rejoined in original order.
-    """
-    if not text.strip():
-        return text
-    sentences, remainder = split_complete_sentences(text)
-    if remainder.strip():
-        sentences.append(remainder)
-    if not sentences:
-        return text
-    if len(sentences) == 1:
-        return apply_expression_tags_to_sentence(sentences[0], mood, router=router)
-
-    priors = [
-        build_prior_context(sentences[:index], _TAGGER_PRIOR_CONTEXT_CHAR_CAP)
-        for index in range(len(sentences))
-    ]
-    with ThreadPoolExecutor(max_workers=len(sentences)) as executor:
-        tagged = list(
-            executor.map(
-                lambda pair: apply_expression_tags_to_sentence(
-                    pair[0], mood, prior_context=pair[1], router=router
-                ),
-                zip(sentences, priors),
-            )
-        )
-    return "".join(tagged)
+# Backward-compatible alias: the per-sentence tagger now lives in the soul layer
+# (single source for run_turn + the streaming finalizer). The stream path and
+# ``test_main_tag_reply_by_sentence`` still reference ``_tag_reply_by_sentence``.
+_tag_reply_by_sentence = tag_reply_by_sentence
 
 
 @app.post(
@@ -776,7 +735,6 @@ def chat_complete(
     request: ChatCompleteRequest,
     background_tasks: BackgroundTasks,
 ) -> ChatCompleteResponse:
-    router = get_provider_router()
     store = get_memory_store()
     budget = load_budget_config()
 
@@ -787,110 +745,29 @@ def chat_complete(
     except ValueError as error:
         raise HTTPException(status_code=400, detail={"error": str(error)}) from error
 
-    decision = evaluate_behavior(
-        store,
-        BehaviorEvent(event_type="user_message", user_input=user_input),
+    # text non-stream surface: build the perceived event, run the shared soul turn,
+    # then frame the outcome as the HTTP response. ProviderError raised anywhere in
+    # run_turn maps to the same surface error shape as before.
+    runtime = SoulTurnRuntime(store=store, router=get_provider_router(), budget=budget)
+    event = PerceivedEvent(
+        event_type="user_message",
+        user_input=user_input,
+        surface="text",
+        provider=request.provider,
+        target_language=request.target_language,
     )
-    final_decision = decision.decision
-    called_llm = False
-    reply_signals: dict | None = None
-    translation: str | None = None
-
-    if decision.should_call_llm:
-        # Resolve the target model first so the spend brake can also veto pricier
-        # reasoning models before any provider call happens.
-        try:
-            target_model = router.get_provider(request.provider).status().model
-        except ProviderError as error:
-            raise HTTPException(
-                status_code=error.status_code,
-                detail={"error": error.message, "provider": error.provider},
-            ) from error
-
-        gate = evaluate_llm_budget_gate(store, budget, target_model=target_model)
-        if not gate.allowed:
-            # Spend brake tripped: answer locally, never touch the provider.
-            result = build_budget_block_completion(gate.block_line or "预算用完了，先省着点。")
-            avatar_state = "annoyed"
-            final_decision = "refuse"
-        else:
-            built = build_provider_context(
-                store,
-                user_input=user_input,
-                budget=budget,
-                behavior=decision,
-                target_language=request.target_language,
-            )
-            completion_request = ChatCompletionRequest(
-                messages=built.messages,
-                max_output_tokens=budget.max_output_tokens_per_turn,
-            )
-
-            try:
-                result = router.complete(completion_request, provider_name=request.provider)
-            except ProviderError as error:
-                raise HTTPException(
-                    status_code=error.status_code,
-                    detail={"error": error.message, "provider": error.provider},
-                ) from error
-
-            parsed = parse_structured_assistant_response(result.content)
-            reply_signals = parsed.signals
-            if request.target_language:
-                translation = translate_to_chinese(parsed.content, router=router)
-            avatar_state = parsed.avatar_state or (
-                "talking" if decision.decision in {"reply", "interrupt"} else decision.avatar_state
-            )
-            if parsed.decision:
-                final_decision = parsed.decision
-            called_llm = True
-            try:
-                apply_signals_to_kernel(store, parsed.signals)
-            except Exception:
-                pass
-            tagged_content = _tag_reply_by_sentence(
-                parsed.content,
-                store.get_mood_state(),
-                router=router,
-            )
-            result = type(result)(
-                provider=result.provider,
-                model=result.model,
-                content=tagged_content,
-                usage=result.usage,
-                cost=result.cost,
-                mock=result.mock,
-            )
-    else:
-        result = build_local_completion(decision, user_input=user_input)
-        avatar_state = decision.avatar_state
-
-    saved_ids = persist_chat_turn(
-        store,
-        [ChatMessageSchema(role="user", content=user_input)],
-        result,
-        decision=final_decision,
-        avatar_state=avatar_state,
-        should_call_llm=called_llm,
-        translation=translation,
-    )
-    user_message_id = saved_ids[0] if user_input.strip() and saved_ids else None
     try:
-        record_turn_memories(
-            store,
-            user_input=user_input,
-            signals=reply_signals,
-            source_message_id=user_message_id,
-            budget=budget,
-        )
-    except Exception:
-        pass
-    maybe_update_conversation_summary(store, budget=budget)
+        outcome = runtime.run_turn(event)
+    except ProviderError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail={"error": error.message, "provider": error.provider},
+        ) from error
 
-    if called_llm:
-        store.note_llm_turn()
+    if outcome.called_llm:
         background_tasks.add_task(run_reflection_if_due, store, budget)
 
+    result = outcome.result
     return ChatCompleteResponse(
         provider=result.provider,
         model=result.model,
@@ -907,10 +784,10 @@ def chat_complete(
             pricing_source=result.cost.pricing_source,
         ),
         mock=result.mock,
-        avatar_state=avatar_state,
-        decision=final_decision,
-        should_call_llm=called_llm,
-        translation=translation,
+        avatar_state=outcome.avatar_state,
+        decision=outcome.decision,
+        should_call_llm=outcome.called_llm,
+        translation=outcome.translation,
     )
 
 
@@ -948,87 +825,6 @@ def _chat_stream_done_meta(
     }
 
 
-def _finalize_streamed_turn(
-    store,
-    budget,
-    *,
-    user_input: str,
-    accumulated_text: str,
-    provider_name: str,
-    model: str,
-    usage,
-    mock: bool,
-    decision: str,
-    avatar_state: str,
-    should_call_llm: bool,
-    target_language: str | None = None,
-) -> tuple[ChatCompletionResult, str | None]:
-    cost = estimate_cost(model, usage)
-    result = ChatCompletionResult(
-        provider=provider_name,
-        model=model,
-        content=accumulated_text,
-        usage=usage,
-        cost=cost,
-        mock=mock,
-    )
-    parsed = parse_structured_assistant_response(result.content)
-    try:
-        apply_signals_to_kernel(store, parsed.signals)
-    except Exception:
-        pass
-    final_avatar_state = parsed.avatar_state or avatar_state
-    final_decision = parsed.decision or decision
-    final_content = _tag_reply_by_sentence(
-        parsed.content,
-        store.get_mood_state(),
-        router=get_provider_router(),
-    )
-    translation: str | None = None
-    if target_language:
-        translation = translate_to_chinese(parsed.content, router=get_provider_router())
-    result = ChatCompletionResult(
-        provider=result.provider,
-        model=result.model,
-        content=final_content,
-        usage=result.usage,
-        cost=result.cost,
-        mock=result.mock,
-    )
-    saved_ids = persist_chat_turn(
-        store,
-        [ChatMessageSchema(role="user", content=user_input)],
-        result,
-        decision=final_decision,
-        avatar_state=final_avatar_state,
-        should_call_llm=should_call_llm,
-        translation=translation,
-    )
-    user_message_id = saved_ids[0] if user_input.strip() and saved_ids else None
-    try:
-        record_turn_memories(
-            store,
-            user_input=user_input,
-            signals=parsed.signals,
-            source_message_id=user_message_id,
-            budget=budget,
-        )
-    except Exception:
-        pass
-    maybe_update_conversation_summary(store, budget=budget)
-    return (
-        ChatCompletionResult(
-            provider=result.provider,
-            model=result.model,
-            content=result.content,
-            usage=result.usage,
-            cost=result.cost,
-            mock=result.mock,
-        ),
-        translation,
-    )
-
-
 @app.post(
     "/chat/stream",
     response_model=None,
@@ -1042,6 +838,7 @@ def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
     router = get_provider_router()
     store = get_memory_store()
     budget = load_budget_config()
+    runtime = SoulTurnRuntime(store=store, router=router, budget=budget)
 
     try:
         user_input = extract_latest_user_input(
@@ -1144,9 +941,7 @@ def chat_stream(request: ChatCompleteRequest) -> StreamingResponse:
                     return
 
                 accumulated_text = "".join(accumulated_parts)
-                result, translation = _finalize_streamed_turn(
-                    store,
-                    budget,
+                result, translation = runtime.finalize_streamed_turn(
                     user_input=user_input,
                     accumulated_text=accumulated_text,
                     provider_name=provider_status.name,

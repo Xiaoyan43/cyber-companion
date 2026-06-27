@@ -245,5 +245,15 @@ def resolve_idle_experience_write(
         str(material.get("id")),
         max_size=budget.idle_experience_fingerprint_history_size,
     )
-    store.update_mood_state(metadata=updated_metadata)
+    store.patch_behavior_runtime_metadata(
+        updates={
+            key: updated_metadata[key]
+            for key in (
+                _LAST_AT_KEY,
+                _DAILY_DATE_KEY,
+                _DAILY_COUNT_KEY,
+                _FINGERPRINT_KEY,
+            )
+        }
+    )
     return memory

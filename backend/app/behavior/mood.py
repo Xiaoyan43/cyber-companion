@@ -3,7 +3,12 @@ from datetime import datetime, timezone
 
 from backend.app.behavior.tone import project_tone
 from backend.app.behavior.types import ToneMode
-from backend.app.memory.database import MemoryRecord, MoodStateRecord, RelationshipStateRecord
+from backend.app.memory.database import (
+    ExistentialStateRecord,
+    MemoryRecord,
+    MoodStateRecord,
+    RelationshipStateRecord,
+)
 
 
 def choose_tone_mode(
@@ -103,26 +108,34 @@ _DECAY_BOX_RELATION = 0.01
 _DECAY_SELF_EASE = 0.005
 
 
-def apply_slow_baseline_decay(mood: MoodStateRecord, *, now: datetime) -> MoodStateRecord:
+def apply_slow_baseline_decay(
+    state: ExistentialStateRecord,
+    *,
+    now: datetime,
+) -> ExistentialStateRecord:
     """Decay-on-read: compute existential baseline as if time has passed since last DB write.
 
     Pure calculation — does not write to DB. Caller uses the returned record for context
     injection only; the DB record (and its updated_at) stays unchanged.
     """
-    stored_at = datetime.fromisoformat(mood.updated_at)
+    stored_at = datetime.fromisoformat(state.updated_at)
     if stored_at.tzinfo is None:
         stored_at = stored_at.replace(tzinfo=timezone.utc)
     elapsed_days = max(0.0, (now - stored_at).total_seconds() / 86400.0)
 
     return dataclasses.replace(
-        mood,
-        gap_feeling=_clamp01(mood.gap_feeling - _DECAY_GAP_FEELING * elapsed_days),
-        box_relation=_clamp01(mood.box_relation - _DECAY_BOX_RELATION * elapsed_days),
-        self_ease=_clamp01(mood.self_ease - _DECAY_SELF_EASE * elapsed_days),
+        state,
+        gap_feeling=_clamp01(state.gap_feeling - _DECAY_GAP_FEELING * elapsed_days),
+        box_relation=_clamp01(state.box_relation - _DECAY_BOX_RELATION * elapsed_days),
+        self_ease=_clamp01(state.self_ease - _DECAY_SELF_EASE * elapsed_days),
     )
 
 
-def apply_interaction_slow_delta(mood: MoodStateRecord, *, positive_turn: bool) -> MoodStateRecord:
+def apply_interaction_slow_delta(
+    state: ExistentialStateRecord,
+    *,
+    positive_turn: bool,
+) -> ExistentialStateRecord:
     """Nudge existential baseline based on interaction quality.
 
     Positive turns push all three dims toward 1.0 (settled / home / at-ease).
@@ -131,16 +144,16 @@ def apply_interaction_slow_delta(mood: MoodStateRecord, *, positive_turn: bool) 
     """
     if positive_turn:
         return dataclasses.replace(
-            mood,
-            gap_feeling=_clamp01(mood.gap_feeling + 0.08),
-            box_relation=_clamp01(mood.box_relation + 0.04),
-            self_ease=_clamp01(mood.self_ease + 0.02),
+            state,
+            gap_feeling=_clamp01(state.gap_feeling + 0.08),
+            box_relation=_clamp01(state.box_relation + 0.04),
+            self_ease=_clamp01(state.self_ease + 0.02),
         )
     return dataclasses.replace(
-        mood,
-        gap_feeling=_clamp01(mood.gap_feeling - 0.04),
-        box_relation=_clamp01(mood.box_relation - 0.02),
-        self_ease=_clamp01(mood.self_ease - 0.01),
+        state,
+        gap_feeling=_clamp01(state.gap_feeling - 0.04),
+        box_relation=_clamp01(state.box_relation - 0.02),
+        self_ease=_clamp01(state.self_ease - 0.01),
     )
 
 

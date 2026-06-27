@@ -190,7 +190,7 @@ def test_user_message_clears_pending_and_unblocks(store: MemoryStore) -> None:
     decision = evaluate_behavior(
         store,
         BehaviorEvent(event_type="proactive_check"),
-        budget=_quiet_budget(),
+        budget=_quiet_budget(proactive_reason_mode="longing_only"),
         rng=random.Random(0),
         now=now,
     )

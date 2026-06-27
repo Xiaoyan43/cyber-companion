@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 ProactiveReasonKind = Literal[
     "due_reminder",
+    "open_loop",
     "commitment_followup",
     "share",
     "memory_callback",
@@ -88,6 +89,7 @@ class ProactiveReason:
     detail: str
     reminder_id: int | None = None
     memory_id: int | None = None
+    open_loop_id: int | None = None
     longing_intensity: float = 0.0
     longing_tier: LongingTier = "bored"
 
@@ -119,6 +121,27 @@ def _pick_due_reminder(store: MemoryStore, *, now: datetime) -> ProactiveReason 
         summary=due.title,
         detail=detail,
         reminder_id=due.id,
+    )
+
+
+def _pick_open_loop(store: MemoryStore, *, now: datetime) -> ProactiveReason | None:
+    """Surface a due/overdue open loop (agenda, Phase 3B) as a proactive reason.
+
+    Only loops whose ``due_at`` has passed are eligible — open-but-not-yet-due
+    loops do not trigger proactive contact.
+    """
+    now_iso = now.astimezone(timezone.utc).isoformat()
+    due = store.list_open_loops(status="open", due_before=now_iso, limit=1)
+    if not due:
+        return None
+    loop = due[0]
+    detail = loop.summary.strip() or loop.title
+    return ProactiveReason(
+        kind="open_loop",
+        avatar_state="worried",
+        summary=loop.title,
+        detail=detail,
+        open_loop_id=loop.id,
     )
 
 
@@ -198,18 +221,26 @@ def _pick_memory_callback(store: MemoryStore, *, now: datetime) -> ProactiveReas
     )
 
 
-def pick_proactive_reason(
+def _pick_substantive_proactive_reason(
     store: MemoryStore,
     *,
-    longing_intensity: float = 0.0,
     longing_tier: LongingTier = "bored",
     now: datetime | None = None,
-) -> ProactiveReason:
+) -> ProactiveReason | None:
+    """Agenda-backed reasons only: reminders, due open loops, memory intents.
+
+    Open-but-not-yet-due loops are excluded by ``_pick_open_loop`` (``due_before=now``).
+    Returns ``None`` when nothing substantive is available.
+    """
     aware = _aware_now(now)
 
     due = _pick_due_reminder(store, now=aware)
     if due is not None:
         return replace(due, longing_tier=longing_tier)
+
+    open_loop = _pick_open_loop(store, now=aware)
+    if open_loop is not None:
+        return replace(open_loop, longing_tier=longing_tier)
 
     commitment = _pick_commitment_followup(store, now=aware)
     if commitment is not None:
@@ -223,6 +254,25 @@ def pick_proactive_reason(
     if callback is not None:
         return replace(callback, longing_tier=longing_tier)
 
+    return None
+
+
+def pick_agenda_proactive_reason(
+    store: MemoryStore,
+    *,
+    longing_tier: LongingTier = "bored",
+    now: datetime | None = None,
+) -> ProactiveReason | None:
+    """Phase 6 default: substantive agenda reason, or ``None`` (no longing fallback)."""
+    return _pick_substantive_proactive_reason(store, longing_tier=longing_tier, now=now)
+
+
+def check_in_proactive_reason(
+    *,
+    longing_intensity: float,
+    longing_tier: LongingTier = "bored",
+) -> ProactiveReason:
+    """Longing-only fallback reason — not an agenda item."""
     return ProactiveReason(
         kind="check_in",
         avatar_state="worried",
@@ -233,10 +283,34 @@ def pick_proactive_reason(
     )
 
 
+def pick_proactive_reason(
+    store: MemoryStore,
+    *,
+    longing_intensity: float = 0.0,
+    longing_tier: LongingTier = "bored",
+    now: datetime | None = None,
+) -> ProactiveReason:
+    """Legacy picker: substantive reason first, then longing check-in fallback."""
+    substantive = _pick_substantive_proactive_reason(
+        store,
+        longing_tier=longing_tier,
+        now=now,
+    )
+    if substantive is not None:
+        return substantive
+    return check_in_proactive_reason(
+        longing_intensity=longing_intensity,
+        longing_tier=longing_tier,
+    )
+
+
 def fallback_line_for_reason(reason: ProactiveReason) -> str:
     if reason.kind == "due_reminder":
         title = reason.summary.strip() or "那件事"
         return f"喂，{title}到期了。别装没看见。"
+    if reason.kind == "open_loop":
+        title = reason.summary.strip() or "那件事"
+        return f"那个「{title}」该收尾了吧？别一直挂着。"
     if reason.kind == "commitment_followup":
         if "求职" in reason.summary or reason.memory_id is not None:
             return local_response_for_decision("proactive")
@@ -255,6 +329,12 @@ def format_reason_block(reason: ProactiveReason) -> str:
             "[Proactive reason: due reminder]\n"
             f"title={reason.summary}\n"
             f"details={reason.detail}"
+        )
+    elif reason.kind == "open_loop":
+        block = (
+            "[Proactive reason: open loop — an unfinished thread that's now due]\n"
+            f"title={reason.summary}\n"
+            f"context={reason.detail}"
         )
     elif reason.kind == "commitment_followup":
         block = (

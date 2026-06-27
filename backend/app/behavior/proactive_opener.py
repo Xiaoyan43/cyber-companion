@@ -232,7 +232,19 @@ def resolve_proactive_opener(
             reason.memory_id,
             max_size=budget.share_fingerprint_history_size,
         )
-    store.update_mood_state(metadata=updated_metadata)
+    runtime_keys = {
+        "proactive_llm_daily_date",
+        "proactive_llm_daily_count",
+        _FINGERPRINT_KEY,
+        "share_recent_memory_ids",
+    }
+    store.patch_behavior_runtime_metadata(
+        updates={
+            key: value
+            for key, value in updated_metadata.items()
+            if key in runtime_keys
+        }
+    )
     return replace(
         decision,
         local_response=completion.content,

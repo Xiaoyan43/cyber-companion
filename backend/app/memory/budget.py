@@ -4,6 +4,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,9 @@ class BudgetConfig:
     daily_llm_turn_limit: int = 200
     allow_reasoning_model: bool = False
     # Proactive initiation (PI-1 longing model). Defaults are conservative / quiet.
+    # ``agenda``: substantive open-loop/reminder/memory reasons only (Phase 6 default).
+    # ``longing_only``: rollback — longing check-in may fire without agenda item.
+    proactive_reason_mode: Literal["agenda", "longing_only"] = "agenda"
     enable_proactive: bool = True
     proactive_quiet_hours: tuple[int, ...] = (23, 8)
     proactive_min_gap_minutes: int = 30
@@ -96,6 +100,7 @@ def load_budget_config(config_dir: Path | None = None) -> BudgetConfig:
         monthly_usd_limit=float(payload.get("monthly_usd_limit", 10.0)),
         daily_llm_turn_limit=int(payload.get("daily_llm_turn_limit", 200)),
         allow_reasoning_model=bool(payload.get("allow_reasoning_model", False)),
+        proactive_reason_mode=_parse_proactive_reason_mode(payload.get("proactive_reason_mode")),
         enable_proactive=bool(payload.get("enable_proactive", True)),
         proactive_quiet_hours=_parse_quiet_hours(payload.get("proactive_quiet_hours")),
         proactive_min_gap_minutes=int(payload.get("proactive_min_gap_minutes", 30)),
@@ -124,6 +129,12 @@ def load_budget_config(config_dir: Path | None = None) -> BudgetConfig:
         ),
         share_fingerprint_history_size=int(payload.get("share_fingerprint_history_size", 4)),
     )
+
+
+def _parse_proactive_reason_mode(raw: object) -> Literal["agenda", "longing_only"]:
+    if raw == "longing_only":
+        return "longing_only"
+    return "agenda"
 
 
 def _parse_quiet_hours(raw: object) -> tuple[int, ...]:
