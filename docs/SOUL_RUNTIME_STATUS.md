@@ -12,15 +12,15 @@
 | 字段 | 值 |
 |---|---|
 | **branch** | `codex/soul-runtime` |
-| **current HEAD** | `c59ce2f` — `docs(soul): mark Phase 6 accepted @ e0b4f23` |
-| **accepted HEAD** | `c59ce2f` — Phase 0–6 全部验收通过；下一任务从 Phase 7 起 |
+| **current HEAD** | `f844ed5` — `docs(soul): fix Phase 6 accepted HEAD pointer to c59ce2f` |
+| **accepted HEAD** | `f844ed5` — Phase 0–6 全部验收通过；下一任务从 Phase 7 起 |
 
 > **accepted HEAD** = 用户/审查已确认可当作下一 session 起点的 commit。
 > 工作树有 dirty 文件时，**以 accepted HEAD 为准**，不要假设 dirty 内容已落地。
 
 ---
 
-## 2. 测试基线（accepted @ `c59ce2f` / feat `e0b4f23`）
+## 2. 测试基线（accepted @ `f844ed5` / feat `e0b4f23`）
 
 | 套件 | 命令 | 结果 |
 |---|---|---|
@@ -45,7 +45,7 @@ invariant 入口：`pytest.ini` + `backend/tests/conftest.py`（collection hook 
 | **4** | ✅ accepted | `6518c14` · `40eb4c7` · `2d22e4f` | **4A** `existential_state` 拆分；**4B** `behavior_runtime_state` 拆分 + trust canonical |
 | **4.5** | ✅ accepted | `1a625db` · `d6003f1` | 注册 `invariant` pytest marker；351 条可 `-m invariant` 运行 |
 | **5** | ✅ accepted | `72d3076` · `90ddedb` | 隔离 Mem0/Letta candidate adapter spike；SQLite canonical 不变；无 schema/runtime 接入 |
-| **6** | ✅ accepted | `e0b4f23` · `c59ce2f` | proactive 迁 `motivation.py`：`agenda` 模式 due/overdue open_loop 等为 reason 来源；longing/Poisson 仅节奏闸；`proactive_reason_mode=longing_only` rollback |
+| **6** | ✅ accepted | `e0b4f23` · `c59ce2f` · `f844ed5` | proactive 迁 `motivation.py`：`agenda` 模式 due/overdue open_loop 等为 reason 来源；longing/Poisson 仅节奏闸；`proactive_reason_mode=longing_only` rollback |
 
 **Phase 4 后仍开放的 §5 缺口**：4 个 surface「同输入 → 同 kernel/memory 副作用」turn 一致性契约测试（部分已在 Phase 1 `test_soul_turn_contract` 起步，Pipecat/RTC 覆盖待补）。
 
@@ -79,7 +79,7 @@ invariant 入口：`pytest.ini` + `backend/tests/conftest.py`（collection hook 
 
 | Phase | 范围 | 风险 | 前置 |
 |---|---|---|---|
-| **6** | proactive 迁 agenda/motivation；longing/Poisson 仅作节奏闸 | 中 | ✅ accepted @ `c59ce2f` |
+| **6** | proactive 迁 agenda/motivation；longing/Poisson 仅作节奏闸 | 中 | ✅ accepted @ `f844ed5` |
 | **7** | 清理：合并 turn_analyzer、退役 soul_llm_server、统一语音换件 | 低 | Phase 6 accepted |
 
 并行列项：**persona 版本化**（决策 8）可在 Phase 5–6 顺带；**RTC**（决策 6）在 Phase 7 决定归档/删除。
