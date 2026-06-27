@@ -3,7 +3,7 @@
 > **冷启动入口**：新 session 先读本文件 + `docs/SOUL_RUNTIME_ARCH.md`（架构契约）。
 > 本文件记录**已验收进度**与**工作树禁区**；不替代 ARCH 的设计细节。
 
-最后更新：**2026-06-27** · branch `codex/soul-runtime` · **Phase 0–6 accepted**
+最后更新：**2026-06-27** · branch `codex/soul-runtime` · **Phase 0–7 accepted**
 
 ---
 
@@ -12,29 +12,28 @@
 | 字段 | 值 |
 |---|---|
 | **branch** | `codex/soul-runtime` |
-| **accepted implementation HEAD** | `e0b4f23` — `feat(soul): route proactive motivation through agenda`（Phase 6 代码/测试验收 checkpoint） |
-| **status/doc branch tip** | `c223234` — 末条 Phase 6 状态对齐 docs（**纯 docs commit 不抬高 implementation checkpoint**） |
+| **accepted implementation HEAD** | `b21bc47` — `feat(soul): consolidate Phase 7 off-path commit and voice adapters`（Phase 7 代码/测试验收 checkpoint） |
+| **latest accepted docs-only tip** | `34e0934` — Phase 6 状态对齐 docs（**纯 docs commit 不抬高 implementation checkpoint**） |
 
 > **accepted implementation HEAD** = 最后验收通过的**代码/测试** commit；下一 session 冷启动与回归以它为基准。
-> 其后仅更新本 STATUS/ARCH 的 docs commit（如 `c59ce2f`…`c223234`）**不算**新的 implementation checkpoint，无需循环改 SHA。
+> 仅更新本 STATUS/ARCH 的 docs commit（如 `c59ce2f`…`34e0934`）**不算**新的 implementation checkpoint，无需循环改 SHA。
 > 工作树有 dirty 文件时，**以 accepted implementation HEAD 为准**，不要假设 dirty 内容已落地。
 
 ---
 
-## 2. 测试基线（accepted implementation @ `e0b4f23`）
+## 2. 测试基线（accepted implementation @ `b21bc47`）
 
 | 套件 | 命令 | 结果 |
 |---|---|---|
-| **Phase 5 targeted** | `pytest backend/tests/test_memory_adapter_contract.py backend/tests/test_soul_ports.py backend/tests/test_soul_turn_contract.py` | **13 passed** |
-| **invariant** | `pytest -m invariant` | **365 passed** |
-| **backend 全量** | `pytest backend/tests` | **738 passed** |
+| **invariant** | `./.venv/bin/python -m pytest -m invariant` | **365 passed** |
+| **backend 全量** | `./.venv/bin/python -m pytest backend/tests` | **738 passed** |
 
 invariant 入口：`pytest.ini` + `backend/tests/conftest.py`（collection hook 按 §5 文件名/前缀打标）。
 详见 `docs/SOUL_RUNTIME_ARCH.md` §5。
 
 ---
 
-## 3. Phase 0–5 进度与 commits
+## 3. Phase 0–7 进度与 commits
 
 | Phase | 状态 | 关键 commits | 摘要 |
 |---|---|---|---|
@@ -47,6 +46,7 @@ invariant 入口：`pytest.ini` + `backend/tests/conftest.py`（collection hook 
 | **4.5** | ✅ accepted | `1a625db` · `d6003f1` | 注册 `invariant` pytest marker；351 条可 `-m invariant` 运行 |
 | **5** | ✅ accepted | `72d3076` · `90ddedb` | 隔离 Mem0/Letta candidate adapter spike；SQLite canonical 不变；无 schema/runtime 接入 |
 | **6** | ✅ accepted | `e0b4f23` | proactive 迁 `motivation.py`：`agenda` 模式 due/overdue open_loop 等为 reason 来源；longing/Poisson 仅节奏闸；`proactive_reason_mode=longing_only` rollback |
+| **7** | ✅ accepted | `b21bc47` | 合并 RTC off-path `turn_analyzer` commit 到 `SoulTurnRuntime.commit_turn`；`soul_llm_server`/`companion_brain` 明确为 voice/transport adapter；无 schema 变更 |
 
 **Phase 4 后仍开放的 §5 缺口**：4 个 surface「同输入 → 同 kernel/memory 副作用」turn 一致性契约测试（部分已在 Phase 1 `test_soul_turn_contract` 起步，Pipecat/RTC 覆盖待补）。
 
@@ -80,20 +80,20 @@ invariant 入口：`pytest.ini` + `backend/tests/conftest.py`（collection hook 
 
 | Phase | 范围 | 风险 | 前置 |
 |---|---|---|---|
-| **6** | proactive 迁 agenda/motivation；longing/Poisson 仅作节奏闸 | 中 | ✅ accepted @ `e0b4f23` |
-| **7** | 清理：合并 turn_analyzer、退役 soul_llm_server、统一语音换件 | 低 | Phase 6 accepted @ `e0b4f23` |
+| **0–7** | Shared Soul Runtime 主干收敛 | 已验收 | ✅ accepted @ `b21bc47` |
 
-并行列项：**persona 版本化**（决策 8）可在 Phase 5–6 顺带；**RTC**（决策 6）在 Phase 7 决定归档/删除。
+Phase 0–7 完成后不继续无目的重构；下一步按 §8 四条路线择一推进。
 
 ---
 
 ## 6. Next task
 
-**Phase 7 — 清理**（下一 session）
+**Phase 0–7 已完成；下一 session 请选择 §8 四条路线之一。**
 
-1. 合并 turn_analyzer、退役/合并 soul_llm_server、统一语音换件。
-2. `pytest -m invariant` + `pytest backend/tests` 全绿才继续。
-3. 继续遵守 §4 禁区；不碰 Fish/voice/.env/data/experiments/HANDOFF（除非 Phase 7 明确 scope）。
+1. 稳定化：准备合并 `codex/soul-runtime` → main，整理 rollback/观测/legacy 清理计划。
+2. Soul Quality：深化 agenda/motivation、memory 检索、persona 版本化、§5 turn 一致性补全。
+3. 产品体验：桌面伴侣 UI/交互小步验证。
+4. 语音：Fish/Pipecat 语音轨独立推进；仍不得反向改动 Soul Runtime 契约。
 
 ---
 
