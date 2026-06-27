@@ -39,6 +39,7 @@ from pipecat.frames.frames import (
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 _NON_WORD_RE = re.compile(r"[^\w]", re.UNICODE)
+_DEFAULT_SINGLE_CHAR_ECHO_WINDOW_MS = 2000
 
 
 def _normalize(text: str) -> str:
@@ -66,6 +67,13 @@ def is_self_echo(user_text: str, bot_text: str, *, min_chars: int = 2, ratio: fl
     return SequenceMatcher(None, u, tail).ratio() >= ratio
 
 
+def _is_exact_single_char_tail(user_text: str, bot_text: str) -> bool:
+    """Match the narrow one-character tail leak seen after local speaker playback."""
+    u = _normalize(user_text)
+    b = _normalize(bot_text)
+    return len(u) == 1 and bool(b) and b.endswith(u)
+
+
 class SelfEchoGate:
     """Shared state for the capture/filter processor pair: Boxi's last reply + when it ended."""
 
@@ -75,9 +83,11 @@ class SelfEchoGate:
         window_ms: int,
         min_chars: int = 2,
         ratio: float = 0.8,
+        single_char_window_ms: int = _DEFAULT_SINGLE_CHAR_ECHO_WINDOW_MS,
         now: Callable[[], float] | None = None,
     ) -> None:
         self._window_secs = window_ms / 1000.0
+        self._single_char_window_secs = single_char_window_ms / 1000.0
         self._min_chars = min_chars
         self._ratio = ratio
         self._now = now or time.monotonic
@@ -112,8 +122,17 @@ class SelfEchoGate:
     def is_echo(self, user_text: str) -> bool:
         if self._bot_stopped_at is None or not self._last_reply:
             return False
-        if self._now() - self._bot_stopped_at > self._window_secs:
+        elapsed = self._now() - self._bot_stopped_at
+        if elapsed > self._window_secs:
             return False
+        # Keep the general matcher at min_chars=2 so real one-character replies such as
+        # "嗯"/"好" are normally preserved. The only exception is the exact final character
+        # of Boxi's reply during the brief physical playback-tail window. This covers the
+        # observed "先睡，乖。" -> ASR "乖。" loop without widening fuzzy matching.
+        if elapsed <= self._single_char_window_secs and _is_exact_single_char_tail(
+            user_text, self._last_reply
+        ):
+            return True
         return is_self_echo(
             user_text, self._last_reply, min_chars=self._min_chars, ratio=self._ratio
         )
