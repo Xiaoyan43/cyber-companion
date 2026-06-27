@@ -12,6 +12,13 @@ def _env_float(name: str, default: float) -> float:
     return float(raw)
 
 
+def _env_optional_float(name: str) -> float | None:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return None
+    return float(raw)
+
+
 def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name, "").strip()
     if not raw:
@@ -51,6 +58,13 @@ ENV_EXPRESSION_TAGGER = "CYBER_COMPANION_VOICE_EXPRESSION_TAGGER"
 # Self-echo backstop (only active alongside half-duplex). Off-switch + window override.
 ENV_SELF_ECHO_FILTER = "CYBER_COMPANION_VOICE_SELF_ECHO_FILTER"
 ENV_SELF_ECHO_WINDOW_MS = "CYBER_COMPANION_VOICE_SELF_ECHO_WINDOW_MS"
+# Fish Audio Pipecat TTS tuning. Empty means "do not pass the setting", preserving the
+# current Pipecat/Fish default for the baseline A/B group.
+ENV_FISH_NORMALIZE = "CYBER_COMPANION_VOICE_FISH_NORMALIZE"
+ENV_FISH_TEMPERATURE = "CYBER_COMPANION_VOICE_FISH_TEMPERATURE"
+ENV_FISH_TOP_P = "CYBER_COMPANION_VOICE_FISH_TOP_P"
+ENV_FISH_PROSODY_SPEED = "CYBER_COMPANION_VOICE_FISH_PROSODY_SPEED"
+ENV_FISH_PROSODY_VOLUME = "CYBER_COMPANION_VOICE_FISH_PROSODY_VOLUME"
 
 DEFAULT_HALF_DUPLEX = True
 DEFAULT_VOICE_MODE = "pipeline"
@@ -96,6 +110,32 @@ def load_self_echo_enabled() -> bool:
 
 def load_self_echo_window_ms() -> int:
     return _env_int(ENV_SELF_ECHO_WINDOW_MS, DEFAULT_SELF_ECHO_WINDOW_MS)
+
+
+def load_fish_normalize() -> bool | None:
+    raw = os.getenv(ENV_FISH_NORMALIZE, "").strip()
+    if not raw:
+        return None
+    return _env_bool(ENV_FISH_NORMALIZE, False)
+
+
+def load_fish_temperature() -> float | None:
+    return _env_optional_float(ENV_FISH_TEMPERATURE)
+
+
+def load_fish_top_p() -> float | None:
+    return _env_optional_float(ENV_FISH_TOP_P)
+
+
+def load_fish_prosody_speed() -> float | None:
+    return _env_optional_float(ENV_FISH_PROSODY_SPEED)
+
+
+def load_fish_prosody_volume() -> int | None:
+    raw = os.getenv(ENV_FISH_PROSODY_VOLUME, "").strip()
+    if not raw:
+        return None
+    return int(raw)
 
 
 def load_voice_mode() -> str:
