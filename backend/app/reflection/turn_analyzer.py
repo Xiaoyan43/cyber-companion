@@ -3,14 +3,9 @@ from __future__ import annotations
 import json
 import logging
 
-from backend.app.behavior.engine import evaluate_behavior
-from backend.app.behavior.kernel import apply_signals_to_kernel
 from backend.app.behavior.parser import JSON_BLOCK_PATTERN
-from backend.app.behavior.types import BehaviorEvent
 from backend.app.memory.budget import BudgetConfig
-from backend.app.memory.chat_persistence import persist_chat_turn
 from backend.app.memory.store import MemoryStore
-from backend.app.memory.write_policy import record_turn_memories
 from backend.app.providers.exceptions import ProviderError
 from backend.app.providers.router import get_provider_router
 from backend.app.providers.types import (
@@ -21,7 +16,7 @@ from backend.app.providers.types import (
     TokenUsage,
 )
 from backend.app.reflection.runner import run_reflection_if_due
-from backend.app.schemas import ChatMessageSchema
+from backend.app.soul import SoulTurnRuntime
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +101,11 @@ def analyze_turn(
     bot_text: str,
     budget: BudgetConfig | None = None,
 ) -> None:
-    """Off-path: transcript -> signals -> kernel + memory (SQLite). Never raises."""
+    """Off-path RTC pure-E2E: transcript -> appraisal -> commit (§3 step 9). Never raises.
+
+    RTC-specific LLM appraisal stays here (decision 6); persist/memory/event-log reuse
+    ``SoulTurnRuntime.commit_turn`` so kernel + SQLite side-effects match the main runtime.
+    """
     try:
         config = budget or BudgetConfig()
         if not config.enable_turn_analyzer:
@@ -114,19 +113,18 @@ def analyze_turn(
         if not user_text.strip() and not bot_text.strip():
             return
 
-        # Local appraisal for the voice turn: runs the SAME behavior evaluation as
-        # text chat, so pure-E2E voice turns advance the felt-vs-shown positive-zone
-        # streak (mood.metadata.positive_zone_streak) identically — playful teasing
-        # arms on voice too. The later apply_signals_to_kernel preserves metadata,
-        # and _run_turn_analysis re-pushes the emotion tag per turn. Keep this call.
-        evaluate_behavior(
-            store,
-            BehaviorEvent(event_type="user_message", user_input=user_text),
+        runtime = SoulTurnRuntime(
+            store=store,
+            router=get_provider_router(),
+            budget=config,
         )
 
+        # Local appraisal for the voice turn: same behavior evaluation as text chat, so
+        # pure-E2E voice turns advance the felt-vs-shown positive-zone streak identically.
+        runtime.decide(user_text)
+
         # A failed/skipped LLM appraisal must NOT drop the turn: still persist the
-        # transcript (SQLite history + summaries/reflection stay complete) and run
-        # regex memory below; only the kernel update is skipped (no valid signals).
+        # transcript; only the kernel update is skipped (no valid signals).
         signals: dict | None = None
         if _llm_analysis_due(store, config):
             signals = _llm_analyze_turn(user_text, bot_text)
@@ -138,28 +136,21 @@ def analyze_turn(
             raw_avatar = signals.get("avatar_state")
             if isinstance(raw_avatar, str) and raw_avatar.strip():
                 avatar_state = raw_avatar.strip()
-            apply_signals_to_kernel(store, signals)
 
-        saved_ids = persist_chat_turn(
-            store,
-            [ChatMessageSchema(role="user", content=user_text)],
-            _voice_completion_result(bot_text),
+        runtime.commit_turn(
+            user_input=user_text,
+            result=_voice_completion_result(bot_text),
             decision="reply",
             avatar_state=avatar_state,
-            should_call_llm=True,
-        )
-        user_message_id = saved_ids[0] if user_text.strip() and saved_ids else None
-
-        record_turn_memories(
-            store,
-            user_input=user_text,
+            called_llm=signals is not None,
             signals=signals,
-            source_message_id=user_message_id,
-            budget=config,
+            apply_signals=isinstance(signals, dict),
+            surface="rtc_off_path",
+            update_summary=False,
+            should_call_llm=True,
         )
 
         if signals is not None:
-            store.note_llm_turn()
             run_reflection_if_due(store, config)
     except Exception:
         logger.exception("analyze_turn failed")

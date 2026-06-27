@@ -1,7 +1,8 @@
-"""Companion Brain — custom LLM slot inside the Pipecat pipeline (V2 Phase 3).
+"""Companion Brain — Pipecat / RTC-hybrid voice surface adapter (V2 Phase 3).
 
-Mirrors the soul seam used by ``/chat/complete`` in ``backend.app.main``:
-behavior → context → provider stream → signal-strip → persist → memory write.
+Streaming orchestration stays here (voice-mode instruction, signal strip, truncation);
+decision + off-path commit delegate to ``SoulTurnRuntime`` (§3). ``soul_llm_server`` is
+a thin OpenAI transport over this same brain — not a parallel soul loop.
 """
 
 from __future__ import annotations

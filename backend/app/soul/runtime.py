@@ -364,18 +364,24 @@ class SoulTurnRuntime:
         signals: dict | None,
         translation: str | None = None,
         apply_signals: bool = False,
+        surface: str = "pipecat",
+        update_summary: bool = True,
+        should_call_llm: bool | None = None,
     ) -> list[int]:
         """Off-path commit (§3 step 9) for surfaces whose persist runs outside the
-        spoken/streamed path — currently Pipecat ``CompanionBrain.remember``.
+        spoken/streamed path — Pipecat ``CompanionBrain.remember`` and RTC pure-E2E
+        ``turn_analyzer.analyze_turn`` (decision 6).
 
-        Persists the turn, writes turn memories, refreshes the summary, and notes the
-        LLM turn (only when ``called_llm``). ``apply_signals`` lets the caller mirror
-        its own kernel-update gating; the kernel write is best-effort like the inline
-        text commits. Byte-equivalent to the former ``remember`` body.
+        Persists the turn, writes turn memories, optionally refreshes the summary, and
+        notes the LLM turn (only when ``called_llm``). ``apply_signals`` lets the
+        caller mirror its own kernel-update gating; the kernel write is best-effort
+        like the inline text commits. ``should_call_llm`` controls the persisted
+        assistant metadata flag and defaults to ``called_llm`` when omitted.
         """
         memory = self.memory
         state = self.state
         budget = self.budget
+        persist_should_call_llm = called_llm if should_call_llm is None else should_call_llm
         if apply_signals:
             try:
                 state.apply_signals(signals)
@@ -386,7 +392,7 @@ class SoulTurnRuntime:
             result=result,
             decision=decision,
             avatar_state=avatar_state,
-            should_call_llm=called_llm,
+            should_call_llm=persist_should_call_llm,
             translation=translation,
         )
         user_message_id = saved_ids[0] if user_input.strip() and saved_ids else None
@@ -399,11 +405,12 @@ class SoulTurnRuntime:
             )
         except Exception:
             pass
-        memory.maybe_update_summary(budget)
+        if update_summary:
+            memory.maybe_update_summary(budget)
         if called_llm:
             memory.note_llm_turn()
         self._append_turn_event(
-            surface="pipecat",
+            surface=surface,
             event_type="user_message",
             user_input=user_input,
             result=result,
