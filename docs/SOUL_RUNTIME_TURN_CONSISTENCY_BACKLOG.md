@@ -152,7 +152,7 @@
 |---|---|
 | **目标** | `evaluate_behavior` → local path，与 `evaluate_llm_budget_gate` → budget_block path：不产生 signal-driven memory；`called_llm=false`；kernel 仅反映 local 决策预期（或无 `apply_signals`）；event `has_signals=false`。 |
 | **建议测试文件** | `backend/tests/test_soul_turn_contract.py` 或 `backend/tests/test_soul_turn_local_budget.py` |
-| **Fake / stub 策略** | local：`user_input="嗯"`（已有）；budget block：`BudgetConfig(daily_llm_turn_limit=0)` 或 monkeypatch `check_llm_budget`；**不** 依赖真实 spend 数据。 |
+| **Fake / stub 策略** | local：`user_input="嗯"`（已有）。budget block：**勿** 用 `daily_llm_turn_limit=0`——`usage_guard.py` 仅在 `> 0` 时启用日上限，`0` / `<=0` 表示**禁用**该 cap，不会触发 block。可用：① 先在 store 记入今日 LLM turn（如先跑一轮 `note_llm_turn` 或等价 HTTP 回合），再设 `BudgetConfig(daily_llm_turn_limit=1)` 使下一回合命中 gate（见 `test_chat_complete_blocks_when_daily_limit_reached` · `test_chat_stream_budget_block`）；② monkeypatch `check_llm_budget` / `evaluate_llm_budget_gate` 返回 `allowed=False`。不依赖真实 spend 数据。 |
 | **允许差异** | local 回复文案因 surface 略异可接受；不比 content。 |
 | **验收标准** | ① text + Pipecat（至少一条）同路径断言；② `list_memories` 无 signal 写入；③ `count_llm_turns_since` 不增加；④ event payload `called_llm is False`；⑤ 与 `test_chat_stream_budget_block` 行为不矛盾。 |
 
