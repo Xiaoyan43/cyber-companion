@@ -153,7 +153,7 @@ Post-merge 观测优先 **SQLite 可查询 + 现有测试名**，不依赖新 me
 |---|---|---|---|---|---|---|
 | `proactive_reason_mode` | flag | `budget.json` | `"agenda"` | `"longing_only"` | **为什么找你**：`agenda` 仅 due/overdue open_loop / reminder / memory 等实质 reason；`longing_only` 恢复 Phase 6 前 check-in fallback | `test_proactive_motivation.py::test_longing_only_mode_restores_check_in_fallback` · `test_agenda_mode_blocks_longing_only_check_in` · `test_proactive_pi4.py` |
 | `enable_proactive` | flag | `budget.json` | `true` | `false` | 关闭全部 proactive tick / opener；`force_proactive` dev 路径仍受此门 | `test_pi1_followups.py::test_force_proactive_still_respects_enable_proactive` · `test_longing.py`（gate 系列） |
-| `proactive_quiet_hours` | throttle | `budget.json` | `[23, 8]` | 扩至全天如 `[0, 0]`（测试用）或缩窄窗口 | 本地时间 quiet window 内不主动 | `test_longing.py::test_quiet_hours_block` |
+| `proactive_quiet_hours` | throttle | `budget.json` | `[23, 8]` | `[0, 0]` = **禁用** quiet window（`start_hour == end_hour` → 永不阻断；测试常用）；关闭全部 proactive 用 `enable_proactive=false`；扩大 quiet window 仅用于指定时段阻断（如 `[22, 10]`） | 本地时间 quiet window 内不主动 | `test_longing.py::test_quiet_hours_block` |
 | `proactive_min_gap_minutes` | throttle | `budget.json` | `30` | 增大（如 `1440`）或 `0`（测试） | 距上次用户消息后最短等待 | `test_longing.py::test_post_conversation_cooldown_blocks` |
 | `proactive_min_fire_gap_hours` | throttle | `budget.json` | `6` | 增大或 `0` | 两次 proactive **发射**之间的最短间隔 | `test_longing.py`（`check_proactive_availability` gate） |
 | `proactive_daily_max` | throttle | `budget.json` | `2` | `0`（禁用日上限）或 `1` | 每日 proactive 发射次数上限 | `test_longing.py::test_daily_cap_blocks` |
