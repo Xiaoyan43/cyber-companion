@@ -7,7 +7,8 @@ from backend.app.providers.exceptions import ProviderError
 from backend.app.providers.router import ProviderRouter
 from backend.app.providers.types import ChatCompletionRequest, ChatMessage
 
-DEFAULT_TRANSLATOR_PROVIDER = "gemini"
+# Translation and expression tagging share the dedicated auxiliary OpenRouter entry.
+DEFAULT_TRANSLATOR_PROVIDER = "tagger"
 
 # P11: a dedicated single-purpose call that only translates an already-finalized reply
 # into Chinese — mirrors expression_tagger.py's decoupling pattern so the main LLM never

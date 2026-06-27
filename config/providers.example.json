@@ -42,12 +42,11 @@
       "model": "x-ai/grok-4.20",
       "api_key_env": "OPENROUTER_API_KEY"
     },
-    "gemini": {
+    "tagger": {
       "enabled": false,
       "base_url": "https://openrouter.ai/api/v1",
       "model": "google/gemini-2.5-flash-lite",
-      "api_key_env": "OPENROUTER_GEMINI_API_KEY"
+      "api_key_env": "OPENROUTER_TAGGER_API_KEY"
     }
   }
 }
-

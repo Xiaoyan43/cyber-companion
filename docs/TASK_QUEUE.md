@@ -1,6 +1,7 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-27（第七十三轮干净集成）**：以最新 `origin/master@bd616d7` 建立 `codex/product-integration-20260627`；master 已含 Soul Runtime、Fish Settings、S2.1 Pro、B 类中句位置和跨句去重，本分支只补 provider 正名 `e2a05b1`、tagger 动态 mood 解耦 `e6e2432`、单字自回声 `a0e23dc`。backend 746、invariant 367、前端 `tsc --noEmit` 全绿。**下一步 = review/合入后做日用闭环 P0，不再继续 Fish/tagger 微调。**
 > **2026-06-26（第六十六轮 · 跨工具交接）**：**无新代码改动。** Claude Code 本周额度将尽，开发临时
 > 交给 Cursor/Codex，下周一额度重置后用户回 Claude Code。本轮只做交接收尾：把第六十五轮工作的
 > commit 状态从「未 commit」更正为**已 commit `111c70c`**，并在 HANDOFF 顶部加「给 Cursor/Codex」
