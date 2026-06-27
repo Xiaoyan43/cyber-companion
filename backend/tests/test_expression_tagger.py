@@ -188,6 +188,19 @@ def test_tagger_instruction_keeps_official_physio_emotion_combo_example() -> Non
     assert "[panting] [tired]" in TAGGER_INSTRUCTION_TEMPLATE
 
 
+def test_tagger_instruction_prefers_mid_sentence_tone_start_for_b_tags() -> None:
+    # B-class tone/emotion tags should mark the start of the emotional span, not lazily dye
+    # the whole sentence from the first character.
+    assert "语气/情绪/音调类标签也不要偷懒全放句首" in TAGGER_INSTRUCTION_TEMPLATE
+    assert "转折词或情绪起点前" in TAGGER_INSTRUCTION_TEMPLATE
+    assert "只有整句话从第一个字开始" in TAGGER_INSTRUCTION_TEMPLATE
+
+
+def test_tagger_instruction_contains_mid_sentence_b_tag_examples() -> None:
+    assert "我嘴上嫌你烦，[soft tone]不过还是给你留了灯" in TAGGER_INSTRUCTION_TEMPLATE
+    assert "我今天去了那家店，[sad]后来才发现你不在" in TAGGER_INSTRUCTION_TEMPLATE
+
+
 # --- dangling trailing tag guardrail (省略号幻觉) ----------------------------------------
 
 
