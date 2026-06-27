@@ -140,15 +140,17 @@ class AgendaPort(Protocol):          # Phase 3：open loops / future events
 invariant 测试清单（现有）：`test_tone` · `test_mood` · `test_behavior` · `test_memory*` · `test_reflection` · `test_relationship_state` · `test_rtc_state_block` · `test_expression_tagger*` · `test_proactive*` · `test_context_builder`。
 **缺口（需新增）**：4 个 surface「同输入 → 同 kernel/memory 副作用」的 turn 一致性契约测试。
 
-**Marker 现状（2026-06-27）**：上述清单尚未实际注册 `invariant` pytest marker，
-`pytest -m invariant` 当前会选中 0 条；Phase 4 使用显式清单运行（351 passed）。后续应把清单
-真正标记后再把 `-m invariant` 作为唯一入口。
+**Marker 现状（2026-06-27 · Phase 4.5 ✅）**：`invariant` marker 已注册（`pytest.ini`）；
+`backend/tests/conftest.py` 在 collection 时按 §5 文件名/前缀自动打标（7 个精确匹配 +
+`test_memory*` / `test_expression_tagger*` / `test_proactive*` 前缀）。**入口**：`pytest -m invariant`。
+**验证（commit `1a625db`）**：`pytest -m invariant --collect-only` → **351** 条；
+`pytest -m invariant` → **351 passed**；`pytest backend/tests` → **724 passed**。
 
 ## 6. 迁移阶段（按决策调整后的顺序）
 
 | Phase | scope | touched | risk | tests | rollback |
 |---|---|---|---|---|---|
-| **0 ✅** | 本文档 + invariants 标记 | docs | 无 | 标 `-m invariant` | 删 doc |
+| **0 ✅** | 本文档 + invariants 标记 | docs | 无 | `-m invariant`（351 条，Phase 4.5 落地） | 删 doc |
 | **1 ✅** | 抽 `backend/app/soul/runtime.py`，3 个主链路入口改薄壳（text 非流式/流式 + Pipecat；turn_analyzer 按决策6延后） | main.py · companion_brain · 新 soul/ | 中（须等价） | 现有 4 路测试 + 新 turn 一致性契约 `test_soul_turn_contract` | runtime 是新增文件，壳层 revert |
 | **2 ✅** | 定义 `MemoryPort/StatePort/EventLogPort`，SQLite adapter 包裹 `MemoryStore`；**只在 runtime 边界依赖接口**。Phase 2 completed at the SoulTurnRuntime boundary: ports are introduced with SQLite adapters; MemoryStore internals and schema are unchanged. | soul/ + store adapter | 中 | `test_soul_ports` + `test_soul_turn_contract` + 全量 `backend/tests` | 接口默认绑 SQLite |
 | **3A ✅** | `soul_events`（append-only）；runtime commit 写最小 `turn.committed` event | schema(additive) · runtime commit | 低中 | event append/tail + runtime 写入 + 全 backend tests | 表 additive，停写即无副作用 |
