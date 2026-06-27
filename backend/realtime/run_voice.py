@@ -114,13 +114,44 @@ def _build_tts(tts_backend: str) -> tuple[object, int]:
         #    if Fish ships a streaming high-quality mode.
         if latency != "balanced":
             raise SystemExit("CYBER_COMPANION_VOICE_TTS_LATENCY must be: balanced")
+        from backend.realtime.voice_config import (
+            load_fish_normalize,
+            load_fish_prosody_speed,
+            load_fish_prosody_volume,
+            load_fish_temperature,
+            load_fish_top_p,
+        )
+
+        settings_kwargs = {
+            "voice": reference_id,
+            "model": model,
+            "latency": latency,
+        }
+        normalize = load_fish_normalize()
+        temperature = load_fish_temperature()
+        top_p = load_fish_top_p()
+        prosody_speed = load_fish_prosody_speed()
+        prosody_volume = load_fish_prosody_volume()
+        if normalize is not None:
+            settings_kwargs["normalize"] = normalize
+        if temperature is not None:
+            settings_kwargs["temperature"] = temperature
+        if top_p is not None:
+            settings_kwargs["top_p"] = top_p
+        if prosody_speed is not None:
+            settings_kwargs["prosody_speed"] = prosody_speed
+        if prosody_volume is not None:
+            settings_kwargs["prosody_volume"] = prosody_volume
+        explicit_settings = {
+            key: value
+            for key, value in settings_kwargs.items()
+            if key not in {"voice", "model", "latency"}
+        }
+        if explicit_settings:
+            logger.info(f"Fish TTS explicit settings: {explicit_settings}")
         svc = FishAudioTTSService(
             api_key=api_key,
-            settings=FishAudioTTSService.Settings(
-                voice=reference_id,
-                model=model,
-                latency=latency,
-            ),
+            settings=FishAudioTTSService.Settings(**settings_kwargs),
             output_format="pcm",
             sample_rate=FISH_SAMPLE_RATE,
         )
