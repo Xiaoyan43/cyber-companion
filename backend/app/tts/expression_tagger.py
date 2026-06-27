@@ -105,7 +105,6 @@ _PAUSE_PUNCTUATION = frozenset("。！？，、；：…—~,.!?;:\n")
 # mid-clause break is left alone — that placement is the LLM's call, not ours.
 _MAX_BREAK_TAGS_PER_CALL = 1
 
-
 def _normalize_malformed_tags(tagged: str) -> str:
     """Fix malformed tag *formatting* so Fish can recognize the tag at all.
 
@@ -161,6 +160,110 @@ def _normalize_tag_placement(tagged: str) -> str:
     return tagged
 
 
+# Sound-effect tags trigger a real physical sound event (a sigh, a laugh, a gasp …) and are
+# position-specific — they should appear precisely where the event happens, not at the start
+# of every sentence.  They are exempt from cross-sentence deduplication because repeating them
+# is legitimate (two genuine sighs in a row, for example).
+_SOUND_EFFECT_TAG_INNERS = frozenset(
+    {
+        "laughing",
+        "chuckling",
+        "sobbing",
+        "crying loudly",
+        "sighing",
+        "groaning",
+        "moaning",
+        "panting",
+        "gasping",
+        "yawning",
+        "snoring",
+        "娇喘",
+        "呻吟",
+    }
+)
+
+# Tags that the cross-sentence dedup guard should leave untouched.
+# Break/pause tags are already handled by _normalize_break_tags; sound-effect tags are
+# position-specific physical events, not reusable emotion markers.
+_DEDUP_EXEMPT_TAG_INNERS = _SOUND_EFFECT_TAG_INNERS | _BREAK_TAG_INNERS
+
+
+def _find_leading_non_exempt_tag(sentence: str) -> re.Match[str] | None:
+    """Return the first non-exempt tag in the sentence *opening region*, if any.
+
+    Opening region: skip leading whitespace, then consecutive exempt tags only.  The first
+    non-exempt tag there is the leading tag.  Once any ordinary text/punctuation appears,
+    scanning stops — mid-sentence tags are out of scope for cross-sentence dedup.
+    """
+    pos = 0
+    while pos < len(sentence):
+        while pos < len(sentence) and sentence[pos].isspace():
+            pos += 1
+        if pos >= len(sentence):
+            return None
+
+        tag_match = _TAG_RE.match(sentence, pos)
+        if not tag_match:
+            return None
+
+        inner = tag_match.group(0)[1:-1]
+        if inner in _DEDUP_EXEMPT_TAG_INNERS:
+            pos = tag_match.end()
+            continue
+        return tag_match
+
+    return None
+
+
+def suppress_repeated_leading_tags(tagged: str) -> str:
+    """Remove a leading emotion/tone tag from a sentence when the same tag led the previous one.
+
+    Haiku's most common over-tagging pattern: consecutive sentences each get a tag, often the
+    same one, even when the emotion hasn't shifted.  If sentence N+1's leading non-exempt tag
+    (in the opening region only — see ``_find_leading_non_exempt_tag``) is identical to
+    sentence N's, the N+1 tag is "continuing the baseline" — it adds no audio information and
+    causes Fish to over-emote.  This guard removes the duplicate.  Mid-sentence tags (e.g. a
+    turn marker before 「不过」) are never touched.
+
+    Exempt tags (``_DEDUP_EXEMPT_TAG_INNERS``):
+    - Sound-effect tags: positional physical-event markers, not mood baselines.
+    - Break/pause tags: already handled by ``_normalize_break_tags``.
+
+    Only exact-match deduplication is done — the guard never judges semantic similarity.
+    The baseline resets when a sentence has no leading non-exempt tag (a tagless opening
+    indicates a possible emotion reset, so the next identical leading tag is kept).
+    """
+    sentences, remainder = split_complete_sentences(tagged)
+    if remainder.strip():
+        sentences.append(remainder)
+    if len(sentences) <= 1:
+        return tagged
+
+    prev_leading: str | None = None
+    result_parts: list[str] = []
+
+    for sentence in sentences:
+        new_sentence = sentence
+        leading_match = _find_leading_non_exempt_tag(sentence)
+
+        if leading_match is None:
+            prev_leading = None  # No leading non-exempt tag → reset baseline
+        else:
+            inner = leading_match.group(0)[1:-1]
+            if inner == prev_leading:
+                # Same leading tag as previous sentence → remove it (continuing baseline, not a shift)
+                new_sentence = (
+                    sentence[: leading_match.start()] + sentence[leading_match.end() :]
+                )
+                # prev_leading stays — the baseline is still active
+            else:
+                prev_leading = inner
+
+        result_parts.append(new_sentence)
+
+    return "".join(result_parts)
+
+
 # Expression layer (P8): a dedicated single-purpose call whose only job is inserting Fish
 # Audio tags into already-finalized reply text. Vocab/position rules sourced from
 # docs/FISH_AUDIO_REFERENCE.md §2-4. Deliberately has no persona/memory/signal content —
@@ -171,10 +274,13 @@ TAGGER_INSTRUCTION_TEMPLATE = (
     "1. 不改变原文一个字——不重写、不增删句子、不调整措辞，只在合适的位置插入 [标签]。\n"
     "2. 标签影响从它出现的位置开始、到下一个标签或句末为止的文字——位置就是语义范围，"
     "不要把只想影响半句话的标签放在整段开头。\n"
-    "3. 逐句重新判断这句话此刻在说什么、怎么说——不要照搬上一句或整体情绪状态机械地贴同一组标签。"
-    "默认倾向于不加标签：只有当这一句相对前文出现明确的情绪或语气变化时才加；平稳的叙述、讲故事或铺垫，"
-    "大多数句子不需要任何标签。如果前文已经是某个情绪基调、这一句只是延续它，就不要再重复贴同一类标签。"
-    "情绪变化贴得太密（几乎每句都贴）反而会让每个标签都显得突兀不自然——宁可少贴、只贴在真正的转折点上。\n"
+    "3. 每句话默认不加标签。只有满足下列条件之一，才在该句子合适位置加一个标签：\n"
+    "   · 条件 A：这句话的情绪/语气相比前一句发生了明确的切换（例如：前一句平静叙述，这一句突然流露悲伤或调侃）。\n"
+    "   · 条件 B：这是整段回复的开头，且起始情绪本身就很突出、明显非中性。\n"
+    "   两个条件都不满足 → 直接输出原文，不加任何标签。\n"
+    "   「这句话有一点伤感」不满足条件 A——只有「前一句明显不伤感而这一句才变伤感」才算切换。\n"
+    "   禁止：为了「让每句都有情绪标记」而贴标签；循环轮换不同标签来制造多样感。\n"
+    "   平稳推进的叙述、铺垫、讲故事中，连续多句甚至大段无标签是完全正确的输出。\n"
     "4. 两类标签精度要求不同：\n"
     "   - 音效/生理反应类（词表里的「音效标签」一类）会插入一段独立可分离的非语言声音事件"
     "（一声叹气、一次喘息、一阵笑声本身），必须紧贴它实际发生的那个词，位置错了就是一声突兀的怪声。\n"
@@ -342,9 +448,10 @@ def apply_expression_tags(
         return text
     cleaned = _strip_dangling_trailing_tags(tagged)
     guarded = _normalize_tag_placement(cleaned)
-    if guarded != cleaned:
-        logger.info(f"🧹 placement guard: {cleaned!r} -> {guarded!r}")
-    return guarded
+    deduped = suppress_repeated_leading_tags(guarded)
+    if deduped != cleaned:
+        logger.info(f"🧹 placement guard: {cleaned!r} -> {deduped!r}")
+    return deduped
 
 
 def apply_expression_tags_to_sentence(

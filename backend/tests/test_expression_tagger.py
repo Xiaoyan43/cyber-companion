@@ -150,7 +150,7 @@ def test_apply_expression_tags_passes_mood_and_text_into_prompt() -> None:
     "expected_phrase",
     [
         "不改变原文一个字",
-        "逐句重新判断",
+        "每句话默认不加标签",  # Rule 3: per-sentence judgment; old "逐句重新判断" rewritten
         "[sighing]",
         "[whispering]",
         "音效/生理反应类",

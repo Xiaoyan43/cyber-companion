@@ -15,6 +15,7 @@ from backend.app.tts.expression_tagger import (
     _normalize_tag_placement,
     apply_expression_tags,
     apply_expression_tags_to_sentence,
+    suppress_repeated_leading_tags,
 )
 
 
@@ -157,3 +158,94 @@ def test_apply_expression_tags_to_sentence_runs_placement_guards() -> None:
 
     # redundant [break] before "，" stripped; malformed [ soft  tone ] normalized.
     assert result == "我想想，[soft tone]别急"
+
+
+# --- cross-sentence consecutive-tag deduplication (suppress_repeated_leading_tags) ---------
+
+
+def test_suppress_removes_exact_duplicate_leading_tag() -> None:
+    # Same leading emotion tag on two consecutive sentences — second is a baseline continuation.
+    tagged = "[nostalgic] 你靠过来吧。[nostalgic] 从前有一只鱼。"
+    result = suppress_repeated_leading_tags(tagged)
+    assert result.count("[nostalgic]") == 1
+    assert "你靠过来吧。" in result
+    assert "从前有一只鱼。" in result
+
+
+def test_suppress_removes_chain_of_same_leading_tags() -> None:
+    tagged = "[nostalgic] 句一。[nostalgic] 句二。[nostalgic] 句三。[sad] 句四。"
+    result = suppress_repeated_leading_tags(tagged)
+    assert result.count("[nostalgic]") == 1
+    assert result.count("[sad]") == 1
+
+
+def test_suppress_keeps_different_leading_tags() -> None:
+    tagged = "[nostalgic] 你靠过来吧。[sad] 从前有一只鱼。"
+    result = suppress_repeated_leading_tags(tagged)
+    assert result.count("[nostalgic]") == 1
+    assert result.count("[sad]") == 1
+
+
+def test_suppress_sound_effect_tags_are_exempt() -> None:
+    # [sighing] is a sound-effect tag — two genuine sighs in a row are both real events.
+    tagged = "[sighing] 我真的累了。[sighing] 好吧，算了。"
+    result = suppress_repeated_leading_tags(tagged)
+    assert result.count("[sighing]") == 2
+
+
+def test_suppress_break_tags_are_exempt() -> None:
+    tagged = "[break] 我想想。[break] 嗯。"
+    result = suppress_repeated_leading_tags(tagged)
+    assert result.count("[break]") == 2
+
+
+def test_suppress_tagless_gap_resets_baseline() -> None:
+    # A sentence with no non-exempt tag resets the baseline, so the same tag re-applied
+    # after the gap is treated as a fresh application and kept.
+    tagged = "[nostalgic] 句一。没有标签。[nostalgic] 句三。"
+    result = suppress_repeated_leading_tags(tagged)
+    assert result.count("[nostalgic]") == 2
+
+
+def test_suppress_single_sentence_unchanged() -> None:
+    tagged = "[nostalgic] 只有一句。"
+    assert suppress_repeated_leading_tags(tagged) == tagged
+
+
+def test_suppress_no_tags_unchanged() -> None:
+    tagged = "第一句没有标签。第二句也没有。"
+    assert suppress_repeated_leading_tags(tagged) == tagged
+
+
+def test_suppress_skips_exempt_to_find_non_exempt_leading() -> None:
+    # Sentence 1 has sound effect first, then an emotion tag.
+    # Sentence 2 starts with that same emotion tag — should be suppressed.
+    tagged = "[sighing][nostalgic] 句一。[nostalgic] 句二。"
+    result = suppress_repeated_leading_tags(tagged)
+    # [sighing] is exempt so the first non-exempt leading tag for sentence 1 is [nostalgic].
+    # Sentence 2's leading non-exempt tag is also [nostalgic] → remove it.
+    assert result.count("[nostalgic]") == 1
+    assert result.count("[sighing]") == 1
+
+
+def test_suppress_keeps_mid_sentence_tag_before_turn() -> None:
+    # Mid-clause tag before a turn word (PR #3 pattern) must survive even when it matches
+    # the previous sentence's leading tag — only sentence-opening tags participate in dedup.
+    tagged = "[nostalgic] 句一。我嘴上嫌你烦，[nostalgic]不过还是给你留了灯。"
+    result = suppress_repeated_leading_tags(tagged)
+    assert result == tagged
+    assert result.count("[nostalgic]") == 2
+
+
+# --- wiring · suppress_repeated_leading_tags runs through apply_expression_tags ------------
+
+
+def test_apply_expression_tags_deduplicates_consecutive_leading_tags() -> None:
+    # Fake router returns multi-sentence text where the same tag leads both sentences.
+    router = _FakeRouter(content="[nostalgic] 你靠过来吧。[nostalgic] 从前有一只鱼。")
+
+    result = apply_expression_tags(
+        "你靠过来吧。从前有一只鱼。", _mood(), router=router  # type: ignore[arg-type]
+    )
+
+    assert result.count("[nostalgic]") == 1
