@@ -41,7 +41,7 @@ def test_translate_to_chinese_returns_translated_text() -> None:
 
 
 def test_translate_to_chinese_falls_back_to_none_on_provider_error() -> None:
-    router = _FakeRouter(error=ProviderError("boom", provider="gemini"))
+    router = _FakeRouter(error=ProviderError("boom", provider="tagger"))
 
     result = translate_to_chinese("Hello", router=router)  # type: ignore[arg-type]
 
@@ -78,7 +78,7 @@ def test_translate_to_chinese_uses_default_provider_name() -> None:
 
     translate_to_chinese("Hello", router=router)  # type: ignore[arg-type]
 
-    assert router.captured_provider_name == DEFAULT_TRANSLATOR_PROVIDER == "gemini"
+    assert router.captured_provider_name == DEFAULT_TRANSLATOR_PROVIDER == "tagger"
 
 
 def test_translate_to_chinese_allows_provider_override() -> None:

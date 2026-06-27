@@ -10,7 +10,7 @@ from backend.app.providers.router import ProviderRouter
 from backend.app.providers.types import ChatCompletionRequest, ChatMessage
 from backend.app.tts.tag_stats import _TERMINATORS as _STATS_TERMINATORS
 
-DEFAULT_TAGGER_PROVIDER = "gemini"
+DEFAULT_TAGGER_PROVIDER = "tagger"
 
 # Streaming-splitter sentence terminators. Derived from the offline tag_stats yardstick but
 # WITH "…" removed: in conversational Chinese an ellipsis is almost always a *mid-utterance
