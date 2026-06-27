@@ -1,9 +1,11 @@
 # Soul Runtime 架构（重构北极星）
 
-> 状态：**目标架构 / 重构契约（Phase 0）**。本文件是 `codex/soul-runtime` 分支的源真相。
+> 状态：**目标架构 / 重构契约**。本文件是 `codex/soul-runtime` 分支的源真相。
 > 由 2026-06-27 的「全项目架构盘点 + Shared Soul Layer 重构准备」审查 + 用户 10 项拍板产生。
-> 取代散落在各入口的回合编排；不改人格，只收敛结构。新 session 先读本文件 + `docs/ARCHITECTURE_V2.md`。
-> **▶ Phase 1 已完成（text + Pipecat surfaces）。Phase 2 已完成（ports at `SoulTurnRuntime` boundary）。Phase 3A 已完成（append-only `soul_events`）。Phase 3B 已完成（open_loops 数据层 + `AgendaPort` + due open_loop proactive reason）。Phase 4 待做（拆 `mood_state`）。**
+> 取代散落在各入口的回合编排；不改人格，只收敛结构。
+> **冷启动**：先读 `docs/SOUL_RUNTIME_STATUS.md`（跨 session 进度）+ 本文件 + `docs/ARCHITECTURE_V2.md`。
+> **▶ Phase 0–4.5 ✅ accepted @ `d6003f1`**（runtime · ports · event_log · open_loops · mood 拆分 · invariant suite）。
+> **下一任务：Phase 5**（MemoryPort 后 Letta/Mem0 adapter spike）。详见 STATUS §6。
 
 ## 0. 北极星与范围
 
