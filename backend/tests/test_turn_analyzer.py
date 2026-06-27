@@ -212,7 +212,7 @@ def test_analyze_turn_never_raises_on_internal_error(
     def boom(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("unexpected")
 
-    monkeypatch.setattr(turn_analyzer, "evaluate_behavior", boom)
+    monkeypatch.setattr("backend.app.behavior.engine.evaluate_behavior", boom)
 
     turn_analyzer.analyze_turn(
         store,
