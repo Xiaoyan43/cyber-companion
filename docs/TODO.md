@@ -392,6 +392,12 @@ contract) — do not hand to Cursor without explicit approval + doc updates.
 - [ ] Latency: streaming TTS backend — 豆包 streaming synth + GET `/tts/stream` (MP3 chunks) `[Claude spec → Cursor]`.
 - [ ] Latency: streaming TTS frontend — progressive `<audio>` playback; MUST preserve avatar/TTS race fix `[Cursor]`.
 - [ ] Voice cost tracking + per-day/month brake for cloud TTS/STT (parallels S3; not yet covered) `[Claude]`.
+- [x] Rename the shared expression-tagger/translator OpenRouter provider from `gemini` to neutral
+  `tagger`, with backward compatibility for the old provider key and environment variable.
+- [x] Remove dynamic mood injection from expression tagging; finalized reply wording is the sole
+  emotion evidence, with user-listening acceptance on the `position_v5` samples.
+- [x] Add a narrow two-second exact single-character playback-tail echo guard without suppressing
+  unrelated or delayed real one-character user replies.
 
 ### Documentation
 
