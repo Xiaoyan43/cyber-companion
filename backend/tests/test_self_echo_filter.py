@@ -78,6 +78,39 @@ def test_gate_does_not_suppress_past_window() -> None:
     assert gate.is_echo("我都在。") is False
 
 
+def test_gate_suppresses_exact_single_char_tail_in_brief_playback_window() -> None:
+    gate, clock = _gate_with_clock()
+    gate.on_reply_start()
+    gate.on_reply_delta("先睡，乖。")
+    gate.on_reply_end()
+    gate.on_bot_stopped()
+
+    clock["t"] += 1.5
+    assert gate.is_echo("乖。") is True
+
+
+def test_gate_preserves_single_char_reply_after_brief_playback_window() -> None:
+    gate, clock = _gate_with_clock()
+    gate.on_reply_start()
+    gate.on_reply_delta("先睡，乖。")
+    gate.on_reply_end()
+    gate.on_bot_stopped()
+
+    clock["t"] += 2.1
+    assert gate.is_echo("乖。") is False
+
+
+def test_gate_preserves_unrelated_single_char_reply_during_playback_window() -> None:
+    gate, clock = _gate_with_clock()
+    gate.on_reply_start()
+    gate.on_reply_delta("先睡，乖。")
+    gate.on_reply_end()
+    gate.on_bot_stopped()
+
+    clock["t"] += 1.0
+    assert gate.is_echo("好。") is False
+
+
 def test_gate_without_bot_stopped_does_not_suppress() -> None:
     gate, _ = _gate_with_clock()
     gate.on_reply_start()
