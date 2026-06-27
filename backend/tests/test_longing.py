@@ -200,7 +200,7 @@ def test_proactive_check_fires_with_high_longing_and_seeded_rng(store: MemorySto
     decision = evaluate_behavior(
         store,
         BehaviorEvent(event_type="proactive_check"),
-        budget=_hot_budget(),
+        budget=_hot_budget(proactive_reason_mode="longing_only"),
         rng=random.Random(0),
         now=now,
     )
@@ -243,6 +243,11 @@ def test_proactive_check_stale_job_when_memory_exists(store: MemoryStore) -> Non
 def test_proactive_check_misses_when_lambda_zero(store: MemoryStore) -> None:
     from datetime import datetime, timezone
 
+    store.create_open_loop(
+        kind="follow_up",
+        title="收尾报税",
+        due_at=(datetime(2026, 6, 13, 11, 0, tzinfo=timezone.utc)).isoformat(),
+    )
     decision = evaluate_behavior(
         store,
         BehaviorEvent(event_type="proactive_check"),

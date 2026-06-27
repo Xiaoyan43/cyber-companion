@@ -17,6 +17,7 @@ from backend.app.behavior.proactive_reason import (
     ProactiveReason,
     fallback_line_for_reason,
     format_reason_block,
+    pick_agenda_proactive_reason,
     pick_proactive_reason,
 )
 from backend.app.behavior.types import BehaviorDecision
@@ -167,6 +168,7 @@ def test_reason_picker_open_loop_not_due_does_not_trigger(store: MemoryStore) ->
         title="下月旅行",
         due_at=(_now() + timedelta(days=30)).isoformat(),
     )
+    assert pick_agenda_proactive_reason(store, now=_now()) is None
     reason = pick_proactive_reason(store, longing_intensity=0.5, now=_now())
     assert reason.kind == "check_in"
 

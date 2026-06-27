@@ -13,7 +13,8 @@ from backend.app.behavior.longing import (
     should_fire_longing,
     snapshot_longing,
 )
-from backend.app.behavior.proactive_reason import fallback_line_for_reason, pick_proactive_reason
+from backend.app.behavior.motivation import resolve_proactive_motivation
+from backend.app.behavior.proactive_reason import LongingTier, fallback_line_for_reason
 from backend.app.behavior.mood import (
     apply_idle_tick_mood_delta,
     apply_user_message_mood_delta,
@@ -242,10 +243,33 @@ def _evaluate_proactive_check(
     )
 
     aware_now = now if now is not None else datetime.now().astimezone()
+    longing_tier = compute_longing_tier(
+        last_meaningful_interaction_at=relationship.last_meaningful_interaction_at,
+        closeness=relationship.closeness,
+        budget=config,
+        now=aware_now,
+    )
+
     check_metadata = mark_proactive_check(mood.metadata, now=aware_now)
     store.patch_behavior_runtime_metadata(
         updates={"last_proactive_check_at": check_metadata["last_proactive_check_at"]}
     )
+
+    motivation = resolve_proactive_motivation(
+        store,
+        budget=config,
+        longing=longing,
+        longing_tier=longing_tier,
+        now=aware_now,
+        force_proactive=force_proactive,
+    )
+    if motivation.reason is None:
+        return BehaviorDecision(
+            decision="observe",
+            avatar_state="idle",
+            should_call_llm=False,
+            reason="no_agenda_reason",
+        )
 
     fired = force_proactive or should_fire_longing(longing, rng=rng)
     if not fired:
@@ -256,7 +280,6 @@ def _evaluate_proactive_check(
             reason="longing_poisson_miss",
         )
 
-    stale_job = find_stale_job_memory(store.list_memories(limit=100))
     fired_metadata = mark_proactive_fired(check_metadata, now=aware_now)
     fired_metadata = mark_local_line_spoken(fired_metadata)
     store.patch_behavior_runtime_metadata(
@@ -273,18 +296,7 @@ def _evaluate_proactive_check(
         }
     )
 
-    longing_tier = compute_longing_tier(
-        last_meaningful_interaction_at=relationship.last_meaningful_interaction_at,
-        closeness=relationship.closeness,
-        budget=config,
-        now=aware_now,
-    )
-    proactive_reason = pick_proactive_reason(
-        store,
-        longing_intensity=longing.intensity,
-        longing_tier=longing_tier,
-        now=aware_now,
-    )
+    proactive_reason = motivation.reason
     return BehaviorDecision(
         decision="proactive",
         avatar_state=proactive_reason.avatar_state,

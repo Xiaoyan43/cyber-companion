@@ -128,8 +128,7 @@ def _pick_open_loop(store: MemoryStore, *, now: datetime) -> ProactiveReason | N
     """Surface a due/overdue open loop (agenda, Phase 3B) as a proactive reason.
 
     Only loops whose ``due_at`` has passed are eligible — open-but-not-yet-due
-    loops do not trigger proactive contact (that's deferred to the Phase 6
-    motivation rework). ``list_open_loops`` already orders earliest-due first.
+    loops do not trigger proactive contact.
     """
     now_iso = now.astimezone(timezone.utc).isoformat()
     due = store.list_open_loops(status="open", due_before=now_iso, limit=1)
@@ -222,13 +221,17 @@ def _pick_memory_callback(store: MemoryStore, *, now: datetime) -> ProactiveReas
     )
 
 
-def pick_proactive_reason(
+def _pick_substantive_proactive_reason(
     store: MemoryStore,
     *,
-    longing_intensity: float = 0.0,
     longing_tier: LongingTier = "bored",
     now: datetime | None = None,
-) -> ProactiveReason:
+) -> ProactiveReason | None:
+    """Agenda-backed reasons only: reminders, due open loops, memory intents.
+
+    Open-but-not-yet-due loops are excluded by ``_pick_open_loop`` (``due_before=now``).
+    Returns ``None`` when nothing substantive is available.
+    """
     aware = _aware_now(now)
 
     due = _pick_due_reminder(store, now=aware)
@@ -251,11 +254,51 @@ def pick_proactive_reason(
     if callback is not None:
         return replace(callback, longing_tier=longing_tier)
 
+    return None
+
+
+def pick_agenda_proactive_reason(
+    store: MemoryStore,
+    *,
+    longing_tier: LongingTier = "bored",
+    now: datetime | None = None,
+) -> ProactiveReason | None:
+    """Phase 6 default: substantive agenda reason, or ``None`` (no longing fallback)."""
+    return _pick_substantive_proactive_reason(store, longing_tier=longing_tier, now=now)
+
+
+def check_in_proactive_reason(
+    *,
+    longing_intensity: float,
+    longing_tier: LongingTier = "bored",
+) -> ProactiveReason:
+    """Longing-only fallback reason — not an agenda item."""
     return ProactiveReason(
         kind="check_in",
         avatar_state="worried",
         summary="想念/check-in",
         detail=f"longing={longing_intensity:.2f}",
+        longing_intensity=longing_intensity,
+        longing_tier=longing_tier,
+    )
+
+
+def pick_proactive_reason(
+    store: MemoryStore,
+    *,
+    longing_intensity: float = 0.0,
+    longing_tier: LongingTier = "bored",
+    now: datetime | None = None,
+) -> ProactiveReason:
+    """Legacy picker: substantive reason first, then longing check-in fallback."""
+    substantive = _pick_substantive_proactive_reason(
+        store,
+        longing_tier=longing_tier,
+        now=now,
+    )
+    if substantive is not None:
+        return substantive
+    return check_in_proactive_reason(
         longing_intensity=longing_intensity,
         longing_tier=longing_tier,
     )
