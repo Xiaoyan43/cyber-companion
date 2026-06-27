@@ -3,7 +3,7 @@
 > **冷启动入口**：新 session 先读本文件 + `docs/SOUL_RUNTIME_ARCH.md`（架构契约）。
 > 本文件记录**已验收进度**与**工作树禁区**；不替代 ARCH 的设计细节。
 
-最后更新：**2026-06-27** · branch `codex/soul-runtime` · **Phase 0–7 accepted**
+最后更新：**2026-06-27** · Soul branch `codex/soul-runtime` · **Phase 0–7 accepted** · voice cleanup branch `codex/voice-stabilization-20260627`
 
 ---
 
@@ -13,7 +13,8 @@
 |---|---|
 | **branch** | `codex/soul-runtime` |
 | **accepted implementation HEAD** | `b21bc47` — `feat(soul): consolidate Phase 7 off-path commit and voice adapters`（Phase 7 代码/测试验收 checkpoint） |
-| **latest accepted docs-only tip** | `34e0934` — Phase 6 状态对齐 docs（**纯 docs commit 不抬高 implementation checkpoint**） |
+| **latest accepted docs-only tip** | `f1298d3` — Phase 7 accepted 状态对齐（**纯 docs commit 不抬高 implementation checkpoint**） |
+| **voice stabilization checkpoint** | `dd026ee` — provider/tagger/Fish/self-echo 四组实现已在独立 voice branch 提交；不改变 Soul accepted HEAD |
 
 > **accepted implementation HEAD** = 最后验收通过的**代码/测试** commit；下一 session 冷启动与回归以它为基准。
 > 仅更新本 STATUS/ARCH 的 docs commit（如 `c59ce2f`…`34e0934`）**不算**新的 implementation checkpoint，无需循环改 SHA。
@@ -27,6 +28,8 @@
 |---|---|---|
 | **invariant** | `./.venv/bin/python -m pytest -m invariant` | **365 passed** |
 | **backend 全量** | `./.venv/bin/python -m pytest backend/tests` | **738 passed** |
+
+独立 voice 稳定化分支 @ `dd026ee` 的最新门禁：**366 invariant passed**、**745 backend passed**、前端 `tsc --noEmit` 通过。
 
 invariant 入口：`pytest.ini` + `backend/tests/conftest.py`（collection hook 按 §5 文件名/前缀打标）。
 详见 `docs/SOUL_RUNTIME_ARCH.md` §5。
@@ -52,20 +55,13 @@ invariant 入口：`pytest.ini` + `backend/tests/conftest.py`（collection hook 
 
 ---
 
-## 4. 当前 dirty 禁区（**禁止 stage / 禁止 soul-runtime session 触碰**）
+## 4. 当前剩余 dirty 禁区（**禁止 stage / 禁止 soul-runtime session 触碰**）
 
-> 共 ~32 项 unstaged/untracked 实验残留（2026-06-27 盘点）。Soul Runtime phase 全程不得修改或提交。
+> 2026-06-27 已把可验收语音改动分离并提交到独立 voice branch。以下只剩故意保留的探针与本地实验资产；Soul Runtime session 仍不得修改或提交。
 
 ### 已修改（M）
-- `.env.example`
-- `backend/app/tts/expression_tagger.py`
 - `backend/realtime/run_voice.py`
-- `backend/realtime/voice_config.py`
-- `backend/tests/test_expression_tagger.py`
-- `backend/tests/test_fish_audio_pipecat_tts.py`
-- `backend/tests/test_voice_config.py`
-- `config/tts.json`
-- `docs/HANDOFF.md`（独立交接文档，本分支 session 不更新）
+  - 仅 `_LatencySpikeLogger` 与 pipeline 插入，P8-C 临时探针，明确不提交。
 
 ### 未跟踪（??）
 - `.agents/` · `.cursor/mcp.json` · `.cursor/skills/` · `.mcp.json` · `skills-lock.json`

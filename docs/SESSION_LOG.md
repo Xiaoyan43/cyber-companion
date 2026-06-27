@@ -4010,3 +4010,87 @@
 - 未改 memory schema / behavior 决策契约 / provider 抽象 / file permission policy。
 - 纯 E2E RTC 路径未动；2.0 音色未设 `disable_markdown_filter`；未换音色。
 - repo public——secrets 只在 env；`reference/` gitignored 未动。
+
+## 2026-06-27 - Session 71
+
+本次完成：
+
+- 将标签器/翻译共用的 OpenRouter provider 从误导性的 `gemini` 正名为 `tagger`。
+- 新增 `OPENROUTER_TAGGER_API_KEY`，同时保留旧 provider key 和 `OPENROUTER_GEMINI_API_KEY` 自动兼容。
+- 本机 `config/providers.json` 已换成 `tagger`，实际模型仍为 Haiku，旧 `.env` 密钥无需立即迁移。
+
+下次接着做：
+
+- 单字自回声继续转日常真机观察；再次自触发时记录 ASR final 和 `BotStopped` 相对时间。
+- 若主动进入下一个可实施切片，候选是 B 类标签位置听感验证。
+
+已知问题：
+
+- 旧 env 名仅作兼容路径，新部署应使用 `OPENROUTER_TAGGER_API_KEY`。
+- 发平/句间呼吸问题继续延后与音色及其他参数统一比较。
+
+相关文件：
+
+- `backend/app/providers/registry.py`
+- `backend/app/tts/expression_tagger.py`
+- `backend/app/tts/translator.py`
+- `config/providers.example.json`、`.env.example`
+- `backend/tests/test_providers.py`、`test_expression_tagger.py`、`test_translator.py`
+- `docs/HANDOFF.md`、`docs/TASK_QUEUE.md`、`docs/TODO.md`
+
+测试结果：
+
+- tagger/translator/providers：67 passed。
+- guards/逐句路径/Pipecat processor/soul contract：54 passed。
+- 后端全量：744 passed（12 个既有 deprecation warnings）。
+- 前端：`tsc --noEmit` 通过。
+- 本机按 dev backend `.env` 加载方式验证 `tagger` 可解析且旧密钥兼容生效。
+- `git diff --check` 通过。
+
+不要改动的边界：
+
+- 未改标签 prompt、标签语义、Fish 参数、memory schema、behavior 契约或文件权限。
+- 旧 `gemini` provider key/env 兼容不要删，直到所有本地/部署配置完成迁移。
+- 工作树内其他语音实验改动属于既有未提交工作，本轮未清理或覆盖。
+
+## 2026-06-27 - Session 72
+
+本次完成：
+
+- 用真实 Haiku tagger + paid Fish S2.1 Pro 复跑 B 类位置样本，确认剩余问题是全局 mood 会提前染中性铺垫。
+- 先收紧 prompt，但 `position_v3/v4` 证明长示例会过拟合且仍压不住 mood 偏置，已撤掉长示例。
+- neutral-mood A/B 两轮 10/10 落点正确；生产移除 tagger 的动态 mood 注入，保留函数参数兼容。
+- 生成最终 `position_v5` 五条音频，五条均没有提前染中性铺垫。实验脚本新增 `--label` 单 fixture 选项以减少重复付费。
+- 用户已听完 `position_v5` 并明确决定保留；B 类位置精修正式结案。
+
+下次接着做：
+
+- 先只读盘点 `codex/soul-runtime` 分支上的 dirty 工作树，区分已验收语音改动、Soul Runtime 主干、临时探针和实验/工具文件。
+- 形成安全的分支/checkpoint 方案后，再转入低 GPU 视觉存在感与端到端日常使用。
+
+已知问题：
+
+- Haiku 仍有生成随机性，但移除 mood 后本轮 10 次 A/B + 5 条最终音频均未出现提前染色。
+- 旧 `position_v3/v4` 仅保留为失败证据，不用于听感验收。
+
+相关文件：
+
+- `backend/app/tts/expression_tagger.py`
+- `backend/tests/test_expression_tagger.py`
+- `experiments/tagger_position_listen.py`
+- `data/tagger_position_listen/s2.1-pro/position_v2/`
+- `data/tagger_position_listen/s2.1-pro/position_v5/`
+- `docs/HANDOFF.md`、`docs/TASK_QUEUE.md`、`docs/TODO.md`
+
+测试结果：
+
+- 标签器相关切片：92 passed。
+- 后端全量：745 passed（12 个既有 deprecation warnings）。
+- `git diff --check` 通过。
+
+不要改动的边界：
+
+- 不重新引入 `[sad]` / `[worried]` high-risk 替换或「谨慎使用」提示。
+- 未动 Fish 参数、音色、断句器、memory/behavior 契约或文件权限。
+- `position_v5` 已验收；不再追加 prompt 规则，不重开 Fish/tagger 微调。
+- 下一会话未完成 dirty 分类前，不要直接 stage、commit、switch branch 或清理文件。

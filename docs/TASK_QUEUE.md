@@ -1,6 +1,14 @@
 # TASK_QUEUE — 按优先级（2026-06-22）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
+> **2026-06-27（第七十三轮稳定化）**：dirty 工作树已从 `codex/soul-runtime` 分离到 `codex/voice-stabilization-20260627`，并按 provider 正名 `67ab085`、tagger 位置 `9847d9e`、Fish 参数 `26f0ef4`、单字自回声 `dd026ee` 四组独立提交。后端 745、invariant 366、前端 `tsc --noEmit` 全绿；`_LatencySpikeLogger` 与全部实验/音频/工具配置仍明确未提交。**下一步 = 产品体验，不再继续 Fish/tagger 微调。**
+> **2026-06-27（第七十二轮用户验收）**：用户已听完 `position_v5` 并决定保留。B 类位置精修结案；动态 mood 不再注入 tagger，正文保持为唯一情绪来源。
+> **2026-06-27（第七十二轮）**：B 类位置根因坐实为动态 mood 注入会抢过已写完的原文证据。继续叠示例的 `position_v3/v4` 不稳定；neutral-mood A/B 两轮 10/10 不再提前染色。生产已移除 tagger prompt 的动态 `mood_block`，保留函数参数兼容；正文成为唯一情绪来源。最终 `position_v5` 五条落点全部正确，后端全量 745 passed，用户听感 PASS 并决定保留。
+> **2026-06-27（第七十一轮）**：标签器 provider 命名债已结案。`"gemini"` 已正名为模型无关的 `"tagger"`，tagger/翻译共用该辅助 OpenRouter 入口；新 env 为 `OPENROUTER_TAGGER_API_KEY`，但旧 provider key 和 `OPENROUTER_GEMINI_API_KEY` 均保留自动兼容。后端全量 744 passed，前端 `tsc --noEmit` 通过，本机旧密钥配置可继续使用。
+> **2026-06-27（第七十轮）**：`normalize=false` 已进 Pipecat 真机链路，听感可接受；发平/呼吸延后与音色和其他参数统一评估。
+> 真机发现 Boxi「先睡，乖。」尾音被 ASR 回收成单字「乖。」，逃过 `min_chars=2` 后触发自回复。已做 2s 窄窗口精确尾字修复 +3 测试（21 passed）。
+> 真机又运行三轮，Boxi 实际生成单字回复「一」；本次尾音未被 ASR 回收、未自触发，真实用户后续输入正常。直接拦截命中由 +3 确定性测试覆盖。
+> **下一步 = 转日常真机观察；再次自触发时记录 ASR final + 时序后继，不再主动制造回声。**
 > **2026-06-26（第六十七轮）**：**标签密度双向攻坚，未 commit，待量化验证后 commit。**
 > ① `TAGGER_INSTRUCTION_TEMPLATE` Rule 3 重写——从"软倾向不加"改成"明确条件判断（条件A/B，默认否）"，
 > 针对 Haiku 对"克制类"指令遵循弱的特性；② 新代码护栏 `suppress_repeated_leading_tags`——连续句

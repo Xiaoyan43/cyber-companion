@@ -1,214 +1,422 @@
-# HANDOFF — 上下文交接（2026-06-26，第六十七轮 · 标签密度双向攻坚）
+# HANDOFF — 上下文交接（2026-06-27，第七十三轮 · 语音并行轨稳定化 checkpoint）
 
 > 本文件每次「瘦身交接」/「工作流交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
 
-## 第六十七轮已完成（2026-06-26，**已 commit `08bf0ec`**）
+## ⚠️ 给新 session 的最小上手指引
 
-### ✅ 方向一：Rule 3 重写（Haiku-friendly 明确判断协议）
-- `TAGGER_INSTRUCTION_TEMPLATE` Rule 3 从"软倾向不加"改成"明确条件判断"：
-  - **默认不加标签**；只有满足"条件 A（情绪切换）"或"条件 B（开头突出情绪）"才加一个标签。
-  - 两条 `禁止` 语句针对 Haiku 最常见的两种违规模式（按句分配/循环轮换）。
-  - 旧版 Gemini 可用的"软倾向"措辞已被替换——新措辞对两个模型都有效。
-- 对应测试：`test_tagger_instruction_contains_core_rules` 里的 `"逐句重新判断"` 更新为
-  `"每句话默认不加标签"`。
+1. 先读本文件 + `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`，**不要全仓库扫描**。
+2. **当前分支 = `codex/voice-stabilization-20260627`，voice implementation checkpoint = `dd026ee`**。已从 `codex/soul-runtime` 的 `f1298d3` 分离；工作树仍有故意不提交残留：
+   - `backend/realtime/run_voice.py`（`_LatencySpikeLogger`，P8-C 探针）——**不要 commit**。
+   - untracked：`experiments/tagger_ab.py`（已本地改过，见下）、`experiments/tagger_listen_haiku.py`、
+     `voice_compare.py`、`data/tagger_eval/`、`.mcp.json` 等实验/数据。
+3. 生效配置（`config/providers.json` 与 `.env` gitignored；`config/tts.json` 已进 voice checkpoint）：
+   - `config/providers.json`：tagger 跑 `anthropic/claude-haiku-4.5`（provider 条目已正名为 `"tagger"`）。
+   - `config/tts.json`：`fish_audio.model = s2.1-pro`，音色嘉岚 `fbe02f8306fc4d3d915e9871722a39d5`。
+   - `.env`：`CYBER_COMPANION_VOICE_FISH_NORMALIZE=false`（第六十九轮 A/B 胜出项）。
+4. `normalize=false` 已进入 Pipecat 真实多轮链路，用户听感「还可以」；发平/句间呼吸的最终优化延后与音色和其他参数一起评估，不继续单点追节奏标签。
+5. 本轮发现单字尾音自回声：Boxi「先睡，乖。」→ ASR「乖。」→ Boxi 再回复。已做窄修复：仅在停止播放后 2s 内拦截与尾字完全一致的单字。真机已生成单字回复「一」，本次未被 ASR 回收且未自触发；直接拦截命中待自然复现时观察。
+6. 第七十三轮稳定化后已重新跑通：后端全量 **745 passed**、invariant **366 passed**、前端 `tsc --noEmit` 通过、`git diff --check` 通过。
+7. Codex 已配置 Fish 官方 agent tooling（全局，不在仓库 commit 内）：Fish Docs MCP + `fish-audio-api`/`fish-audio-sdk` skills。新会话可能需要重启后才热加载。
+8. 标签器/翻译共用的 OpenRouter provider 已从误导性的 `"gemini"` 正名为 `"tagger"`；实际模型仍是 Haiku。新环境变量为 `OPENROUTER_TAGGER_API_KEY`，但注册层会自动兼容旧 `OPENROUTER_GEMINI_API_KEY`，本机无需立即迁移。
+9. B 类位置的真正杠杆是移除 tagger prompt 的动态 mood 注入：已写完的正文是唯一情绪来源。neutral-mood A/B 两轮 10/10 不再提前染色，`position_v5` **已由用户听感验收通过，决定保留**。
+10. **语音微调与 dirty 分轨均已结案**，下一会话不要继续追加 tagger/Fish 规则。下一步进入产品体验整合；日常使用中被动观察单字自回声即可。
 
-### ✅ 方向二：代码护栏 `suppress_repeated_leading_tags`
-- 新常量 `_SOUND_EFFECT_TAG_INNERS`（12 个声音事件标签，免疫去重）+
-  `_DEDUP_EXEMPT_TAG_INNERS = _SOUND_EFFECT_TAG_INNERS | _BREAK_TAG_INNERS`。
-- 新导出函数 `suppress_repeated_leading_tags(tagged: str) -> str`（`expression_tagger.py`）：
-  - 分句后，对每句话找第一个非 exempt 标签；
-  - 若与上一句的第一个非 exempt 标签完全相同 → 删除（"继续基调"非新切换，白加）；
-  - 无标签句 → 重置基线（下一次同标签视为新起点，不压制）；
-  - 音效/break 标签不受影响。
-- 接入 `apply_expression_tags`（全文路径，在现有 placement guard 之后）。
-- 接入 `main.py` `_tag_reply_by_sentence`（逐句并发后 join，再过一遍护栏）。
-- 新增 10 个单测（`test_expression_tagger_guards.py`）：去重/链式/不同标签不压/音效豁免/
-  break 豁免/空白间隙重置/单句/无标签/音效跳过找非exempt/wiring 测试。
-- **69 个 tagger 相关测试全绿**（=39 prompt + 30 guard tests，相比上轮 +10）。
+---
 
-### 注意
-- `test_expression_tagger_processor.py` 和 `test_main_tag_reply_by_sentence.py` 等涉及
-  pipecat / FastAPI 的测试文件在本机遇到 numpy macOS `_mac_os_check` 崩溃，与本轮改动无关
-  （预存在环境问题，旧 session 同样无法运行这批测试）。
-- 效果待用 `experiments/tagger_ab.py` 量化验证：分别测 Haiku 和 Gemini，
-  对比 Rule 3 改写前后 `tagged_sentence_ratio` 变化。
+## 第六十七轮已完成（2026-06-26，**已 commit `08bf0ec` + `0d51acb`**）
 
-## ⚠️ 本次交接特殊说明（给 Cursor / Codex）
-- **背景**：Claude Code 本周额度即将用完。从现在到下周一额度重置前，开发交给 **Cursor 或 Codex**；
-  重置后用户会回到 Claude Code 继续。本次 session **没有任何新代码改动**——第六十五轮的工作（下文）
-  已在 commit `111c70c` 落地，工作树现在是干净的「已交付」状态，只剩两类**故意不提交**的残留物。
-- **当前 git 工作树状态（交接基线 = HEAD `111c70c`）**：
-  - `backend/realtime/run_voice.py`（+44 行，**未提交，故意保留**）：`_LatencySpikeLogger`——P8-C
-    前置的临时延迟探针（量「用户停说→第一帧 TTS 音频」），跨多轮一直按用户要求留在工作区不提交。
-    **不要 commit 它**；继续开发时按需保留或本地临时禁用即可。
-  - untracked 文件（`.mcp.json`、`experiments/*`、`data/ja_voice_audition/`、`data/tagger_eval/`）：
-    全是**故意不提交**的实验脚本 / A-B 音频 / MCP 配置。`.mcp.json` 是 Fish Audio 官方文档 MCP
-    （project scope，Claude Code 专用；Cursor/Codex 不一定能用这个 server，可忽略）。
-- **给 Cursor/Codex 的最小上手指引**：
-  1. 先读本文件 + `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`，**不要全仓库扫描**。
-  2. 生效配置在 `config/providers.json` 和 `config/tts.json`（**均 gitignored**，不在 git 里）——
-     当前 tagger 实际跑 `anthropic/claude-haiku-4.5`（经 OpenRouter），见下文「已知 bug / 风险」。
-  3. 主线 = 标签密度问题（Haiku 上未解决），量化工具是 `experiments/tagger_ab.py`，**不要凭感觉调**。
-  4. 改动遵循本仓库 small-diff 习惯；测试入口见 `backend/tests/`，TTS 切片 `pytest backend/tests/test_*tag*`。
+### ✅ 代码：Rule 3 重写 + 跨句去重护栏
+
+**方向一 · Rule 3 重写（Haiku-friendly 明确判断协议）**
+- `TAGGER_INSTRUCTION_TEMPLATE` Rule 3：从「软倾向不加」→「默认不加；仅条件 A（情绪切换）或 B（开头突出）才加」。
+- 两条 `禁止` 针对 Haiku 常见违规：按句机械分配 / 循环轮换不同标签制造多样感。
+- 测试：`"逐句重新判断"` → `"每句话默认不加标签"`。
+
+**方向二 · `suppress_repeated_leading_tags`**
+- 新函数 + `_SOUND_EFFECT_TAG_INNERS` / `_DEDUP_EXEMPT_TAG_INNERS`（`expression_tagger.py`）。
+- 连续两句句首非 exempt 标签完全相同 → 删后一句（延续基调，非新切换）；无标签句重置基线。
+- 接入 `apply_expression_tags`（全文路径）+ `main.py` `_tag_reply_by_sentence`（逐句 join 后）。
+- +10 单测（`test_expression_tagger_guards.py`），tagger 相关 **69 pytest 全绿**。
+
+**已修改文件（`08bf0ec`）**
+- `backend/app/tts/expression_tagger.py`
+- `backend/app/main.py`
+- `backend/tests/test_expression_tagger.py`
+- `backend/tests/test_expression_tagger_guards.py`
+
+### ✅ 量化验证（同轮 Cursor session，`experiments/tagger_ab.py` N=3）
+
+脚本走**生产逐句路径** + join 后 `suppress_repeated_leading_tags`（本地 untracked 版已改好，未 commit）。
+
+| 模型 | 场景 | 改前基线 | 改后（含护栏） |
+|------|------|----------|----------------|
+| **Haiku** | long_story | ~1.00 | **0.67** |
+| **Haiku** | short_chat | ~1.00 | **0.56** |
+| Gemini | long_story | 0.43 | **0.43**（无回归） |
+| Gemini | short_chat | 0.11–0.33 | **0.33–0.44** |
+
+**结论**：Haiku 密度从「几乎句句贴」降到「约 2/3 句有标签」，主目标达成；Gemini 未退化。
+
+**同轮 `tagger_eval.py`（全文路径，4 fixture，Haiku）**
+
+| Fixture | 标签 | tagged_sent | 评价 |
+|---------|------|-------------|------|
+| 01 揶揄+想念 | `[sarcastic]` + `[nostalgic]` | 2/4 | 转折处分贴，好 |
+| 02 冷淡失落 | `[lonely]` 仅句首 | 1/4 | opening_only，略平 |
+| 03 得意挖苦 | `[smug]` 仅句首 | 1/3 | opening_only，可接受 |
+| 04 揶揄→心软 | `[soft tone]` 在「不过」前 | 1/4 | 转折点句中插入，好 |
+
+### ✅ Fish 文档对照 + 密度/位置/语义分析（同轮讨论，无新代码）
+
+对照 [Fish Emotion Control](https://docs.fish.audio/developer-guide/core-features/emotions) +
+`docs/FISH_AUDIO_REFERENCE.md` §3–4，结论摘要：
+
+**密度**
+- Fish：「space out emotional changes」「短文本别滥用」「一句最多一种情绪（不是每句都必须有标签）」。
+- **不是过少**：长故事 0.67、短对话 0.25–0.56，已从过密回到合理区间。
+- **长叙事略密于 Fish 理想（~0.35–0.50）**，但可接受；短对话偏克制，符合官方「短文本别滥用」。
+
+**位置准确度（中等偏上）**
+- **做得好**：情绪转折点句中插入（04 `[soft tone]`、01 后半 `[nostalgic]`）；break 冗余/悬空标签有代码护栏。
+- **仍偏弱**：B 类常偷懒贴句首（整句染色，精度不如句中贴）；`opening_only`（02/03 仅开头一标）。
+- **未做**：task 2 的 P2（词中插 `那[sighing]股`）/ P3（无意义句首堆叠）守卫。
+
+**语义对齐 & A/B 类标签用法**
+- **Haiku（当前生产）**：B 类情绪跟情节走（`[nostalgic]`/`[sad]`/`[relieved]`），A 类滥用少（task 3 prompt 仍有效）。
+- **Gemini**：密度优，但 A 类语义错（`[sighing]`/`[panting]` 贴拟声「扑通」）、生造标签（`[heartbeat]`、`[wistful]`）、脏标签（`[beklagende]`）。
+- **架构边界不变**：代码只强制格式/明显非法位置；**情绪恰当性 & A/B 类选对**靠 LLM，`_preserves_original_wording` 会在改字插标时整句放弃标签。
+
+**架构决策（仍有效）**：禁止用代码硬删 `[sighing]` 等语义判断——见 TASK_QUEUE task 3 结案记录。
+
+### ✅ 运维：前后端已重启供真机检测
+
+- 后端：`http://127.0.0.1:8000`（`bash scripts/dev_backend.sh`）
+- 前端：`http://127.0.0.1:5173`（`npm run dev --workspace frontend`）
+- 用户开新 session 前若服务已停，重新 `npm run dev:backend` + `npm run dev:frontend`。
+
+---
+
+## 第六十八轮补充（2026-06-26，**未 commit，仅更新 HANDOFF + Codex 全局配置**）
+
+### ✅ 用户真机听感结论已记录
+
+- 当前标签密度/稳定性：**较为稳定**，不再是第六十七轮前那种「几乎句句贴」的主问题。
+- 主要听感问题：**稍微发平**，重点像是**语句之间停顿不足、没有顿挫感**。
+- 方向判断：下一步不应全局加密度，也不应回退到句句贴；主线应切到 Fish TTS 的**节奏/韵律控制**。
+
+### ✅ Fish 文档复核后的新调优线索
+
+只读 `docs/FISH_AUDIO_REFERENCE.md`、`docs/PIPECAT_REFERENCE.md`、`docs/PIPECAT_AUDIT.md` 与当前 Fish/Pipecat 装配，结论：
+
+1. **节奏标签疑似需要 A/B**
+   Fish S2-Pro 文档里的节奏类标签是 `[pause]` / `[short pause]` / `[long pause]`，但当前标签器 prompt 和守卫用的是 `[break]` / `[long-break]`。历史上 `[break]` 似乎有过效果，不能直接断言是 bug；但这正贴合「句间没顿挫」症状，应优先固定文本 A/B。
+2. **Pipecat 语音路径没有显式传 Fish 表达参数**
+   `backend/realtime/run_voice.py` 当前只传 `voice` / `model` / `latency=balanced`。Pipecat `FishAudioTTSService.Settings` 支持 `normalize`、`temperature`、`top_p`、`prosody_speed`、`prosody_volume`，但语音路径未显式设置。
+3. **文字路径和语音路径配置不一致**
+   `backend/app/tts/fish_audio.py` 已传 `temperature/top_p`，并设置 `prosody.normalize_loudness=false`；Pipecat 语音路径仍走默认 `normalize=True`，可能压平 whisper/shouting 等动态。
+4. **`latency=normal` 仍不要碰**
+   项目已真机确认 normal 在 Pipecat 多轮会失声，且首字节约 3.5s；继续锁 `balanced` 是当前正确取舍。
+
+### ✅ Codex 侧 Fish 官方 agent tooling 已配置
+
+根据 Fish 官方博客 `llms.txt + MCP + Agent Skills`：
+
+- 已在 `/Users/xiaoiwawang/.codex/config.toml` 追加全局 MCP：
+  - `[mcp_servers.fish_audio]`
+  - `url = "https://docs.fish.audio/mcp"`
+  - 备份：`/Users/xiaoiwawang/.codex/config.toml.bak-fish-audio-mcp`
+- 已安装 Codex 全局 skills：
+  - `/Users/xiaoiwawang/.agents/skills/fish-audio-api`
+  - `/Users/xiaoiwawang/.agents/skills/fish-audio-sdk`
+- 当前会话可能不会热加载；新 Codex 会话应可发现。以后 Fish API/SDK 代码生成优先用 skill，开放式/最新文档问题优先查 MCP。
+
+---
+
+## 第六十九轮补充（2026-06-27，**未 commit，Fish 节奏/参数 A/B**）
+
+### ✅ 固定文本节奏标签 A/B 已做，结论：不要迁移词表
+
+新增 `experiments/fish_rhythm_ab.py`，真实 Fish HTTP 生成固定文本 A/B：
+
+- 输出目录：`data/fish_rhythm_ab/s21-pro-free/`
+- 比较：无标签 / `[break]` / `[long-break]` / `[pause]` / `[short pause]` / `[long pause]`
+- 用户听感：**区别不是很大**
+- 决策：**暂不把生产 prompt/guard 从 `[break]` 系迁移到 `[pause]` 系**；节奏标签词表不是当前主矛盾。
+
+### ✅ Fish 参数 A/B 已做，结论：只关 normalize
+
+同一脚本生成 `pause` 固定文本参数 A/B：
+
+- `pipecat_default_norm_true`（近似 Pipecat 默认 `normalize=True`）
+- `normalize_false`
+- `normalize_false_speed_094`
+- `normalize_false_speed_094_temp_08`
+
+用户听感：
+
+- **`normalize=false` 最正常**
+- 其他三组句间呼吸略别扭
+
+已改：
+
+- `.env` 增加 `CYBER_COMPANION_VOICE_FISH_NORMALIZE=false`
+- `backend/realtime/run_voice.py` 已支持可选 Fish Settings：`normalize` / `temperature` / `top_p` / `prosody_speed` / `prosody_volume`
+- `.env.example` 标注当前推荐：只关 normalize；降速/升温仅作为后续实验项
+- 测试：`pytest backend/tests/test_voice_config.py backend/tests/test_fish_audio_pipecat_tts.py` → 11 passed
+
+下一步：**跑 Pipecat 真机语音链路验证 `normalize=false` 是否也改善真实对话**。不要同时开 `prosody_speed=0.94` 或 `temperature=0.8`。
+
+### ✅ 模型版本 A/B 样本已生成（S2.1 Pro paid vs free vs S2.0/S2-Pro）
+
+用户多轮真机怀疑问题可能来自 `s2.1-pro-free`。按 Fish 文档/API 语义确认：
+
+- S2.1 Pro paid：`model` header 用 `s2.1-pro`
+- S2.1 Pro Free：`s2.1-pro-free`
+- 上一代 S2 / S2.0：`s2-pro`
+
+新增 `experiments/fish_model_ab.py`，只做离线 HTTP `/v1/tts` 样本，不改生产配置。
+
+生成参数：
+
+- voice：嘉岚 `fbe02f8306fc4d3d915e9871722a39d5`
+- models：`s2.1-pro` vs `s2.1-pro-free` vs `s2-pro`
+- fixtures：5 条不同情绪（teasing / soft / angry / excited / lonely）
+- `format=mp3`
+- `latency=balanced`（贴近当前 Pipecat 真实链路）
+- `temperature=0.7`
+- `top_p=0.7`
+- `prosody.normalize_loudness=false`
+
+输出：
+
+- `data/fish_model_ab/s2.1-pro/*.mp3`
+- `data/fish_model_ab/s2.1-pro-free/*.mp3`
+- `data/fish_model_ab/s2-pro/*.mp3`
+- `data/fish_model_ab/manifest.json`
+
+下一步：用户人工横向听同名文件（如三组 `01_teasing.mp3`），判断 paid S2.1 Pro 是否明显优于 Free，或 `s2-pro` 是否更自然。
+
+用户听后三组结论：**`s2.1-pro-free` 明显过于粗糙，当前 `s2.1-pro` 最好**。已把本地 `config/tts.json`
+切到 `s2.1-pro`；Pipecat 构造验证为 `model=s2.1-pro`、`latency=balanced`、`normalize=False`。
+
+### ✅ Paid S2.1 Pro 上已重做停顿/normalize 样本
+
+因为前一轮 `[break]`/`[pause]` 和 `normalize=false/true` 判断基于 `s2.1-pro-free`，用户要求在 paid
+`s2.1-pro` 上重测。已用同一固定文本、同一嘉岚音色、同一参数生成：
+
+- `data/fish_rhythm_ab/s21-pro/rhythm_norm_false/*.mp3`
+- `data/fish_rhythm_ab/s21-pro/rhythm_norm_true/*.mp3`
+
+每组 6 条：`none` / `break` / `long_break` / `short_pause` / `pause` / `long_pause`。
+
+用户听感结论：
+
+- 停顿/顿挫：各标签**没什么区别**，不要因为这轮去大改节奏词表。
+- `normalize=false`：比 `true` **稍微好一点**，当前 `.env` 保留 `CYBER_COMPANION_VOICE_FISH_NORMALIZE=false`。
+- 奇怪现象：两组里 `long_pause` 的**音质**都更好一些，但这不像是“停顿/顿挫”改善，更可能是 Fish 生成随机性、
+  分段/采样路径变化，或 `[long pause]` 对整句韵律的副作用。**不要直接把所有停顿迁移成 `[long pause]`**；
+  若要利用它，需再做多次重复样本确认稳定性。
+
+### ✅ B 类标签位置 prompt 精修已做
+
+用户决定不再围绕停顿标签打转，转向 B 类标签位置精修。已修改
+`backend/app/tts/expression_tagger.py` 的 `TAGGER_INSTRUCTION_TEMPLATE`：
+
+- 强化语气/情绪/音调类标签不要偷懒全放句首。
+- 优先贴在情绪真正开始的位置，尤其是转折词或情绪起点前：如「不过」「但是」「其实」「只是」「偏偏」
+  「突然」「后来」「那一刻」。
+- 只有整句从第一个字开始就是同一种明确情绪时，才句首贴。
+- 新增正反例：
+  - `我嘴上嫌你烦，[soft tone]不过还是给你留了灯。`
+  - `我今天去了那家店，[sad]后来才发现你不在。`
+
+边界：这次**没有**新增代码语义 guard。B 类标签位置属于语义判断，仍交给 tagger LLM；代码只做格式/明显非法位置护栏。
+
+测试：`pytest backend/tests/test_expression_tagger.py backend/tests/test_expression_tagger_guards.py backend/tests/test_main_tag_reply_by_sentence.py`
+→ 76 passed。
+
+### ✅ B 类位置精修听感样本已生成
+
+新增 `experiments/tagger_position_listen.py`，用真实 tagger（当前 `"gemini"` provider 实际 Haiku）+
+paid `s2.1-pro` + 嘉岚 + `latency=balanced` + `normalize_loudness=false` 生成 5 条位置专项样本：
+
+- 输出：`data/tagger_position_listen/s2.1-pro/*.mp3`
+- manifest：`data/tagger_position_listen/s2.1-pro/manifest.json`
+
+样本专门设计成「前文中性 → 当前句中途转情绪」，用来听 B 类标签是否贴在转折/情绪起点：
+
+- `01_tease_to_soft`：成功贴到 `[soft tone]不过`
+- `03_dry_to_sarcastic`：成功贴到 `[disdainful]其实`
+- `02_neutral_to_sad`：仍偏句首 `[sad]我本来只是想随便看看...`，没贴到「后来」
+- `04_calm_to_worried`：过早贴 `[worried]水也喝一口`，且第二句又贴 worried
+- `05_story_to_nostalgic`：opening-only / 重复 `[nostalgic]`
+
+初步观察：prompt 精修有作用，但 Haiku 仍不稳定；下一步以用户听感为准。若仍不满意，可能要继续 prompt 收紧
+「不要提前染中性铺垫」，或改 tagger 策略，而不是继续调 TTS。
+
+### ⚠️ 已撤销：`[sad]` / `[worried]` high-risk guard
+
+曾短暂尝试把 `[sad]` / `[worried]` 强制替换成 `[low voice]` / `[soft tone]`，但用户复听后判断：
+
+- 02 / 04 的主要问题是**位置**，不是 `[sad]` / `[worried]` 标签本身。
+- 不需要替换 `[sad]` / `[worried]`。
+- 也不要在 prompt 里保留“谨慎使用”提醒。
+
+因此已撤销：
+
+- `_normalize_high_risk_tone_tags()` 删除。
+- `[sad]` / `[worried]` 保留在基础情绪词表。
+- prompt 不再提示它们是 high-risk。
+- 相关测试断言已恢复。
+
+保留结论：下一步继续处理 B 类标签**位置**，不要用代码硬替换情绪标签。
+
+---
+
+## 第七十轮补充（2026-06-27，**未 commit，Pipecat 真机 + 单字自回声修复**）
+
+### ✅ `normalize=false` 真实链路已验证
+
+- 启动日志确认：`Fish TTS explicit settings: {'normalize': False}`。
+- 真机多轮完成 STT → soul → 逐句 tagger → Fish TTS；一轮 `user-stopped→first-audio = 2.576s`。
+- 用户听感：「还可以」；发平和句间呼吸暂不继续单点调参，最后与换音色/其他设置统一评估。
+- 继续保留 `s2.1-pro + latency=balanced + normalize=false`；不开 `prosody_speed=0.94` / `temperature=0.8`，不迁移 `[pause]` 词表。
+
+### ✅ 单字尾音自回声已做窄修复
+
+真机时 Boxi 上轮末句是「先睡，乖。」，播放尾音被 ASR 识别成新的用户 final「乖。」，
+触发 Boxi 再回复「嗯，这就乖了。」。根因是现有 `is_self_echo` 故意保留单字用户回复，
+`min_chars=2` 让单字尾音漏过。
+
+修复：
+
+- 保留通用匹配器 `min_chars=2`，不全局吞掉「嗯」/「好」这类真实单字接话。
+- `SelfEchoGate` 新增 2s 窄窗口：只有用户 final 正好等于 Boxi 尾字时才拦截，且不做模糊单字匹配。
+- +3 回归测试：1.5s 内「乖」被拦截；2.1s 后「乖」保留；窗口内无关「好」保留。
+- 测试：21 passed。真机又运行三轮，Boxi 实际生成单字回复「一」；本次扬声器尾音没有被 ASR 回收，因此未直接命中 `self-echo suppressed`，但也未自触发下一轮。随后真实用户输入正常通过。
+
+---
+
+## 第七十一轮补充（2026-06-27，**未 commit，标签器 provider 正名**）
+
+### ✅ `gemini` 别名已改为模型无关的 `tagger`
+
+- `DEFAULT_TAGGER_PROVIDER` 和共用翻译 provider 的默认名统一为 `"tagger"`。
+- `config/providers.example.json` 及本机 `config/providers.json` 已改用 `"tagger"`；本机模型仍是 `anthropic/claude-haiku-4.5`。
+- 新环境变量名为 `OPENROUTER_TAGGER_API_KEY`。注册层优先用新名，新名缺失时自动回退到旧 `OPENROUTER_GEMINI_API_KEY`；旧 `"gemini"` provider key 也保留为配置兼容别名。
+- 本机按 dev backend 的 `.env` 加载方式验证：`tagger` 可解析且旧密钥兼容生效，未打印密钥。
+- 测试：相关切片 67 + 54 passed；后端全量 744 passed；前端 `tsc --noEmit` 通过；`git diff --check` 通过。
+
+---
+
+## 第七十二轮补充（2026-06-27，**未 commit，B 类位置 prompt + 真实样本**）
+
+### ✅ 根因坐实：动态 mood 注入在二次创作情绪
+
+- `position_v2` 坐实旧问题：04 提前把中性「水也喝一口」染成 worried，05 在景物铺垫和「那一刻」重复 nostalgic。
+- 继续叠具体示例的 `position_v3/v4` 不稳定：Haiku 会模仿示例吞掉前缀，或仍然被 mood 拉回句首。因此撤掉过拟合的长示例，不再继续叠 prompt。
+- A/B：同样 5 个 fixture，只把 mood 设为 neutral，两轮共 10/10 条都没有提前染中性铺垫，情绪点稳定落在正文证据附近。
+- 生产改动：移除 `TAGGER_INSTRUCTION_TEMPLATE` 的动态 `mood_block`。`mood` 参数暂保留在函数契约中保持调用兼容，但不再进 prompt；已写完的 Boxi 正文是 tagger 的唯一情绪来源。
+- 实验脚本新增 `--label` 可重复选项，可只重生成单个 fixture，避免重复付费调其他样本。
+- 最终 `position_v5` 五条全部正确：01 `[soft tone]不过`；02 在「那里安静得有点过分」前；03 `[sarcastic]其实`；04 在「我有点担心」前；05 `[nostalgic]那一刻`。
+- 样本：`data/tagger_position_listen/s2.1-pro/position_v5/`，当前 Haiku tagger + paid `s2.1-pro` + `normalize_loudness=false`。
+- 测试：相关 92 passed；后端全量 745 passed；`git diff --check` 通过。
+
+### ✅ 用户听感验收通过
+
+2026-06-27，用户听完 `position_v5` 并明确决定保留。B 类位置精修正式结案；不再重开动态 mood 注入、high-risk 替换或节奏词表迁移。
+
+---
 
 ## 当前项目目标
+
 赛博伴侣 / Boxi：一个「被困盒子里的存在」——有人格、记忆、情绪、会主动找你的 AI 陪伴。
 最终形态 = Direction C「一个有世界的存在」（深度 > 延迟；soul 写每个字）。仓库 **public**（MIT）。
 
 ## 当前阶段目标
-**标签器架构升级——文字路径逐句化已完成并真机验证；当前主线转向标签质量调优（密度/堆叠/情绪判断）+ TTS 引擎/账号层探索。**
-第六十五轮完成了上一轮立项的「文字路径标签器逐句化」（P0+P1），随后围绕标签质量做了多轮真机实测和模型 A/B，并研究了 Fish Audio 的音色克隆/Voice Design 能力——**已在 commit `111c70c` 落地**（含本文件 + TASK_QUEUE 当时版本；`config/providers.json` 因 gitignored 未进 commit，仍是本地生效配置）。
 
-## 第六十五轮已完成（2026-06-26，**已 commit `111c70c`**）
-
-### ✅ P0：分句/拼回工具搬到 `expression_tagger.py`（纯重构）
-- `split_complete_sentences()` / `build_prior_context()` / `SENTENCE_TERMINATORS` 从
-  `backend/realtime/expression_tagger_processor.py` 原样搬到 `backend/app/tts/expression_tagger.py`，
-  `expression_tagger_processor.py` 改为从那里 import。
-- 目的：让 `backend/app` 主路径（文字聊天）能复用这套分句逻辑，不需要反向依赖
-  `backend/realtime`（标注为非默认/实验线的模块）。
-- 行为零变化，纯搬运。
-
-### ✅ P1：`main.py` 两处调用点改「逐句 + 并发」标签
-- `chat_complete`（[main.py:807](backend/app/main.py:807) 附近）和 `_finalize_streamed_turn`
-  （[main.py:938](backend/app/main.py:938) 附近）的整段 `apply_expression_tags` 调用，
-  改成新 helper `_tag_reply_by_sentence()`（[main.py:728](backend/app/main.py:728)）：
-  分句 → `ThreadPoolExecutor` 并发逐句调 `apply_expression_tags_to_sentence`（带累积
-  `prior_context`）→ 按原序拼回。
-- **解决的问题**：旧架构"整段一次性标 + 整段校验"，任何单点失败（截断/漏句/改字）会让全篇标签
-  作废，长回复尤其容易撞到。现在单句失败只退化那一句，不影响其余句子。
-- 并发而非串行：避免 N 句 = N 倍往返延迟（语音/文字路径标签调用本来就是离线补标，不能指望
-  播放时间掩盖延迟，串行会让长回复整体变慢）。
-- 新增测试 [test_main_tag_reply_by_sentence.py](backend/tests/test_main_tag_reply_by_sentence.py)
-  （5 个：单句失败隔离 / 保真 / 并发乱序仍按原序拼回 / 单句跳过线程池 / 空文本直通）。
-- **真机验证 PASS**：语音 Pipecat 路径听感确认长故事/多轮场景标签不再"整段消失"。
-
-### ✅ 标签器密度 prompt 调优（小改，已验证有部分效果）
-- `TAGGER_INSTRUCTION_TEMPLATE` 规则3（[expression_tagger.py:171](backend/app/tts/expression_tagger.py:171)）
-  增加"默认倾向于不加标签，只在明确情绪转折时才加，平稳叙述大多数句子不需要标签"的措辞。
-- 用自建 A/B 脚本（见下）量化验证：**对 Gemini 2.5 Flash Lite 有效**（长故事密度 0.73→0.43，
-  短对话 0.33→0.11，堆叠对 1.33→0.67）；**对 Claude Haiku 4.5 几乎无效**（密度 1.00→0.97，
-  它对"少做/克制"类指令的遵循度明显弱于格式类规则）。
-- 39 个 prompt 相关测试全绿，未引入 `至少一次`/`硬性要求` 等被测试禁止的措辞。
-
-### ✅ 标签器模型 A/B：Gemini 2.5 Flash Lite vs Claude Haiku 4.5 vs MiniMax-M3
-- 新建 untracked 脚本 [experiments/tagger_ab.py](experiments/tagger_ab.py)（走逐句生产路径，
-  同一文本同一轮里切换 model 真机对比，N=3 重复）+
-  [experiments/tagger_listen_haiku.py](experiments/tagger_listen_haiku.py)（单独合成长故事音频
-  供耳听）+ [experiments/voice_compare.py](experiments/voice_compare.py)（固定文本/标签、只切
-  音色，社区 vs 官方音色对比）。
-- **结论**：
-  - **MiniMax-M3 出局**——延迟 ~9.5s/句（Gemini 的 ~10倍），密度几乎为 0（基本不执行任务，
-    疑似把 token 都花在推理而非按指令插标签），不建议再测。
-  - **Gemini vs Haiku 是质量 vs 密度/成本的权衡**：Haiku 情绪判断更准（`[nostalgic]`/`[sad]`/
-    `[relieved]` 跟着情节走，未见错标），但密度压不下来 + 延迟更高（~1.7-2.2s vs ~1.0-1.3s）+
-    成本更高（~3.5×）。Gemini 偶发音效标签语义错误（`[sighing]`/`[groaning]`/`[panting]`
-    贴到心跳声上）。
-  - **逐句化（P1）本身已经消除了两个模型的逗号复合标签问题**（`[soft, with a little tease]`
-    那类）——证明这不是模型选择问题，是"整段一次性标"架构逼出来的，P1 顺带修复。
-- **当前生产配置（`config/providers.json`，gitignored，本地已改、未提交）**：tagger provider
-  `"gemini"` 条目的 `model` 已切到 `anthropic/claude-haiku-4.5`（经 OpenRouter，key 不变）。
-  这是**质量优先**的临时选择，密度问题仍待解决（见「当前未完成」）。
-
-### ✅ 真机听感复核：嘉岚音色本身没问题，问题在回复内容
-- 用户多轮 Pipecat + 文字路径真机测试后判断：**嘉岚音色情绪表现是 OK 的**（能听到不同情绪），
-  此前怀疑"克隆音色情绪响应天然偏弱"的猜测**已撤回、无官方依据**（查证 Fish 文档后发现：
-  情绪表现力是按音色样本本身的情绪覆盖范围决定的，不是"克隆就弱"）。
-- 真正的问题模式：**短对话回复情绪听感好，长叙事/讲故事回复情绪听感差**——根因指向"标签密度
-  过高 + 情绪变化太频"，与 Fish 官方排障建议（"space out emotional changes"）吻合。这是
-  上面 prompt 调优 + 后续护栏要继续攻的方向，不是音色问题。
-
-### ✅ Fish Audio 克隆 / Voice Design 调研（信息收集，未执行）
-- 查清两条路线：**Voice Cloning**（克隆已有人声，instant/persistent 两种，官方强调参考样本
-  要覆盖多种情绪 + 逐字稿精确匹配 + 仅可用本人/授权声音）vs **Voice Design**（自然语言描述生成
-  候选音色，$0.01/次，候选选中后通常还要再走 Cloning 固化）。
-- **关键发现**：用户当前 Fish 账号是 **Free 套餐**，**这两个功能都被锁住**（截图证实
-  「✕ 增强音色克隆」「✕ 商业使用」，Voice Design 仅 Plus（$15/月）起可用）。Fish 开发者文档
-  只讲 API 按量计费（pay-as-you-go，不需要订阅）这一层，**完全没提网页账号的套餐门槛**——这是
-  文档没覆盖、只能从用户实际账号状态确认的事实，之前一轮回答"不需要会员"是不准确的，已纠正。
-  详见 memory `fish-voice-creation-plan`。
-- **用户决定**：当前仍维持「嘉岚」为主音色，**暂不**执行克隆/设计，记录留作以后参考。
-
-## 已修改文件（第六十五轮，已随 `111c70c` 提交）
-- `backend/app/tts/expression_tagger.py`：+分句/拼回工具（P0）+ prompt 规则3密度调优。
-- `backend/realtime/expression_tagger_processor.py`：改 import 复用 P0 搬出的工具（P0）。
-- `backend/app/main.py`：新增 `_tag_reply_by_sentence()` + 两处调用点改用它（P1）。
-- 新增 `backend/tests/test_main_tag_reply_by_sentence.py`（P1 测试）。
-- 新增 untracked `experiments/tagger_ab.py` / `tagger_listen_haiku.py` / `voice_compare.py`
-  （A/B 测试脚本，按惯例不提交，留作复用）。
-- 新增 untracked `data/tagger_eval/`（A/B 测试生成的音频文件，按惯例不提交）。
-- `config/providers.json`（**gitignored，不在 git diff 里**）：tagger model 本地已切到
-  `anthropic/claude-haiku-4.5`，是当前真实生效配置，但不会出现在 commit 里——下一 session
-  如果要复现/调整，直接改这个文件，不需要等 commit。
-- `config/tts.json`：本轮中途多次切换 model/voice 做听感测试（s2.1-pro↔s2.1-pro-free、
-  嘉岚↔社区/官方音色），**最终已切回跟 HEAD 完全一致的值**（`s2.1-pro-free` + 嘉岚
-  `fbe02f8306fc4d3d915e9871722a39d5`），`git diff` 显示无变化，无需处理。
-
-## 已知 bug / 风险
-- **🆕 Haiku 密度问题未解决**：prompt 调优对 Gemini 有效，对 Haiku 基本无效——Haiku 长回复
-  仍几乎逐句贴标签（tagged_sentence_ratio ~0.97-1.00）。这是质量(Haiku判断准) vs
-  密度/延迟/成本(Gemini更优) 的真实权衡，未决定最终选谁，当前生产配置临时停在 Haiku。
-- **🆕 标签器 provider 命名名不副实**：provider 条目仍叫 `"gemini"`、
-  `DEFAULT_TAGGER_PROVIDER = "gemini"`、env 名 `OPENROUTER_GEMINI_API_KEY`，代码注释/日志里
-  也写"Gemini"，但现在实际跑的是 Haiku。不影响功能，是个命名债，留作以后小任务清理。
-- **🆕 Fish 账号套餐门槛**：用户 Free 套餐锁住克隆/Voice Design/商用，需升级 Plus（$15/月）
-  才能用——这不是代码问题，是产品决定，已记入 memory，暂不阻塞其他工作。
-- 沿用：自回声残余（AEC epic，暂缓）、P12（Hume prosody 立项）、P9-P2-C（素材源真联网）、
-  P9-D（投递层，暂缓）、日语音色清单未接后端按语言切换、Fish WebSocket 空闲断连（自动重连，
-  功能不受影响）。
-
-## 当前未完成
-
-### 🔴 最高优先 · 标签密度问题（第六十七轮已落两层防御，待量化验证）
-- **第六十七轮已做并 commit `08bf0ec`**：① Rule 3 重写（明确条件判断，Haiku-friendly）；
-  ② 代码护栏 `suppress_repeated_leading_tags`（连续同标签去重）。
-- **量化验证结果**（`tagger_ab.py` N=3，production-path 含护栏）：
-  - Haiku long_story density: **~1.00 → 0.67**（主目标达成）
-  - Haiku short_chat density: **~1.00 → 0.56**
-  - Gemini long_story density: **0.43**（稳定，无回归）
-- **当前状态**：已 commit，密度问题显著改善。剩余路径：
-  ① 真机多轮听感验证——确认"密度 0.67"的标签分布听起来是否自然；
-  ② 如听感仍嫌密，再打磨 prompt 或接受当前水平；
-  ③ 若想进一步优化，可以考虑回退 Gemini（密度 0.43，代价是情绪判断稍糙）。
-
-### 🟡 标签器 provider 命名正名（独立小任务，不紧急）
-- 把 `"gemini"` 这个 provider 名字、`DEFAULT_TAGGER_PROVIDER`、`OPENROUTER_GEMINI_API_KEY`
-  env 名、相关注释/日志统一改成跟模型无关的中性名（如 `"tagger"`），消除"代码里写 Gemini
-  实际跑 Haiku"的误导。涉及 4-5 处 + env 变量改名，small-medium diff。
-
-### 🟢 Fish 音色克隆/设计（产品决定，等用户升级套餐后再启动）
-- 不阻塞当前工作，详见 memory `fish-voice-creation-plan`。
-
-### 沿用未完成项
-- task 4 自回声残余（归 AEC epic，暂缓）、P12（Hume prosody 立项）、P9-P2-C（素材源真联网）、
-  P9-D（投递层，暂缓）、日语音色清单未接后端按语言切换。
-
-## 下一步只需读取（按任务挑）
-- **永远先读**：`docs/HANDOFF.md`（本文件）+ `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`。
-- 做密度调优/护栏：额外读 `backend/app/tts/expression_tagger.py`（`TAGGER_INSTRUCTION_TEMPLATE`
-  规则3 + 已有 placement guard 模式）+ `experiments/tagger_ab.py`（直接复用做量化验证）。
-- 做 provider 命名正名：额外读 `backend/app/providers/registry.py`（`gemini` 分支）+
-  `backend/app/tts/expression_tagger.py`（`DEFAULT_TAGGER_PROVIDER`）+ `.env`/`.env.example`
-  （`OPENROUTER_GEMINI_API_KEY`）。
-
-## 下一步不要读取（省上下文）
-- ❌ `docs/SESSION_LOG.md`（历史日志，不维护）
-- ❌ `reference/`（Pipecat/Fish 文档线已结）
-- ❌ `experiments/`（除 `tagger_ab.py`/`tagger_listen_haiku.py`/`voice_compare.py` 外均为废弃 spike，
-  故意不提交）
-- ❌ 不要重开：P0/P1 逐句化架构本身（已完成并真机验证）、嘉岚音色是否有问题（已确认无问题）、
-  MiniMax-M3 标签器（已排除）、Fish Audio 是否需要会员（已查清，需 Plus）
-- ❌ 全仓库扫描
-
-## 推荐下一个最小任务
-- **主线**：真机多轮听感验证——跑几轮对话（文字路径 + Pipecat 路径各几轮），确认 Haiku density 0.67
-  的标签分布听起来是否自然，还是仍嫌密。听感 OK → 密度问题结案；听感仍密 → 考虑以下选项。
-- **备选调优方向**（听感验证后再决定）：继续打磨 prompt / 接受当前 Haiku 密度 / 回退 Gemini（密度更优
-  但情绪判断稍糙）。
-- **备选独立小任务**（不紧急）：标签器 provider 命名正名（`"gemini"` → 中性名，见「当前未完成 · 🟡」）。
+**Fish/TTS/tagger 微调与工程稳定化均已结案。语音改动已在独立分支形成四个可审查实现 checkpoint，下一步转入产品体验。**
+文字路径逐句化（P0+P1）已在 `111c70c` 落地并真机验证。
 
 ---
 
-> **给 Cursor/Codex**：本周接手开发，先读本文件顶部「⚠️ 本次交接特殊说明」。
-> **给 Claude Code（下周回归）**：执行 `/clear` 或新开 session，只需读取
-> `docs/HANDOFF.md`、`docs/TASK_QUEUE.md`、`docs/ARCHITECTURE_SNAPSHOT.md`。
+## 已知 bug / 风险
+
+- **~~Haiku 密度过高~~ → 已大幅改善**：`tagger_ab` N=3 证实 long_story 1.00→0.67；用户真机反馈当前较稳定。
+- **当前听感偏平**：主要像语句之间停顿/顿挫不足，不是标签数量不足。
+- **节奏标签词表 A/B 差异不大**：当前 prompt/guard 仍保留 `[break]` / `[long-break]`，不要仅凭文档迁移到 `[pause]` 系。
+- **Pipecat Fish 参数已暴露，A/B 胜出项是 `normalize=false`**：本地 `.env` 已设置；降速/升温听感别扭，先不要启用。
+- **~~标签器 provider 命名债~~ → 已完成**：默认 key 已改为 `"tagger"`，并保留旧 key/env 兼容。
+- **位置精度**：B 类句首粗放、opening_only；A 类一旦出现容错极低——真机重点听。
+- **Gemini A 类语义错**：若回退 Gemini 换密度，会重新引入音效标签误用。
+- **改字护栏副作用**：Haiku 试图给「扑通」插 `[扑通]` 类标签时被拒绝 → 该句无标签（正确降级，但丢表达）。
+- Fish 账号 Free 套餐锁住克隆/Voice Design（不阻塞）。
+- **自回声残余**：本轮已补单字干净尾音；ASR 增字/误听成非干净后缀仍是内容匹配器的固有边界，真治仍是未来 WebRTC/AEC。
+- 沿用：P12、P9-P2-C、P9-D、日语音色未接后端、Fish WS 空闲断连。
+
+---
+
+## 当前未完成
+
+### 🟡 单字自回声后续观察
+
+代码和确定性回归已完成；真机生成单字回复时未重现回声，暂不为了制造回声继续消耗云调用。
+
+推荐最小顺序：
+
+1. 下次日常真机对话若再出现尾字回收，确认日志出现 `self-echo suppressed`，并且没有新的 `Boxi decision=reply`。
+2. 若仍自触发，记录 ASR final 文字和相对 `BotStopped` 时间；不盲目继续放宽单字匹配。
+
+### ✅ 位置精修（用户听感 PASS，结案）
+
+- Prompt 保留抽象证据规则：中性铺垫不贴标签，后文情绪不得倒灌。
+- 动态 mood 不再注入 tagger；正文是唯一情绪来源。
+- `position_v5` 已由用户听感验收并决定保留。
+- 代码守卫（未做）：P2 词中插、P3 无意义句首堆叠（task 2 遗留，真机未复现故降级过）。
+
+### 🟢 Fish 音色克隆/设计（等用户升级 Plus）
+
+详见 memory `fish-voice-creation-plan`。当前维持嘉岚。
+
+### 沿用未完成项
+
+task 4 非干净后缀自回声/AEC、P12、P9-P2-C、P9-D、日语音色切换。
+
+---
+
+## 历史背景（第六十五轮 `111c70c`，摘要）
+
+- P0/P1：文字路径标签器逐句化 + 并发，单句失败不再整段作废。
+- 模型 A/B：Haiku 情绪准 / Gemini 密度优；MiniMax-M3 出局。
+- task 3（第六十三轮 `70d5c7a`）：A/B 类音效 vs 语气 prompt 修正，`[sighing]` 滥用从 6+/轮 降到 ~1–2/20 句。
+- 嘉岚音色无问题；长叙事听感差根因是密度过高（本轮已量化改善）。
+- Fish 克隆/Voice Design 需 Plus，用户暂不升级。
+
+---
+
+## 下一步只需读取（按任务挑）
+
+- **永远先读**：本文件 + `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`。
+- **节奏/韵律 A/B**：`docs/FISH_AUDIO_REFERENCE.md` §2/4/7/9 + `docs/PIPECAT_REFERENCE.md` §4/8 +
+  `docs/PIPECAT_AUDIT.md` B 项 + `backend/realtime/run_voice.py` + `backend/app/tts/fish_audio.py` +
+  `backend/app/tts/expression_tagger.py`（节奏词表/guard）。
+- **checkpoint 状态**：`docs/SOUL_RUNTIME_STATUS.md` + `git status`；确认只剩 `_LatencySpikeLogger` 与明确排除的本地实验/数据。
+
+## 下一步不要读取
+
+- ❌ `docs/SESSION_LOG.md`
+- ❌ `reference/`（Pipecat/Fish 文档线已结；Fish 查 `docs/FISH_AUDIO_REFERENCE.md` 或 MCP）
+- ❌ `experiments/` 废弃 spike（**除外**：`tagger_ab.py`、`tagger_listen_haiku.py`、`voice_compare.py`）
+- ❌ 不要重开：P0/P1 逐句化、嘉岚音色问题、MiniMax-M3、Fish 会员门槛、第六十七轮密度代码（已 commit）
+- ❌ 全仓库扫描
+
+## 推荐下一个最小任务
+
+1. 转入产品体验：优先低 GPU、asset-based 视觉存在感与端到端日常使用，不再继续微调 TTS。
+2. 日常真机若再次出现尾字回收，只记录 ASR final 与 `BotStopped` 相对时间；不要主动制造回声或扩大匹配。
+3. `_LatencySpikeLogger`、音频数据、实验脚本与 agent/MCP 工具配置继续保持本地未提交。
+
+---
+
+> **给新 session**：`/clear` 后只读 `docs/HANDOFF.md` + `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`。
+> 用户真机听感结论已记录：`normalize=false` 真实链路「还可以」；`position_v5` 已验收保留。下一步进入产品体验，单字尾音自回声仅随日常使用观察。
