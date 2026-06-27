@@ -19,6 +19,7 @@
   "allow_cloud_stt": false,
   "allow_cloud_tts": false,
   "enable_proactive": true,
+  "proactive_reason_mode": "agenda",
   "proactive_quiet_hours": [23, 8],
   "proactive_min_gap_minutes": 30,
   "proactive_min_fire_gap_hours": 6,
