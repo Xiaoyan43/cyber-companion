@@ -131,7 +131,7 @@ def test_apply_expression_tags_allows_provider_override() -> None:
     assert router.captured_provider_name == "deepseek"
 
 
-def test_apply_expression_tags_passes_mood_and_text_into_prompt() -> None:
+def test_apply_expression_tags_uses_finalized_text_not_dynamic_mood() -> None:
     router = _FakeRouter(content="带标签的文本")
     mood = _mood(mood="annoyed", annoyance=0.8)
 
@@ -140,8 +140,9 @@ def test_apply_expression_tags_passes_mood_and_text_into_prompt() -> None:
     assert router.captured_request is not None
     system_message, user_message = router.captured_request.messages
     assert system_message.role == "system"
-    assert "mood=annoyed" in system_message.content
-    assert "annoyance=0.80" in system_message.content
+    assert "mood=annoyed" not in system_message.content
+    assert "annoyance=0.80" not in system_message.content
+    assert "{mood_block}" not in system_message.content
     assert user_message.role == "user"
     assert user_message.content == "用户刚才说的话"
 
@@ -186,6 +187,27 @@ def test_tagger_instruction_keeps_official_physio_emotion_combo_example() -> Non
     # emotion tag back-to-back (e.g. [panting][tired]) — this was dropped during an earlier
     # rewrite of rule 5 and is restored here as an exception to the no-stacking rule.
     assert "[panting] [tired]" in TAGGER_INSTRUCTION_TEMPLATE
+
+
+def test_tagger_instruction_prefers_mid_sentence_tone_start_for_b_tags() -> None:
+    # B-class tone/emotion tags should mark the start of the emotional span, not lazily dye
+    # the whole sentence from the first character.
+    assert "语气/情绪/音调类标签也不要偷懒全放句首" in TAGGER_INSTRUCTION_TEMPLATE
+    assert "转折词或情绪起点前" in TAGGER_INSTRUCTION_TEMPLATE
+    assert "只有整句话从第一个字开始" in TAGGER_INSTRUCTION_TEMPLATE
+
+
+def test_tagger_instruction_contains_mid_sentence_b_tag_examples() -> None:
+    assert "我嘴上嫌你烦，[soft tone]不过还是给你留了灯" in TAGGER_INSTRUCTION_TEMPLATE
+    assert "我今天去了那家店，[sad]后来才发现你不在" in TAGGER_INSTRUCTION_TEMPLATE
+
+
+def test_tagger_instruction_requires_text_evidence_over_global_mood() -> None:
+    assert "必须有当前原文的措辞证据" in TAGGER_INSTRUCTION_TEMPLATE
+    assert "不能只因 mood 背景" in TAGGER_INSTRUCTION_TEMPLATE
+    assert "后文才出现的情绪不能倒灌" in TAGGER_INSTRUCTION_TEMPLATE
+    assert "中性铺垫必须原样保留且不加标签" in TAGGER_INSTRUCTION_TEMPLATE
+    assert "完整输出标签前后的所有原文" in TAGGER_INSTRUCTION_TEMPLATE
 
 
 # --- dangling trailing tag guardrail (省略号幻觉) ----------------------------------------
