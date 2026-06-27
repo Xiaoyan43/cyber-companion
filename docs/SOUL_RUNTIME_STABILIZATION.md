@@ -2,7 +2,7 @@
 
 > **状态**：计划文档（非 implementation checkpoint）。  
 > **进度真相源**：`docs/SOUL_RUNTIME_STATUS.md` · **架构契约**：`docs/SOUL_RUNTIME_ARCH.md`  
-> 最后更新：**2026-06-27** · docs @ `1484577`
+> 最后更新：**2026-06-27** · introduced by docs commit: `262bd02`
 
 本文件记录 Phase 0–7 合并至 `master` 后的 **rollback 矩阵、观测清单、legacy/dual-write 退役路线**。  
 **不包含**已完成的代码退役承诺；P2 退役需单独 session + 用户确认。
@@ -14,7 +14,7 @@
 | 字段 | 值 |
 |---|---|
 | **branch** | `master` |
-| **docs tip（本文件所在）** | `1484577` — `docs(soul): align architecture status after merge` |
+| **stabilization doc introduced by** | `262bd02` — `docs(soul): add stabilization rollback plan` |
 | **merge commit** | `dbefff0` — `Merge pull request #1 from Xiaoyan43/codex/soul-runtime` |
 | **accepted implementation HEAD** | `95848c4` — Phase 7 rebase integration 代码/测试验收 checkpoint |
 | **invariant 回归** | `./.venv/bin/python -m pytest -m invariant` → **353 passed** |
