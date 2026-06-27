@@ -279,6 +279,10 @@ TAGGER_INSTRUCTION_TEMPLATE = (
     "   · 条件 B：这是整段回复的开头，且起始情绪本身就很突出、明显非中性。\n"
     "   两个条件都不满足 → 直接输出原文，不加任何标签。\n"
     "   「这句话有一点伤感」不满足条件 A——只有「前一句明显不伤感而这一句才变伤感」才算切换。\n"
+    "   条件 A/B 必须有当前原文的措辞证据；不能只因 mood 背景是 worried/nostalgic 就给"
+    "中性动作或景物铺垫贴同名标签。后文才出现的情绪不能倒灌到前面的中性铺垫。\n"
+    "   中性铺垫必须原样保留且不加标签；只在当前原文的情绪措辞真正开始前插入标签，"
+    "并仍然完整输出标签前后的所有原文。\n"
     "   禁止：为了「让每句都有情绪标记」而贴标签；循环轮换不同标签来制造多样感。\n"
     "   平稳推进的叙述、铺垫、讲故事中，连续多句甚至大段无标签是完全正确的输出。\n"
     "4. 两类标签精度要求不同：\n"
@@ -327,10 +331,6 @@ TAGGER_INSTRUCTION_TEMPLATE = (
     "[娇喘] [呻吟]\n"
     "节奏（停顿，非声音事件）：[break] [long-break]\n"
     "\n"
-    "下面给出这句话此刻的情绪状态作为参考背景——这是基线情绪，不是要照搬的标签来源，"
-    "每句话具体配什么标签仍然要看这句话实际在说什么、怎么说：\n"
-    "{mood_block}\n"
-    "\n"
     "只输出插好标签后的完整文本，不加任何解释、不加引号、不加多余的话。"
 )
 
@@ -344,13 +344,6 @@ SENTENCE_PRIOR_CONTEXT_TEMPLATE = (
     "不要重复输出这些话、也不要给它们重新贴标签，只给本次这一句贴标签）：\n"
     "{prior_context}"
 )
-
-
-def _format_mood_block(mood: MoodStateRecord) -> str:
-    return (
-        f"mood={mood.mood}, energy={mood.energy:.2f}, annoyance={mood.annoyance:.2f}, "
-        f"boredom={mood.boredom:.2f}, worry={mood.worry:.2f}, loneliness={mood.loneliness:.2f}"
-    )
 
 
 def split_complete_sentences(buffer: str) -> tuple[list[str], str]:
@@ -418,10 +411,9 @@ def apply_expression_tags(
     if not stripped:
         return text
 
-    system_prompt = TAGGER_INSTRUCTION_TEMPLATE.format(mood_block=_format_mood_block(mood))
     request = ChatCompletionRequest(
         messages=[
-            ChatMessage(role="system", content=system_prompt),
+            ChatMessage(role="system", content=TAGGER_INSTRUCTION_TEMPLATE),
             ChatMessage(role="user", content=stripped),
         ],
         max_output_tokens=_tagger_output_token_budget(stripped),
@@ -470,8 +462,11 @@ def apply_expression_tags_to_sentence(
     passed for tone continuity only — the tagger is told not to re-output or re-tag it. The
     caller (the Pipecat processor) owns any length cap on ``prior_context``.
 
-    Same hard requirement as :func:`apply_expression_tags`: any failure degrades to the
-    original untagged sentence — the tagger must never break or delay the turn.
+    ``mood`` remains in the public call contract for compatibility, but is deliberately not
+    injected into the tagger prompt: the finalized wording is the only emotion source. Live A/B
+    showed that global worried/nostalgic state pre-colored neutral setup text before the actual
+    emotional pivot. Same hard requirement as :func:`apply_expression_tags`: any failure
+    degrades to the original untagged sentence — the tagger must never break or delay the turn.
     """
     stripped = sentence.strip()
     if not stripped:
@@ -484,7 +479,7 @@ def apply_expression_tags_to_sentence(
     messages = [
         ChatMessage(
             role="system",
-            content=TAGGER_INSTRUCTION_TEMPLATE.format(mood_block=_format_mood_block(mood)),
+            content=TAGGER_INSTRUCTION_TEMPLATE,
         )
     ]
     prior = prior_context.strip()
