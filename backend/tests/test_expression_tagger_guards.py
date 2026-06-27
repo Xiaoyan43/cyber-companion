@@ -228,6 +228,15 @@ def test_suppress_skips_exempt_to_find_non_exempt_leading() -> None:
     assert result.count("[sighing]") == 1
 
 
+def test_suppress_keeps_mid_sentence_tag_before_turn() -> None:
+    # Mid-clause tag before a turn word (PR #3 pattern) must survive even when it matches
+    # the previous sentence's leading tag — only sentence-opening tags participate in dedup.
+    tagged = "[nostalgic] 句一。我嘴上嫌你烦，[nostalgic]不过还是给你留了灯。"
+    result = suppress_repeated_leading_tags(tagged)
+    assert result == tagged
+    assert result.count("[nostalgic]") == 2
+
+
 # --- wiring · suppress_repeated_leading_tags runs through apply_expression_tags ------------
 
 
