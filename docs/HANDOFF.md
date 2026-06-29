@@ -2,6 +2,18 @@
 
 > 本文件每次「瘦身交接」/「工作流交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
 
+> **🟢 2026-06-29 第七十六轮（最新 · Opus 总工程师）**：
+> 1. **路线重置已落盘**：codex 的 2026-06-29 重置（删关系节流 + store.py 拆 mixin + 前端默认 Pipecat
+>    + 最近邻审计）经 Opus 审查 PASS，分 4 个主题 commit + 1 个路线图 commit 落在
+>    `codex/voice-stabilization-20260627`（`2dacd28`/`e36847d`/`1016af8`/`ef6944a`/`98a9559`）。
+>    736 backend + tsc 绿。`run_voice.py` 探针 + experiments/data/工具配置按约定仍保持本地未提交。
+> 2. **完整剩余任务地图 = `docs/ROADMAP.md`（向前看的唯一权威）**——含依赖图 + Track A–E，已切到
+>    Sonnet 可执行粒度。**新 session 务必读它**（`/resume-lite` 默认不读，需手动加）。
+> 3. **下一步 = A1 分支收敛**（先做，需用户拍板分支处置 + 是一次 93 文件需人工解冲突的前向 merge 进
+>    public master，**不交盲跑 Sonnet**，由 Opus 做/设计）→ A2 本地物归位 → **B1 AIRI baseline**（首个 spike）。
+>    分支处置表见 ROADMAP Track A / 本轮对话结论：soul-runtime 是 voice 分支祖先(可删)；多条 voice/* 已并入 master(可删)。
+> 4. **冻结新自研**：B 序列期间不加自研功能，只做开源替换 spike + 7 天日用验收(Track C, 并行)。
+
 ## ⚠️ 给新 session 的最小上手指引
 
 1. 先读本文件 + `docs/MVP_STATUS.md`（进度记分牌 + 下一步，单一事实来源）+ `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`，**不要全仓库扫描**。
