@@ -31,6 +31,7 @@ import {
 } from "./chat/types";
 import { appendChatStreamDelta } from "./chat/streamRender";
 import { PixelCharacter } from "./components/PixelCharacter";
+import { PipecatVoicePanel } from "./components/PipecatVoicePanel";
 import { RtcVoicePanel } from "./components/RtcVoicePanel";
 import { LetterView } from "./letter/LetterView";
 import { type LetterMood } from "./letter/scripts";
@@ -41,8 +42,8 @@ import { MoodPanel } from "./components/MoodPanel";
 import { RelationshipPanel } from "./components/RelationshipPanel";
 import { primeAudioPlayback } from "./voice/audioUnlock";
 import { usePushToTalk } from "./voice/usePushToTalk";
+import { usePipecatVoice } from "./voice/usePipecatVoice";
 import { useTextToSpeech } from "./voice/useTextToSpeech";
-import { useVoiceTranscript } from "./voice/useVoiceTranscript";
 import { useRtcVoice } from "./rtc/useRtcVoice";
 import type { RtcAgentPhase } from "./rtc/rtcMessages";
 
@@ -132,24 +133,12 @@ function App() {
       return next;
     });
   }, []);
-  const [pipecatStatus, setPipecatStatus] = useState<"stopped" | "running" | "loading" | "error">("stopped");
-  const pipecatStatusRef = useRef(pipecatStatus);
-  pipecatStatusRef.current = pipecatStatus;
-
-  const togglePipecat = async () => {
-    const current = pipecatStatusRef.current;
-    if (current === "loading") return;
-    setPipecatStatus("loading");
-    const isRunning = current === "running";
-    try {
-      const endpoint = isRunning ? "/realtime/stop" : "/realtime/start";
-      await fetch(`${apiBaseUrl}${endpoint}`, { method: "POST" });
-      setPipecatStatus(isRunning ? "stopped" : "running");
-    } catch {
-      setPipecatStatus("error");
-    }
-  };
-  const pipecatTranscript = useVoiceTranscript(pipecatStatus === "running", apiBaseUrl);
+  const pipecatVoice = usePipecatVoice();
+  const pipecatBlocksOtherVoice =
+    pipecatVoice.phase === "checking" ||
+    pipecatVoice.phase === "starting" ||
+    pipecatVoice.phase === "running" ||
+    pipecatVoice.phase === "stopping";
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const lastBoxiText = useMemo(
@@ -202,7 +191,6 @@ function App() {
     (input: { text: string; decision?: string; avatarState?: string; userMessage?: string }) => Promise<boolean>
   >(async () => false);
   const stopSpeakingRef = useRef<(notifyEnd?: boolean) => void>(() => {});
-  const markBehaviorActivityRef = useRef(() => {});
 
   const statusText = useMemo(() => stateLines[avatarState], [avatarState]);
 
@@ -393,7 +381,6 @@ function App() {
 
   async function submitToBackend(userText: string, appendUserBubble: boolean) {
     primeAudioPlayback();
-    markBehaviorActivityRef.current();
     if (userText.trim()) {
       sessionStorage.removeItem(CHAT_VIEW_CLEARED_KEY);
       setChatViewCleared(false);
@@ -762,14 +749,13 @@ function App() {
     ],
   );
 
-  const { markUserActivity: markBehaviorActivity } = useBehaviorTicks({
+  useBehaviorTicks({
     enabled: apiHealth.status === "ok",
     paused: isSending || ttsSpeaking || ttsActiveRef.current,
     onDecision: (decision) => {
       void handleBehaviorDecision(decision);
     },
   });
-  markBehaviorActivityRef.current = markBehaviorActivity;
 
   useEffect(() => {
     const verifyWindow = window as Window & {
@@ -905,35 +891,47 @@ function App() {
 
         <p className="status-line">{statusText}</p>
 
-        <RtcVoicePanel
-          mode={rtcVoice.mode}
-          onModeChange={rtcVoice.setMode}
-          modeReady={rtcVoice.modeReady}
-          pureReady={rtcVoice.status?.pure_ready ?? false}
-          hybridReady={rtcVoice.status?.hybrid_ready ?? false}
-          phaseLabel={rtcPhaseLabel}
-          agentPhase={rtcVoice.agentPhase}
-          error={rtcVoice.error}
-          isLive={rtcVoice.isLive}
-          subtitles={rtcVoice.subtitles}
-          welcomeMessage={rtcVoice.session?.welcome_message}
-          autoplayBlocked={rtcVoice.autoplayBlocked}
-          micActive={rtcVoice.micActive}
-          onJoin={() => {
-            primeAudioPlayback();
-            void rtcVoice.join();
-          }}
-          onLeave={() => void rtcVoice.leave()}
-          onResumeAudio={() => void rtcVoice.resumeAutoplay()}
-          disabled={apiHealth.status !== "ok"}
-          vikingMemoryEnabled={rtcVoice.status?.viking_memory_enabled ?? false}
-          vikingMemoryWriteReady={rtcVoice.status?.viking_memory_write_ready ?? false}
-          vikingUserId={rtcVoice.status?.default_user_id}
-          vikingMemorySaveState={rtcVoice.memorySaveState}
-          sqliteMemoryReady={rtcVoice.status?.sqlite_memory_ready ?? false}
+        <PipecatVoicePanel
+          phase={pipecatVoice.phase}
+          error={pipecatVoice.error}
+          transcript={pipecatVoice.transcript}
+          onStart={() => void pipecatVoice.start()}
+          onStop={() => void pipecatVoice.stop()}
+          disabled={apiHealth.status !== "ok" || rtcVoice.isLive}
         />
 
-        {!rtcVoice.isLive ? (
+        <details className="experimental-voice-panel">
+          <summary>实验对照：RTC-AIGC</summary>
+          <RtcVoicePanel
+            mode={rtcVoice.mode}
+            onModeChange={rtcVoice.setMode}
+            modeReady={rtcVoice.modeReady}
+            pureReady={rtcVoice.status?.pure_ready ?? false}
+            hybridReady={rtcVoice.status?.hybrid_ready ?? false}
+            phaseLabel={rtcPhaseLabel}
+            agentPhase={rtcVoice.agentPhase}
+            error={rtcVoice.error}
+            isLive={rtcVoice.isLive}
+            subtitles={rtcVoice.subtitles}
+            welcomeMessage={rtcVoice.session?.welcome_message}
+            autoplayBlocked={rtcVoice.autoplayBlocked}
+            micActive={rtcVoice.micActive}
+            onJoin={() => {
+              primeAudioPlayback();
+              void rtcVoice.join();
+            }}
+            onLeave={() => void rtcVoice.leave()}
+            onResumeAudio={() => void rtcVoice.resumeAutoplay()}
+            disabled={apiHealth.status !== "ok" || pipecatBlocksOtherVoice}
+            vikingMemoryEnabled={rtcVoice.status?.viking_memory_enabled ?? false}
+            vikingMemoryWriteReady={rtcVoice.status?.viking_memory_write_ready ?? false}
+            vikingUserId={rtcVoice.status?.default_user_id}
+            vikingMemorySaveState={rtcVoice.memorySaveState}
+            sqliteMemoryReady={rtcVoice.status?.sqlite_memory_ready ?? false}
+          />
+        </details>
+
+        {!rtcVoice.isLive && !pipecatVoice.isRunning ? (
           <>
             <RelationshipPanel enabled={apiHealth.status === "ok"} />
             <MoodPanel enabled={apiHealth.status === "ok"} />
@@ -976,15 +974,6 @@ function App() {
             <small>{apiHealth.version ? `v${apiHealth.version}` : apiHealth.detail}</small>
           </div>
           <div className="chat-header-actions">
-            <button
-              type="button"
-              className={pipecatStatus === "running" ? "letter-toggle-button active" : "letter-toggle-button"}
-              onClick={() => void togglePipecat()}
-              disabled={pipecatStatus === "loading" || apiHealth.status !== "ok"}
-              title="Pipecat 本地语音（麦克风 + 扬声器）"
-            >
-              {pipecatStatus === "loading" ? "…" : pipecatStatus === "running" ? "Pipecat 开" : pipecatStatus === "error" ? "Pipecat ✗" : "Pipecat"}
-            </button>
             <button
               type="button"
               className={uiMode === "letter" ? "letter-toggle-button active" : "letter-toggle-button"}
@@ -1048,20 +1037,6 @@ function App() {
           <LetterView mood={letterMood} text={lastBoxiText} />
         ) : (
           <>
-            {pipecatStatus === "running" ? (
-              <div className="pipecat-transcript" aria-live="polite">
-                {pipecatTranscript.length === 0 ? (
-                  <p className="chat-empty">Pipecat 字幕：等待你说话…</p>
-                ) : (
-                  pipecatTranscript.map((entry, index) => (
-                    <article key={`${entry.ts}-${index}`} className={`message ${entry.role}`}>
-                      <span className="speaker">{entry.role === "boxi" ? "Boxi" : "You"}</span>
-                      <p>{entry.text}</p>
-                    </article>
-                  ))
-                )}
-              </div>
-            ) : null}
             <div className="message-list" ref={messageListRef}>
               {historyStatus === "loading" ? (
                 <p className="chat-empty">Loading chat history...</p>
@@ -1114,7 +1089,7 @@ function App() {
                 placeholder="Type something..."
                 disabled={isSending || pushToTalkState === "transcribing"}
               />
-              {pushToTalkEnabled && !rtcVoice.isLive ? (
+              {pushToTalkEnabled && !rtcVoice.isLive && !pipecatBlocksOtherVoice ? (
                 <button
                   type="button"
                   className={
@@ -1122,7 +1097,12 @@ function App() {
                   }
                   aria-pressed={pushToTalkState === "recording"}
                   aria-label="Hold to talk"
-                  disabled={isSending || pushToTalkState === "transcribing" || rtcVoice.isLive}
+                  disabled={
+                    isSending ||
+                    pushToTalkState === "transcribing" ||
+                    rtcVoice.isLive ||
+                    pipecatBlocksOtherVoice
+                  }
                   onPointerDown={handlePttPointerDown}
                   onPointerUp={handlePttPointerUp}
                   onPointerLeave={handlePttPointerLeave}
