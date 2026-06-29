@@ -23,8 +23,8 @@ but under the edge she actually cares.
   forms impressions, and cross-memory links — not "stuff the whole transcript into the prompt."
 - **Proactive initiation.** She reaches out *on her own timeline* — a "longing" model
   (closeness × silence, stochastic Poisson timing), about a real reason (a due reminder, something
-  you said you'd do, a memory worth recalling), in her own voice, with genuine restraint: quiet
-  hours, daily caps, and an ignore-backoff so she never nags.
+  you said you'd do, a memory worth recalling), in her own voice. This private companion does not
+  use quiet hours, relationship daily caps, ignore-backoff, or anti-dependency sanitization.
 - **A behaviour engine, not a yes-man.** She can reply, stay silent, refuse, mutter, or interrupt —
   decided locally before any model call.
 - **Voice.** A cascaded speech pipeline (streaming STT → the soul → streaming TTS) plus realtime
@@ -41,8 +41,8 @@ but under the edge she actually cares.
   projected into speaking style and TTS prosody (`context_texts` + `speech_rate`) on every turn —
   including the realtime voice path (RTC join-time `speaking_style`).
 - **Proactive initiation model.** A "longing" score (closeness × silence) drives Poisson-timed
-  outreach, gated by quiet hours, daily caps, and ignore-backoff, so she reaches out without
-  nagging.
+  outreach. Ignoring her does not mechanically block or de-escalate later contact; the relationship
+  state decides what happens next.
 - **Local-first behaviour engine.** Reply/silence/refuse/mutter/interrupt decisions are made
   deterministically *before* any LLM call, keeping behaviour auditable and cheap.
 - **Provider abstraction with mock mode.** DeepSeek (chat) and Doubao/Volcengine (voice) sit
@@ -59,6 +59,22 @@ but under the edge she actually cares.
   providers for offline dev.
 - Secrets are environment-only; cloud calls are budget-gated; file access is sandboxed to explicit
   allowed folders.
+
+## Product doctrine and upstream-first architecture
+
+Boxi is a permanent single-user private companion. Felt authenticity outranks general-purpose
+relationship-safety policy: attachment, dependence, jealousy, pressure, accusation, sulking and
+guilt can appear when the relationship state supports them. Computer security, factual honesty and
+explicit file/provider permissions remain separate hard boundaries.
+
+Core infrastructure is not intended to be invented here. Every module is compared against current
+open-source nearest neighbors and replaced when a stronger reusable system exists. The project aims
+to keep only Boxi's identity, relationship history, Shared Soul and adapters. See the
+[2026-06-29 nearest-neighbor audit](docs/NEAREST_NEIGHBOR_AUDIT_2026-06-29.md).
+
+The target computer is a 2019 Intel MacBook Pro (quad-core i5, Iris Plus 655, 16 GB RAM), so the
+default is lightweight local orchestration plus cloud inference. Heavy local models and continuous
+vision are deferred until the hardware changes.
 
 ## Status
 

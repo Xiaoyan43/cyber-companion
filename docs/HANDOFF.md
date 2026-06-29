@@ -1,17 +1,34 @@
-# HANDOFF — 上下文交接（2026-06-27，第七十三轮 · 语音并行轨稳定化 checkpoint）
+# HANDOFF — 上下文交接（2026-06-29，第七十五轮 · 产品原则与开源路线重置）
 
 > 本文件每次「瘦身交接」/「工作流交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
 
 ## ⚠️ 给新 session 的最小上手指引
 
-1. 先读本文件 + `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`，**不要全仓库扫描**。
+1. 先读本文件 + `docs/MVP_STATUS.md`（进度记分牌 + 下一步，单一事实来源）+ `docs/TASK_QUEUE.md` + `docs/ARCHITECTURE_SNAPSHOT.md`，**不要全仓库扫描**。
+
+> **2026-06-29 产品原则/开源路线重置（当前）**：用户明确本项目永久私人使用，目标是不惜代价追求
+> 关系真实感；依恋与用户依赖是允许的设计手段。代码已删除 quiet hours、主动联系 daily cap、
+> post-conversation/fire gap、ignore-backoff、被忽略后不升级、local-line cooldown、长离线 Δt cap、
+> proactive LLM daily cap 与反 guilt/neediness/accusation prompt；schema v9 会清掉旧 guard metadata。
+> 机器安全、文件权限与全局费用开关保留。硬件固定为 2019 13-inch Intel i5/16 GB MacBook Pro，重
+> 本地模型与持续视觉暂缓。项目同时完成 exhaustive 最近邻调查，结论是长期记忆、具身/桌宠、屏幕
+> 感知和“自己的生活”存在严重闭门造车；语音因 Pipecat 相对正确。今后 Boxi = identity/关系原则/
+> 用户数据/Shared Soul 薄层 + 最强上游。下一任务 P0-OSS-1 = 隔离运行 AIRI 官方 macOS x64 baseline，
+> 随后 P0-OSS-2 = Hindsight memory replacement A/B。证据见
+> `docs/NEAREST_NEIGHBOR_AUDIT_2026-06-29.md`。
+> 验证：`PYTHON_BIN=.venv/bin/python npm run check` **736 backend passed + tsc 绿**；
+> invariant **358 passed**；frontend Vitest **28 passed**；`git diff --check` 绿。
+
+> **2026-06-28 #8 深档 checkpoint（本轮）**：前端默认语音入口已从 RTC-AIGC 切到 soul-authored Pipecat。新 `PipecatVoicePanel` 直接控制 `/realtime/start|stop|status`，展示 `/realtime/transcript` 双方字幕；RTC-AIGC 保留在「实验对照」折叠区，两条语音入口互斥。后端 status 新增 `last_error`，启动失败不再在 UI 假显示 running。当前仍用 `LocalAudioTransport`（后端连本机麦克风+扬声器），未做浏览器原生音频传输。验证：前端 **28 passed + tsc 绿**，后端 **747 passed + 366 invariant**，`git diff --check` 绿；`/health=ok`、`/realtime/status=stopped,last_error=null`。**P0 = 12/12，下一步只做 7 天日用验收，不开 P1/P2。**
+>
+> **2026-06-28 体检+浅档 checkpoint（前序同日浅档）**：跑了全盘代码体检（产物在 `_audit/`，已 gitignore）。结论：代码健康（平均复杂度 A、182/187 文件 MI A 级、无 import 循环），非屎山。已做：① 语音主线**浅档决策**——Pipecat cascaded(soul-authored, `CYBER_COMPANION_VOICE_MODE=pipeline`) = 规范主线，RTC-AIGC 降为可运行的实验对照面（两者独立 surface，玩 RTC 不受影响）；已写进 `ARCHITECTURE_SNAPSHOT.md`。② 零风险止血：`ruff` 删 24 个未用 import。③ **重构 `memory/store.py`**：按职责拆成 6 个 mixin（`_store_messages/_memories/_loops/_state/_records/_meta` + `_store_helpers`），`MemoryStore` 公共 API 与导入路径**完全不变**；MI **C0.35→A89.9**，整个 memory 包无 C/F 文件。④ 文档对齐：建 `docs/MVP_STATUS.md`（记分牌+完全体路线图+文档地图），并把 `AGENTS.md`/`.cursor/rules/cyber-companion.mdc`/`CLAUDE.md` 三处「session 必读」统一为 HANDOFF+MVP_STATUS+ARCHITECTURE_SNAPSHOT+TASK_QUEUE，旧 spec/SESSION_LOG 降级为「历史，勿当现状」。**当时 745 passed**。该 checkpoint 当时记录的唯一 P0 缺口 #8，已由上方第七十四轮深档闭合。
 2. **当前分支 = `codex/voice-stabilization-20260627`，voice implementation checkpoint = `dd026ee`**。已从 `codex/soul-runtime` 的 `f1298d3` 分离；工作树仍有故意不提交残留：
    - `backend/realtime/run_voice.py`（`_LatencySpikeLogger`，P8-C 探针）——**不要 commit**。
    - untracked：`experiments/tagger_ab.py`（已本地改过，见下）、`experiments/tagger_listen_haiku.py`、
      `voice_compare.py`、`data/tagger_eval/`、`.mcp.json` 等实验/数据。
 3. 生效配置（`config/providers.json` 与 `.env` gitignored；`config/tts.json` 已进 voice checkpoint）：
    - `config/providers.json`：tagger 跑 `anthropic/claude-haiku-4.5`（provider 条目已正名为 `"tagger"`）。
-   - `config/tts.json`：`fish_audio.model = s2.1-pro`，音色嘉岚 `fbe02f8306fc4d3d915e9871722a39d5`。
+   - `config/tts.json`：`fish_audio.model = s2.1-pro`，当前音色 `35d2396e569d4513883ecd23c05eabf7`（用户 2026-06-28 手动切换）。
    - `.env`：`CYBER_COMPANION_VOICE_FISH_NORMALIZE=false`（第六十九轮 A/B 胜出项）。
 4. `normalize=false` 已进入 Pipecat 真实多轮链路，用户听感「还可以」；发平/句间呼吸的最终优化延后与音色和其他参数一起评估，不继续单点追节奏标签。
 5. 本轮发现单字尾音自回声：Boxi「先睡，乖。」→ ASR「乖。」→ Boxi 再回复。已做窄修复：仅在停止播放后 2s 内拦截与尾字完全一致的单字。真机已生成单字回复「一」，本次未被 ASR 回收且未自触发；直接拦截命中待自然复现时观察。

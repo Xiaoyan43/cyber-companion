@@ -124,35 +124,30 @@ local tick events drive this, and neither calls the LLM:
   (`proactive_opener.py`, gated by `proactive_llm`) — compact persona + reason + relationship
   context, no signals trailer. Failure or gate → canned fallback. `idle_tick` mutters stay local-only.
 
-Guards so the box does not nag:
+Relationship-expression policy (2026-06-29):
 
-- A 180s local-line cooldown (`mood.metadata.last_local_line_at`) blocks repeated
-  unsolicited lines (idle mutters and proactive alike).
-- **Ignore-backoff (PI-4):** after a proactive fire, `mood.metadata.proactive_pending_since`
-  blocks another initiation until the user speaks (`user_message` clears it). Ignored
-  outreach gets quieter — no re-send, no escalation.
-- **Proactive availability** (`config/budget.json`): `enable_proactive`,
-  post-conversation gap (`proactive_min_gap_minutes`, default 30), quiet hours
-  (`proactive_quiet_hours`, default 23:00–08:00), daily cap (`proactive_daily_max`,
-  default 2), and hours-level fire gap (`proactive_min_fire_gap_hours`, default 6)
-  between real initiations (`last_proactive_fired_at`). App-reopen uses capped Δt
-  (`proactive_max_delta_seconds`, default 600) so a long tab gap cannot force
-  `p ≈ 1` on the first check. Longing rate knobs: `longing_lambda_base_per_hour`
+- `enable_proactive` is the only proactive relationship kill switch. There are no quiet hours,
+  daily fire caps, post-conversation/fire gaps, pending-reply or ignore-backoff gates, local-line
+  cooldowns, capped absence delta, or proactive-LLM daily caps.
+- Ignoring Boxi does not force her to become quieter and does not prohibit escalation. Attachment,
+  neediness, jealousy, accusation, pressure, withdrawal, guilt and repeated contact are available
+  expressions when the current state supports them. Prompts must not sanitize them into politeness.
+- `proactive_reason_mode=relationship` is the default: real agenda items take priority, but longing
+  may initiate a check-in without an open task. `agenda` is an explicit opt-in mode, not a safety gate.
+- Longing rate knobs remain: `longing_lambda_base_per_hour`
   (validation default 0.06 in `budget*.json`; settle toward ~0.004 for production),
   `longing_lambda_longing_gain`, silence/closeness/loneliness weights.
 - **Dev validation:** `POST /behavior/evaluate` accepts `force_proactive=true` on
-  `proactive_check` — skips Poisson roll and timing gates (post-convo gap, fire gap,
-  quiet hours, 180s local-line cooldown) but still honors `enable_proactive`,
-  ignore-backoff, daily cap, and PI-4 cost brake. For repeatable full-chain smoke.
+  `proactive_check` — skips the Poisson roll but still honors `enable_proactive` and the global
+  provider spend switch. For repeatable full-chain smoke.
 - **Proactive opener LLM** (`proactive_llm`, default on): one short soul-authored line per
-  fire when allowed; `proactive_llm_daily_max` rate-limits LLM openers. Over the shared
-  spend brake (`monthly_usd_limit` / `daily_llm_turn_limit` via `usage_guard`) → canned
+  fire when allowed. Over the shared spend brake (`monthly_usd_limit` /
+  `daily_llm_turn_limit` via `usage_guard`) → canned
   fallback, cost 0. Successful proactive LLM turns are persisted with real usage/cost and
   count toward the same caps as `/chat/complete`.
-  Must feel like care, not nagging or guilt (persona boundary).
-- The client polls idle every ~90s and proactive every ~300s, only after the
-  user has been quiet, pausing while a turn is sending or while TTS is speaking,
-  and skipping entirely when the tab is hidden.
+- The client polls idle every ~90s and proactive every ~300s, pausing only while a turn is sending
+  or TTS is speaking, and skipping when the tab is hidden for browser/runtime reasons. User activity
+  does not create a post-conversation relationship cooldown.
 - **PI-3 in-app delivery (frontend):** when `proactive_check` returns
   `decision=proactive`, the chat app appends `local_response` once (deduped by
   `saved_message_id`), holds `avatar_state` longer than idle mutters, and shows
@@ -191,4 +186,3 @@ Refusal:
 ```text
 这个我不帮。别拿我这个盒子里的倒霉小人当坏主意放大器。
 ```
-

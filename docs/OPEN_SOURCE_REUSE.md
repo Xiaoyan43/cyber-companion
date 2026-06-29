@@ -2,21 +2,26 @@
 
 ## Intent
 
-This project is for the user to play with and improve personal efficiency. It is assumed to be private personal-use unless the user says otherwise. We should move fast by learning from, connecting, and adapting existing open-source projects where practical.
+This is a permanent private, single-user project. Core self-development is not a goal. Boxi should
+combine the strongest available implementations and keep custom code only for her unique identity,
+data mapping, and integration seams.
 
 The default is:
 
 ```text
-reuse or adapt proven open-source pieces first, build from scratch only when needed
+systematically find the nearest neighbors -> directly reuse the strongest fit -> keep only Boxi-specific glue
 ```
 
 ## What To Look For
 
-Useful open-source categories:
+Every module is in scope:
 
 - Pixel character renderers and sprite animation patterns.
 - Desktop/web chat UI shells.
-- Local memory or note-like SQLite patterns.
+- Long-term/episodic/temporal memory and user models.
+- Emotion, relationship progression, identity persistence, and roleplay continuity.
+- Proactive contact, heartbeat/scheduling, planning, reflection, dreaming, and autonomous daily life.
+- Screen/camera perception and embodied desktop presence.
 - LLM provider adapters.
 - Prompt and structured-output patterns.
 - Push-to-talk STT examples.
@@ -27,7 +32,8 @@ Useful open-source categories:
 
 ## License Rules
 
-For this project, license checks are mostly for awareness, source tracking, and future cleanup. They should not block personal experimentation unless they create a practical risk or force a large architecture change.
+License checks ensure that the chosen form of reuse is allowed; public-distribution convenience is
+not an optimization target.
 
 Preferred when choices are otherwise similar:
 
@@ -55,11 +61,10 @@ If the project ever changes direction toward public GitHub release, commercial h
 
 ## Reuse Levels
 
-### Level 1 - Learn Only
+### Level 1 - Reference Only
 
-Read the idea or architecture, then implement independently.
-
-Record only if it materially influenced the design.
+Use only when code reuse is legally unavailable, the project is abandoned, or its implementation is
+not actually ahead. “Learn and rewrite it ourselves” is not a substitute for direct reuse.
 
 ### Level 2 - Dependency
 
@@ -91,19 +96,29 @@ Record:
 
 Use an existing project as the base.
 
-This needs explicit user approval because it can dictate the architecture and make future replacement harder.
+The architecture is allowed to change. Execute as an isolated spike and staged migration so user data
+and verified Boxi-specific behavior remain recoverable.
 
 ## Evaluation Checklist
 
-Before using an open-source candidate, check:
+Before any module implementation or extension, record:
 
-- Does it solve a real MVP task?
-- What is the license or reuse risk?
-- Is it maintained enough for our use?
-- Can it fit the architecture without bending the project around it?
-- Is the dependency size acceptable?
-- Does it introduce security or privacy risk?
-- Can we replace it later if needed?
+- Nearest whole-product projects plus subsystem-specific projects searched.
+- Current release/commit, maintenance/activity, license, and upstream docs.
+- Capability delta against our current implementation; do not compare marketing copy only.
+- Direct integration surface: dependency, REST API, plugin, adapted licensed module, or fork.
+- Runtime/API cost on the target machine: 2019 Intel MacBook Pro, quad-core i5, Iris Plus 655,
+  16 GB LPDDR3. Cloud inference and lightweight local orchestration are preferred.
+- Security/privacy impact and a rollback/data-migration plan.
+- Adopt, spike, defer-for-hardware, or reject. Rejection requires evidence. “Current custom code is
+  simpler”, “avoid dependencies”, and “does not fit the architecture” are invalid by themselves.
+
+## 2026-06-29 Direction Reset
+
+The earlier candidate log below is historical evidence of the wrong optimization: it repeatedly
+rejected mature projects in favor of small custom implementations. Those decisions are not binding.
+The current replacement audit and source evidence are in
+`docs/NEAREST_NEIGHBOR_AUDIT_2026-06-29.md`.
 
 ## Candidate Log
 

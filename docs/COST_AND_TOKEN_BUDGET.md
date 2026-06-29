@@ -43,16 +43,11 @@ This requires memory retrieval and summaries. Full-history prompting is not acce
   "allow_cloud_stt": false,
   "allow_cloud_tts": false,
   "enable_proactive": true,
-  "proactive_quiet_hours": [23, 8],
-  "proactive_min_gap_minutes": 30,
-  "proactive_min_fire_gap_hours": 6,
-  "proactive_daily_max": 2,
   "longing_silence_hours_scale": 48,
   "longing_closeness_weight": 0.55,
   "longing_loneliness_weight": 0.45,
   "longing_lambda_base_per_hour": 0.06,
-  "longing_lambda_longing_gain": 2.5,
-  "proactive_max_delta_seconds": 600
+  "longing_lambda_longing_gain": 2.5
 }
 ```
 
@@ -61,23 +56,15 @@ validation-period rate (fires a couple times/day at high longing). Lower toward
 **~0.004** after on-device tuning. `_validation_notes` in `budget*.json` records
 the same intent.
 
-`proactive_max_delta_seconds` caps the Δt used in the Poisson fire probability so
-app-reopen after a long absence does not force an immediate proactive line.
-
-### Proactive opener (PI-2 + PI-4)
+### Proactive opener
 
 When longing fires, `proactive_llm` (default on) lets the route author one short
-line via the provider (`proactive_max_output_tokens`, default 80).
-`proactive_llm_daily_max` rate-limits LLM openers per UTC day. Off, over cap,
-or over the shared spend brake → canned fallback from `proactive_reason.fallback_line_for_reason`
+line via the provider (`proactive_max_output_tokens`, default 80). Off or over the shared spend
+brake → canned fallback from `proactive_reason.fallback_line_for_reason`
 (cost 0).
 
-**PI-4 respect + cost brake:**
+**Cost brake:**
 
-- `proactive_pending_since` — after a proactive fire, no second initiation until
-  the user speaks (`awaiting_user_reply` gate). Ignored outreach stays quiet.
-- `proactive_min_fire_gap_hours` (default 6) — minimum hours between real fires
-  (`last_proactive_fired_at`), separate from the 30-minute post-conversation gap.
 - Proactive LLM calls run through `evaluate_llm_budget_gate` (same
   `monthly_usd_limit` / `daily_llm_turn_limit` / reasoning-model rules as chat).
   Successful proactive LLM turns persist real `usage`/`cost` on the behavior_tick
@@ -87,12 +74,9 @@ or over the shared spend brake → canned fallback from `proactive_reason.fallba
 
 Local `proactive_check` timing uses the longing model in `behavior/longing.py`
 (no LLM). Set `enable_proactive` to `false` to disable entirely. Dev smoke:
-`force_proactive=true` on `/behavior/evaluate` skips timing/Poisson but keeps
-safety gates (see `docs/PERSONA_AND_BEHAVIOR.md`).
-
-Post-conversation cooldown uses `get_last_user_chat_created_at` (`source='chat'`).
-RTC voice turns via `POST /rtc/turn` → `analyze_turn` → `persist_chat_turn` also
-use `source='chat'`, so voice counts the same as text for this gate.
+`force_proactive=true` on `/behavior/evaluate` skips Poisson but keeps the explicit
+`enable_proactive` switch (see `docs/PERSONA_AND_BEHAVIOR.md`). Relationship-expression throttles
+are intentionally not part of the budget system; only machine/provider spending is capped here.
 
 ### Enforcement (implemented)
 
@@ -139,4 +123,3 @@ Stage 4 always-alive voice loop should still use local VAD/wake detection first.
 ## Provider Notes
 
 Provider prices change. Always verify official pricing before making hard monthly cost claims.
-

@@ -38,8 +38,8 @@ Anti-fabrication constraint: generation is grounded in a human-curated whitelist
 (`config/idle_material_pool.json`, falls back to the `.example.json` template) — real movies/news
 with a verified short summary. The LLM prompt explicitly restricts output to that summary; it may
 not invent plot details, names, or events beyond what the material provides. Rhythm is gated by
-`BudgetConfig.idle_experience_min_gap_hours` / `idle_experience_daily_max` (mood_state metadata
-tracks last-write time + daily count, same pattern as the proactive opener's daily cap), and a
+`BudgetConfig.idle_experience_min_gap_hours` / `idle_experience_daily_max` (runtime metadata
+tracks last-write time + daily count as a compute/resource control, not a relationship limit), and a
 recent-material fingerprint (`idle_experience_recent_material_ids`, FIFO capped by
 `idle_experience_fingerprint_history_size`) avoids picking the same material twice in a row.
 Writing never sends a message — it is purely a memory write for later recall (see P9-P2-B's
@@ -345,4 +345,3 @@ runs synchronously as before.
 - `llm_summary` (default true) — LLM summary in reflection vs rule-based sync path
 
 Reflection spend is not yet gated by budget walls (`# TODO(SD-later): gate reflection spend`).
-

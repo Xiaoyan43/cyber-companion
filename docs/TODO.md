@@ -30,33 +30,17 @@ Final form = **"a being with a world"** (see `docs/VISUAL_SPIKE_SPEC.md` header 
   for whatever lightweight renderer is chosen later.
 - [ ] (deep-voice) Un-shelf cascaded soul-authored voice as primary (Phases 1–3); pure E2E → fast toggle.
 
-## Proactive initiation (PI) — 2026-06-13: the missing companion pillar
+## Proactive initiation — current state (2026-06-29 doctrine reset)
 
-Deepening, not from-scratch — the tick loop already exists (`useBehaviorTicks` →
-`POST /behavior/evaluate` → persist line). **Spec: `docs/PROACTIVE_INITIATION_SPEC.md`.**
+- [x] Longing/Poisson timing, reason picker, Soul-authored opener and in-app delivery remain.
+- [x] All relationship-expression throttles and anti-attachment prompt rules from the old PI-4
+  design were deliberately removed. `enable_proactive` and global provider spend controls remain.
+- [x] Schema v9 purges retired guard metadata from mood/runtime state.
+- [ ] Replace custom scheduling/delivery infrastructure with the strongest suitable upstream after
+  the AIRI/Open-LLM-VTuber/OpenClaw comparison; keep Boxi-specific motive and relationship state.
 
-- [x] **PI-1 — Longing model (timing) `[Claude spec ✓ → Cursor → update PERSONA_AND_BEHAVIOR + COST]`.**
-  `behavior/longing.py`: longing from `last_meaningful_interaction_at × closeness` (fix the inverted
-  `mood.py:74` sign), stochastic Poisson fire, availability gate (quiet hours / post-convo cooldown /
-  daily cap). Replaces stale-job-only fire gate. Seedable RNG. Reuse `pearthink123/revive-companion` (MIT, Level 1). **Claude review PASS @ `ab14a7e`** — 350 tests green; see PI-1 follow-ups below.
-- [x] **PI-2 — Reason + soul-authored opener `[done @ c6fe473; Claude review PASS]`.**
-  Reason picker (reminder / follow-up / memory callback / check-in) → in-voice opener authored at the
-  **route layer** (`proactive_opener.resolve_proactive_opener`, engine stays provider-free);
-  `proactive_llm` gate + daily LLM cap (PI-4 cost hook) + triple canned fallback; 363 tests green.
-  **Real-provider smoke PASS** (DeepSeek, 2026-06-14): 4 reasons → short in-voice openers
-  (11–20字), no guilt/nag; check-in invoked the 盒子 persona ("别让我以为盒子里就我一个活物").
-- [x] **PI-1 follow-ups (from review) `[done @ b16e2e0; Claude review PASS]`.** (a) Validation λ
-  `longing_lambda_base_per_hour=0.06` + `force_proactive` dev trigger on `/behavior/evaluate`
-  (skips only timing gates; **enable/backoff/daily-cap/cost stay enforced**). (b)
-  `proactive_max_delta_seconds=600` Δt cap. (c) RTC voice turns confirmed `source='chat'`
-  (`persist_chat_turn` line 32) — counted, no query change. 379 tests green.
-- [x] **PI-3 — Delivery feels like initiation (in-app) `[done @ 16cccaf; Claude review PASS]`.** Avatar + attention cue; surfaces
-  after idle without a user action. (Away-delivery = desktop/box platform follow-on.)
-- [x] **PI-4 — Respect + cost brake `[done @ 52f4390; Claude review PASS]`.** ignore-backoff
-  (`proactive_pending_since` blocks `awaiting_user_reply` until a user msg clears it), hours fire-gap
-  (`proactive_min_fire_gap_hours`), and the USD cost brake (`evaluate_llm_budget_gate` pre-call +
-  real completion threaded so cost is recorded). 372 tests green. **PI series complete (PI-1/2/3/4 + follow-ups);
-remaining: settle validation λ on-device + optional UI regression test.**
+Current contract: `docs/PROACTIVE_INITIATION_SPEC.md`. Replacement plan:
+`docs/NEAREST_NEIGHBOR_AUDIT_2026-06-29.md`.
 
 ## Soul Deepening (Claude spec 2026-06-09 → Cursor implements → Claude reviews)
 

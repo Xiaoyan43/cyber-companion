@@ -48,6 +48,10 @@ recordings/
 # OS
 .DS_Store
 
+# Project audit artifacts (regenerate with project_audit.sh; venv is large)
+.audit_venv/
+_audit/
+
 # Scratch / tooling — never publish (vendor doc scrapes, local agent config)
 .firecrawl/
 .claude/

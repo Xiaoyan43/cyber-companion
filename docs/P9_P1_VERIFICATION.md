@@ -1,5 +1,8 @@
 # P9-P1 真机验证报告（2026-06-22）
 
+> 历史验收记录。2026-06-29 已废止其中“不得冷淡/疏离”和旧 proactive 频率门控；当前契约只看
+> `docs/PROACTIVE_INITIATION_SPEC.md`。
+
 > 验证对象：commit `aca291d`（想念轨迹三档）+ `8f4ba8e`（反重复指纹）。
 > 方法：通过 `POST /behavior/evaluate`（`event_type=proactive_check`, `force_proactive=true`）触发，
 > 临时改写 `relationship_state.closeness` / `last_meaningful_interaction_at` 模拟三档墙钟状态，
