@@ -2,7 +2,7 @@ from collections.abc import Iterator
 
 from backend.app.providers.base import ChatProvider
 from backend.app.providers.config import ProvidersConfig, load_providers_config
-from backend.app.providers.exceptions import ProviderConfigError, ProviderError
+from backend.app.providers.exceptions import ProviderConfigError
 from backend.app.providers.registry import build_providers
 from backend.app.providers.types import (
     ChatCompletionRequest,

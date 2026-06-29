@@ -4,7 +4,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
-from backend.app.memory import usage_guard
 from backend.app.memory.budget import BudgetConfig
 from backend.app.memory.store import MemoryStore, reset_memory_store
 from backend.app.memory.usage_guard import evaluate_llm_budget_gate, is_reasoning_model

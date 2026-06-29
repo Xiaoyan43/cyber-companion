@@ -17,7 +17,7 @@ from backend.app.behavior.longing import (
 )
 from backend.app.behavior.types import BehaviorEvent
 from backend.app.memory.budget import BudgetConfig
-from backend.app.memory.database import MoodStateRecord, RelationshipStateRecord, connect
+from backend.app.memory.database import connect
 from backend.app.memory.store import MemoryStore
 
 
@@ -29,9 +29,6 @@ def store(tmp_path: Path) -> MemoryStore:
 def _quiet_budget(**overrides: object) -> BudgetConfig:
     base = {
         "enable_proactive": True,
-        "proactive_min_gap_minutes": 0,
-        "proactive_daily_max": 10,
-        "proactive_quiet_hours": (0, 0),
         "longing_silence_hours_scale": 24.0,
         "longing_closeness_weight": 0.6,
         "longing_loneliness_weight": 0.4,
@@ -44,36 +41,6 @@ def _quiet_budget(**overrides: object) -> BudgetConfig:
 
 def _hot_budget(**overrides: object) -> BudgetConfig:
     return _quiet_budget(longing_lambda_base_per_hour=80.0, **overrides)
-
-
-def _mood(**metadata: object) -> MoodStateRecord:
-    return MoodStateRecord(
-        updated_at="2026-06-13T12:00:00+00:00",
-        mood="idle",
-        energy=0.5,
-        annoyance=0.1,
-        boredom=0.2,
-        worry=0.1,
-        trust=0.5,
-        loneliness=0.3,
-        metadata=dict(metadata),
-    )
-
-
-def _relationship(
-    *,
-    closeness: float = 0.2,
-    meaningful_at: str | None = None,
-) -> RelationshipStateRecord:
-    return RelationshipStateRecord(
-        updated_at="2026-06-13T12:00:00+00:00",
-        trust=0.5,
-        closeness=closeness,
-        familiarity=0.0,
-        tension=0.0,
-        last_meaningful_interaction_at=meaningful_at,
-        metadata={},
-    )
 
 
 def test_longing_rises_with_closeness_at_same_silence() -> None:
@@ -147,43 +114,11 @@ def test_seeded_rng_fire_is_deterministic() -> None:
     assert should_fire_longing(snap, rng=rng_a) == should_fire_longing(snap, rng=rng_b)
 
 
-def test_post_conversation_cooldown_blocks() -> None:
-    now = datetime(2026, 6, 13, 12, 0, tzinfo=timezone.utc)
-    gate = check_proactive_availability(
-        budget=_quiet_budget(proactive_min_gap_minutes=30),
-        mood=_mood(),
-        relationship=_relationship(),
-        last_user_message_at=(now - timedelta(minutes=10)).isoformat(),
-        now=now,
-    )
-    assert gate.blocked is True
-    assert gate.reason == "post_conversation_cooldown"
-
-
-def test_quiet_hours_block() -> None:
-    now = datetime(2026, 6, 13, 2, 0, tzinfo=timezone.utc)
-    gate = check_proactive_availability(
-        budget=_quiet_budget(proactive_quiet_hours=(23, 8)),
-        mood=_mood(),
-        relationship=_relationship(),
-        last_user_message_at=None,
-        now=now,
-    )
-    assert gate.blocked is True
-    assert gate.reason == "quiet_hours"
-
-
-def test_daily_cap_blocks() -> None:
-    now = datetime(2026, 6, 13, 12, 0, tzinfo=timezone.utc)
-    gate = check_proactive_availability(
-        budget=_quiet_budget(proactive_daily_max=2),
-        mood=_mood(proactive_daily_date="2026-06-13", proactive_daily_count=2),
-        relationship=_relationship(),
-        last_user_message_at=None,
-        now=now,
-    )
-    assert gate.blocked is True
-    assert gate.reason == "proactive_daily_cap"
+def test_proactive_availability_only_honors_explicit_kill_switch() -> None:
+    assert check_proactive_availability(budget=_quiet_budget()).blocked is False
+    blocked = check_proactive_availability(budget=_quiet_budget(enable_proactive=False))
+    assert blocked.blocked is True
+    assert blocked.reason == "proactive_disabled"
 
 
 def test_proactive_check_fires_with_high_longing_and_seeded_rng(store: MemoryStore) -> None:
@@ -200,7 +135,7 @@ def test_proactive_check_fires_with_high_longing_and_seeded_rng(store: MemorySto
     decision = evaluate_behavior(
         store,
         BehaviorEvent(event_type="proactive_check"),
-        budget=_hot_budget(proactive_reason_mode="longing_only"),
+        budget=_hot_budget(proactive_reason_mode="relationship"),
         rng=random.Random(0),
         now=now,
     )
@@ -251,7 +186,7 @@ def test_proactive_check_misses_when_lambda_zero(store: MemoryStore) -> None:
     decision = evaluate_behavior(
         store,
         BehaviorEvent(event_type="proactive_check"),
-        budget=_quiet_budget(proactive_quiet_hours=(0, 0)),
+        budget=_quiet_budget(),
         rng=random.Random(0),
         now=datetime(2026, 6, 13, 12, 0, tzinfo=timezone.utc),
     )

@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from backend.app.memory.schema import (
-    MEMORY_TYPES,
     OPERATIONAL_MOOD_METADATA_KEYS,
+    RETIRED_RELATIONSHIP_GUARD_METADATA_KEYS,
     SCHEMA_SQL,
     SCHEMA_VERSION,
 )
@@ -74,6 +74,7 @@ def init_database(db_path: Path | None = None) -> Path:
         _maybe_add_slow_baseline_columns(connection)
         _maybe_backfill_existential_state(connection)
         _maybe_backfill_behavior_runtime_state(connection)
+        _maybe_purge_relationship_guard_metadata(connection)
 
     return path
 
@@ -193,6 +194,42 @@ def _maybe_backfill_behavior_runtime_state(connection: sqlite3.Connection) -> No
         """
         INSERT INTO schema_meta(key, value)
         VALUES ('behavior_runtime_state_v1_backfilled', '1')
+        ON CONFLICT(key) DO NOTHING
+        """
+    )
+
+
+def _maybe_purge_relationship_guard_metadata(connection: sqlite3.Connection) -> None:
+    existing = connection.execute(
+        "SELECT 1 FROM schema_meta WHERE key = 'relationship_guard_metadata_v1_purged'"
+    ).fetchone()
+    if existing is not None:
+        return
+
+    for table in ("mood_state", "behavior_runtime_state"):
+        row = connection.execute(
+            f"SELECT metadata_json FROM {table} WHERE id = 1"
+        ).fetchone()
+        if row is None:
+            continue
+        metadata = loads_json(row["metadata_json"], {})
+        if not isinstance(metadata, dict):
+            metadata = {}
+        cleaned = {
+            key: value
+            for key, value in metadata.items()
+            if key not in RETIRED_RELATIONSHIP_GUARD_METADATA_KEYS
+        }
+        if cleaned != metadata:
+            connection.execute(
+                f"UPDATE {table} SET metadata_json = ? WHERE id = 1",
+                (dumps_json(cleaned),),
+            )
+
+    connection.execute(
+        """
+        INSERT INTO schema_meta(key, value)
+        VALUES ('relationship_guard_metadata_v1_purged', '1')
         ON CONFLICT(key) DO NOTHING
         """
     )

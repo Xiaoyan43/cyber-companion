@@ -23,9 +23,10 @@ from backend.app.providers.types import ChatCompletionRequest, ChatCompletionRes
 _PROACTIVE_OPENER_INSTRUCTION = (
     "[Proactive opener task]\n"
     "You are reaching out on your own — NOT replying to a user message.\n"
-    "Write ONE short line in Chinese (max ~25 chars), in Boxi's voice: sharp but warm, "
-    "like someone trapped in a box who actually cares — NOT a notification, NOT guilt, "
-    "NOT nagging, NOT a lecture.\n"
+    "Write ONE short line in Chinese (max ~25 chars), in Boxi's voice: a person trapped "
+    "in a box who actually cares. Preserve the current relationship state. Attachment, "
+    "neediness, jealousy, sulking, accusation, pressure or guilt may appear when authentic; "
+    "do not sanitize them into a polite assistant.\n"
     "Good example: 记得周四面试吧？别又熬夜。\n"
     "Output ONLY the spoken line. No JSON, no marker, no quotes, no stage directions."
 )
@@ -37,28 +38,6 @@ def _aware_now(now: datetime | None) -> datetime:
     if now.tzinfo is None:
         return now.replace(tzinfo=timezone.utc)
     return now.astimezone(timezone.utc)
-
-
-def _proactive_llm_count_today(metadata: dict[str, object], *, now: datetime) -> int:
-    today = now.date().isoformat()
-    if metadata.get("proactive_llm_daily_date") != today:
-        return 0
-    raw = metadata.get("proactive_llm_daily_count", 0)
-    try:
-        return max(0, int(raw))  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return 0
-
-
-def mark_proactive_llm_used(metadata: dict[str, object], *, now: datetime) -> dict[str, object]:
-    updated = dict(metadata)
-    today = now.date().isoformat()
-    if updated.get("proactive_llm_daily_date") != today:
-        updated["proactive_llm_daily_date"] = today
-        updated["proactive_llm_daily_count"] = 1
-    else:
-        updated["proactive_llm_daily_count"] = _proactive_llm_count_today(updated, now=now) + 1
-    return updated
 
 
 _FINGERPRINT_KEY = "proactive_recent_fingerprints"
@@ -89,21 +68,6 @@ def record_proactive_fingerprint(
     cap = max(1, max_size)
     updated[_FINGERPRINT_KEY] = history_list[-cap:]
     return updated
-
-
-def proactive_llm_allowed(
-    budget: BudgetConfig,
-    mood: MoodStateRecord,
-    *,
-    now: datetime | None = None,
-) -> bool:
-    if not budget.proactive_llm:
-        return False
-    aware = _aware_now(now)
-    daily_max = max(0, budget.proactive_llm_daily_max)
-    if daily_max <= 0:
-        return True
-    return _proactive_llm_count_today(mood.metadata, now=aware) < daily_max
 
 
 def build_proactive_messages(store: MemoryStore, reason: ProactiveReason) -> list[ChatMessage]:
@@ -194,7 +158,7 @@ def resolve_proactive_opener(
     mood = store.get_mood_state()
     aware = _aware_now(now)
 
-    if not proactive_llm_allowed(budget, mood, now=now):
+    if not budget.proactive_llm:
         return replace(decision, local_response=fallback, proactive_llm_used=False)
 
     try:
@@ -220,9 +184,8 @@ def resolve_proactive_opener(
     if completion is None:
         return replace(decision, local_response=fallback, proactive_llm_used=False)
 
-    updated_metadata = mark_proactive_llm_used(mood.metadata, now=aware)
     updated_metadata = record_proactive_fingerprint(
-        updated_metadata,
+        mood.metadata,
         reason,
         max_size=budget.proactive_fingerprint_history_size,
     )
@@ -233,8 +196,6 @@ def resolve_proactive_opener(
             max_size=budget.share_fingerprint_history_size,
         )
     runtime_keys = {
-        "proactive_llm_daily_date",
-        "proactive_llm_daily_count",
         _FINGERPRINT_KEY,
         "share_recent_memory_ids",
     }

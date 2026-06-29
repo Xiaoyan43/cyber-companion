@@ -1,5 +1,8 @@
 # P9-P2-B 真机验证报告（2026-06-22）
 
+> 历史验收记录。2026-06-29 已删除文中用于测试绕过的旧 proactive 频率/待回复门控；当前契约只看
+> `docs/PROACTIVE_INITIATION_SPEC.md`。idle_experience 的计算资源配额仍保留。
+
 > 验证对象：commit `be2a81d`（idle_experience 写入机制）+ `9890ca4`（share intent）+ 本轮新建的
 > `config/idle_material_pool.json`（生产素材池）。
 > 方法：通过 `POST /behavior/evaluate`（`idle_tick` 触发 idle_experience 写入，`proactive_check`

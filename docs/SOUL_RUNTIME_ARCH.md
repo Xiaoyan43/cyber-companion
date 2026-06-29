@@ -1,11 +1,11 @@
 # Soul Runtime 架构（重构北极星）
 
-> 状态：**目标架构 / 重构契约**。设计细节以本文件为准；**实施进度以 `docs/SOUL_RUNTIME_STATUS.md` 为准**。
+> 状态：**目标架构 / 重构契约**。本文件是 `codex/soul-runtime` 分支的源真相。
 > 由 2026-06-27 的「全项目架构盘点 + Shared Soul Layer 重构准备」审查 + 用户 10 项拍板产生。
 > 取代散落在各入口的回合编排；不改人格，只收敛结构。
 > **冷启动**：先读 `docs/SOUL_RUNTIME_STATUS.md`（跨 session 进度）+ 本文件 + `docs/ARCHITECTURE_V2.md`。
-> **▶ Phase 0–7 ✅ accepted / merged @ `95848c4`**（merge `dbefff0` → `master`）。
-> **下一任务**：见 STATUS §6 / §8 四条路线（稳定化 · Soul Quality · 产品体验 · 语音）；非 Phase 5–7 续作。
+> **▶ Phase 0–4.5 ✅ accepted @ `d6003f1`**（runtime · ports · event_log · open_loops · mood 拆分 · invariant suite）。
+> **下一任务：Phase 5**（MemoryPort 后 Letta/Mem0 adapter spike）。详见 STATUS §6。
 
 ## 0. 北极星与范围
 
@@ -27,7 +27,7 @@
 | 7 | **proactive 迁到 agenda/motivation，保留 longing/Poisson 作节奏闸** | open-loops/agenda 决定「为什么找你」，Poisson 决定「现在是否合适」 |
 | 8 | **现在做轻量 persona 版本化** | 加 `persona_version` / `persona_profile_id` 元信息；不重写 Boxi |
 | 9 | **前端视觉暂缓** | SoulRuntime 稳定前不开 PixiJS room；前端只做 debug panel / 验证 / 小 bugfix |
-| 10 | **独立分支 `codex/soul-runtime`**（已合并 `master` @ `dbefff0`） | Phase 0 文档可小 commit；Phase 1/2 每阶段独立 commit，绿才继续 |
+| 10 | **独立分支 `codex/soul-runtime`** | Phase 0 文档可小 commit；Phase 1/2 每阶段独立 commit，绿才继续 |
 
 ## 2. 目标分层
 
@@ -142,11 +142,11 @@ class AgendaPort(Protocol):          # Phase 3：open loops / future events
 invariant 测试清单（现有）：`test_tone` · `test_mood` · `test_behavior` · `test_memory*` · `test_reflection` · `test_relationship_state` · `test_rtc_state_block` · `test_expression_tagger*` · `test_proactive*` · `test_context_builder`。
 **缺口（需新增）**：4 个 surface「同输入 → 同 kernel/memory 副作用」的 turn 一致性契约测试。
 
-**Marker 现状（post-merge @ `95848c4`）**：`invariant` marker 已注册（`pytest.ini`）；
+**Marker 现状（2026-06-27 · Phase 4.5 ✅）**：`invariant` marker 已注册（`pytest.ini`）；
 `backend/tests/conftest.py` 在 collection 时按 §5 文件名/前缀自动打标（7 个精确匹配 +
 `test_memory*` / `test_expression_tagger*` / `test_proactive*` 前缀）。**入口**：`pytest -m invariant`。
-**当前基线（accepted implementation @ `95848c4`）**：`pytest -m invariant` → **353 passed**；
-`pytest backend/tests` → **725 passed**。详见 STATUS §2。
+**验证（commit `1a625db`）**：`pytest -m invariant --collect-only` → **351** 条；
+`pytest -m invariant` → **351 passed**；`pytest backend/tests` → **724 passed**。
 
 ## 6. 迁移阶段（按决策调整后的顺序）
 
@@ -158,32 +158,26 @@ invariant 测试清单（现有）：`test_tone` · `test_mood` · `test_behavio
 | **3A ✅** | `soul_events`（append-only）；runtime commit 写最小 `turn.committed` event | schema(additive) · runtime commit | 低中 | event append/tail + runtime 写入 + 全 backend tests | 表 additive，停写即无副作用 |
 | **3B ✅** | `open_loops` 数据层（additive 表 + `AgendaPort`/`SQLiteAgendaPort`，`SoulPorts.agenda` 默认 `NoopAgendaPort`）；`proactive_reason` 只读 **due/overdue** open_loop 作为新 reason source。**longing/Poisson 仍只是节奏闸**——open_loop 决定「为什么找你」，Poisson 决定「现在是否合适」；motivation/proactive 全链路重构留 Phase 6。open 但未到期的 loop 不触发主动；runtime 暂不写 open_loop。 | schema(additive) · database · store · ports · adapters · proactive_reason | 中 | `test_open_loops` + open_loop reason 选择/回归（703 passed） | 表 additive，空表即天然 kill switch；revert 两个 commit 即回退 |
 | **4 ✅** | **4A**：新增 `existential_state` canonical singleton，v6 精确/幂等 backfill，context builder 改读独立 decay clock；旧 mood 三列保留但停止生产读写。**4B**：新增 `behavior_runtime_state` singleton，迁出 proactive/idle/cooldown operational metadata，内部 writer 改 key-level patch/remove；新表 canonical + legacy mood metadata dual-write；`positive_zone_streak` 留在 mood；`relationship_state.trust` 成为唯一 canonical，mood GET/PUT trust 保留兼容别名，旧列停止写入。 | schema(additive) · database · store · mood/context_builder · behavior metadata writers | 中高 | 4A 定向 59；4B 定向 198；显式 invariant 351；全量 724 passed | 两个独立代码 commit；新表 additive，旧列/legacy metadata 保留；已验证 `4c5bd21` 旧代码可原地打开升级库，timer dual-write 连续 |
-| **5 ✅** | `MemoryPort` 后做 Letta（spike）/ Mem0（对照）adapter | memory/adapters/* | 低（隔离） | 契约测试复用 | 删 adapter |
-| **6 ✅** | proactive 迁 agenda/motivation，longing 留作节奏闸 | motivation policy · engine proactive 分支 | 中 | proactive 闸门 + agenda 触发 | `proactive_reason_mode=longing_only` in budget.json |
-| **7 ✅** | 清理：合并 turn_analyzer、退役/合并 soul_llm_server、统一语音换件 | main.py · rtc · realtime | 低 | invariant 353；backend 725 | 单 commit revert |
+| **5** | `MemoryPort` 后做 Letta（spike）/ Mem0（对照）adapter | memory/adapters/* | 低（隔离） | 契约测试复用 | 删 adapter |
+| **6** | proactive 迁 agenda/motivation，longing 留作节奏闸 | motivation policy · engine proactive 分支 | 中 | proactive 闸门 + agenda 触发 | `proactive_reason_mode=longing_only` in budget.json |
+| **7** | 清理：合并 turn_analyzer、退役/合并 soul_llm_server、统一语音换件 | main.py · rtc · realtime | 低 | 全 invariant | 单 commit revert |
 
-**Phase 0–7 已全部 accepted 并合并至 `master`**（accepted implementation @ `95848c4`，merge `dbefff0`）。后续路线见 STATUS §8，不在此表续作 Phase 8。
-
-并行的轻量项：persona 版本化（决策 8）可在 Phase 1–2 顺带加 `persona_version` 元信息；RTC（决策 6）off-path 写回已在 Phase 7 对齐，transport 归档/删除留稳定化或语音轨决策。
+并行的轻量项：persona 版本化（决策 8）可在 Phase 1–2 顺带加 `persona_version` 元信息；RTC（决策 6）在 Phase 7 决定归档/删除。
 
 ## 7. 待办 / 开放问题
 
-> Phase 0–7 已 merged；下列为**仍开放的架构/质量缺口**（非下一 migration phase）。路线选择见 STATUS §8。
+- Phase 1 的 `PerceivedEvent` / `TurnOutcome` 具体字段：在 Phase 1 任务开始前定稿。
+- turn 一致性契约测试如何在不跑真实音频的前提下覆盖 Pipecat 路径（用 fake transport / 直接测 `CompanionBrain` 而非全 pipeline）。
+- RTC off-path 写回与主 runtime `commit` 的复用边界（决策 6）。
 
-- turn 一致性契约测试如何在不跑真实音频的前提下覆盖 Pipecat 路径（用 fake transport / 直接测 `CompanionBrain` 而非全 pipeline）——§5 缺口，Soul Quality 轨。
-- RTC transport 归档/删除与 off-path 观测收拢（决策 6 后续）——稳定化或语音轨。
+## 8. Phase 1 启动（next session · 冷启动自洽）
 
-## 8. Phase 1 启动（历史实施记录 · 勿作 next-task 入口）
-
-> **📜 历史记录**：Phase 1 已于 Phase 0–7 周期内完成并合并至 `master`。
-> **新 session 冷启动**：读 `docs/SOUL_RUNTIME_STATUS.md` §6 / §8，勿从本节推断下一 phase。
->
 > **✅ Phase 1 COMPLETED**（commits `3562c33` · `7c263c1` · `17daf62` · `d69290e`）。
 > Phase 1 completed for text + Pipecat surfaces; RTC pure E2E off-path analyzer
 > intentionally deferred per decision 6. 子步骤 1-5 全绿，`backend/tests` 670 passed。
-> 以下内容保留作为 Phase 1 的实施记录。
+> 本 §8 以下内容保留作为 Phase 1 的实施记录；新 session 请转 Phase 2（§6 + §4）。
 
-**状态（历史快照）**：Phase 0 已完成并 commit（`fb053c3`，仅本文档）。实施分支 `codex/soul-runtime`（已 merge `master` @ `dbefff0`）。
+**状态**：Phase 0 已完成并 commit（`fb053c3`，仅本文档）。当前分支 `codex/soul-runtime`。
 工作树有 32 项 Fish/tagger 实验残留（unstaged，**故意不提交**）——Phase 1 全程不要 stage 它们。
 
 **Phase 1 目标**：抽出 `backend/app/soul/runtime.py` 的 `SoulTurnRuntime.run_turn()`，

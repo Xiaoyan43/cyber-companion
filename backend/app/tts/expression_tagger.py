@@ -188,50 +188,21 @@ _SOUND_EFFECT_TAG_INNERS = frozenset(
 _DEDUP_EXEMPT_TAG_INNERS = _SOUND_EFFECT_TAG_INNERS | _BREAK_TAG_INNERS
 
 
-def _find_leading_non_exempt_tag(sentence: str) -> re.Match[str] | None:
-    """Return the first non-exempt tag in the sentence *opening region*, if any.
-
-    Opening region: skip leading whitespace, then consecutive exempt tags only.  The first
-    non-exempt tag there is the leading tag.  Once any ordinary text/punctuation appears,
-    scanning stops — mid-sentence tags are out of scope for cross-sentence dedup.
-    """
-    pos = 0
-    while pos < len(sentence):
-        while pos < len(sentence) and sentence[pos].isspace():
-            pos += 1
-        if pos >= len(sentence):
-            return None
-
-        tag_match = _TAG_RE.match(sentence, pos)
-        if not tag_match:
-            return None
-
-        inner = tag_match.group(0)[1:-1]
-        if inner in _DEDUP_EXEMPT_TAG_INNERS:
-            pos = tag_match.end()
-            continue
-        return tag_match
-
-    return None
-
-
 def suppress_repeated_leading_tags(tagged: str) -> str:
     """Remove a leading emotion/tone tag from a sentence when the same tag led the previous one.
 
     Haiku's most common over-tagging pattern: consecutive sentences each get a tag, often the
-    same one, even when the emotion hasn't shifted.  If sentence N+1's leading non-exempt tag
-    (in the opening region only — see ``_find_leading_non_exempt_tag``) is identical to
-    sentence N's, the N+1 tag is "continuing the baseline" — it adds no audio information and
-    causes Fish to over-emote.  This guard removes the duplicate.  Mid-sentence tags (e.g. a
-    turn marker before 「不过」) are never touched.
+    same one, even when the emotion hasn't shifted.  If sentence N+1's first non-exempt tag is
+    identical to sentence N's first non-exempt tag, the N+1 tag is "continuing the baseline" —
+    it adds no audio information and causes Fish to over-emote.  This guard removes the duplicate.
 
     Exempt tags (``_DEDUP_EXEMPT_TAG_INNERS``):
     - Sound-effect tags: positional physical-event markers, not mood baselines.
     - Break/pause tags: already handled by ``_normalize_break_tags``.
 
     Only exact-match deduplication is done — the guard never judges semantic similarity.
-    The baseline resets when a sentence has no leading non-exempt tag (a tagless opening
-    indicates a possible emotion reset, so the next identical leading tag is kept).
+    The baseline resets when a sentence has no non-exempt tags (a tagless gap indicates a
+    possible emotion reset, so the next identical tag is treated as a fresh application).
     """
     sentences, remainder = split_complete_sentences(tagged)
     if remainder.strip():
@@ -244,20 +215,23 @@ def suppress_repeated_leading_tags(tagged: str) -> str:
 
     for sentence in sentences:
         new_sentence = sentence
-        leading_match = _find_leading_non_exempt_tag(sentence)
+        has_non_exempt = False
 
-        if leading_match is None:
-            prev_leading = None  # No leading non-exempt tag → reset baseline
-        else:
-            inner = leading_match.group(0)[1:-1]
+        for m in _TAG_RE.finditer(sentence):
+            inner = m.group(0)[1:-1]
+            if inner in _DEDUP_EXEMPT_TAG_INNERS:
+                continue
+            has_non_exempt = True
             if inner == prev_leading:
                 # Same leading tag as previous sentence → remove it (continuing baseline, not a shift)
-                new_sentence = (
-                    sentence[: leading_match.start()] + sentence[leading_match.end() :]
-                )
+                new_sentence = sentence[: m.start()] + sentence[m.end() :]
                 # prev_leading stays — the baseline is still active
             else:
                 prev_leading = inner
+            break  # Only the first non-exempt tag per sentence matters
+
+        if not has_non_exempt:
+            prev_leading = None  # Tagless sentence resets the baseline
 
         result_parts.append(new_sentence)
 

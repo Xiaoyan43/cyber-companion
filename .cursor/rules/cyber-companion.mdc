@@ -7,19 +7,26 @@ alwaysApply: true
 
 This project builds a low-cost AI desktop companion: a pixel-style "person trapped in a box" with memory, personality, chat, later voice, and eventual hardware support.
 
+## Binding Doctrine
+
+Read `AGENTS.md` first. Its authenticity doctrine, exact list of retired relationship guardrails,
+2019 Intel Mac hardware envelope, and mandatory open-source/nearest-neighbor workflow are always
+binding. `AGENTS.md` is not historical. Do not reintroduce those guardrails, polite-assistant
+sanitization, or a custom subsystem when a stronger reusable implementation exists.
+
 ## Read Before Editing
 
-Read these files before meaningful edits:
+Canonical entry — read only these to learn current state:
 
-- `AGENTS.md`
-- `docs/PROJECT_BRIEF.md`
-- `docs/SESSION_PROTOCOL.md`
-- `docs/MVP_ROADMAP.md`
-- `docs/CURSOR_PHASE_PLAYBOOK.md`
-- `docs/TODO.md`
-- `docs/SESSION_LOG.md`
 - `docs/HANDOFF.md`
-- `docs/OPEN_SOURCE_REUSE.md`
+- `docs/MVP_STATUS.md` — 进度记分牌 + 下一步 + 文档地图（§F）
+- `docs/ARCHITECTURE_SNAPSHOT.md`
+- `docs/TASK_QUEUE.md` — when expanding into a concrete task
+
+> Historical (do NOT treat as current state; read only if a task points to them):
+> `docs/PROJECT_BRIEF.md`, `docs/SESSION_PROTOCOL.md`, `docs/MVP_ROADMAP.md`,
+> `docs/CURSOR_PHASE_PLAYBOOK.md`, `docs/TODO.md`, `docs/SESSION_LOG.md`, `docs/OPEN_SOURCE_REUSE.md`,
+> and all `SD*/V2_*/VE*/VM*/PHASE_*/P9_*` specs. Full doc map: `docs/MVP_STATUS.md` §F.
 
 ## Cursor Role
 
@@ -41,7 +48,11 @@ Avoid changing these without explicit user approval and doc updates:
 
 ## Open Source
 
-Use mature open-source dependencies or examples when they speed up development. This is a private personal-use project, so license checks are mainly for awareness and future cleanup. Prefer MIT, Apache-2.0, BSD, and ISC when choices are otherwise similar. Record reused or adapted sources in `docs/OPEN_SOURCE_REUSE.md`, especially if the source is restrictive, unclear, copied, or adapted.
+Before editing a module, search its current open-source nearest neighbors. If a maintained project is
+materially ahead, integrate, adapt, or migrate to it; studying it and then rebuilding a smaller
+version is not acceptable reuse. The present architecture is not a reason to reject a stronger
+upstream. Record evidence and decisions in `docs/OPEN_SOURCE_REUSE.md`. Compute-heavy candidates
+are deferred for hardware, never replaced by weaker custom code.
 
 ## UI Direction
 

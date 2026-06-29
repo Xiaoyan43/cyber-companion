@@ -1,7 +1,6 @@
 import shutil
 from pathlib import Path
 
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 

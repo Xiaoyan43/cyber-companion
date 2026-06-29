@@ -100,7 +100,13 @@ def test_resolve_idle_experience_write_creates_memory(
     budget = BudgetConfig(idle_experience_enabled=True, idle_experience_daily_max=4)
     router = ProviderRouter.from_config()
 
-    memory = resolve_idle_experience_write(store, budget=budget, router=router, now=_now())
+    memory = resolve_idle_experience_write(
+        store,
+        budget=budget,
+        router=router,
+        provider_name="mock",
+        now=_now(),
+    )
 
     assert memory is not None
     assert memory.type == "idle_experience"

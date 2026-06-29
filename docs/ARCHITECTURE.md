@@ -102,8 +102,8 @@ Idle and proactive ticks have side effects:
 - `idle_tick` drifts mood locally (boredom/loneliness up, energy down) and may
   surface a local `mutter`/`observe` line without calling the LLM.
 - `proactive_check` may surface a stale-job `proactive` nudge.
-- A local-line cooldown (`mood.metadata.last_local_line_at`) throttles repeated
-  unsolicited lines.
+- Repeated unsolicited lines are not relationship-throttled; longing, agenda and relationship
+  state decide whether they occur.
 - When a tick produces a `mutter`/`proactive` line, it is persisted as an
   assistant message with `source="behavior_tick"`. These lines are kept for UI
   history but are **excluded from the replayed recent turns and from
@@ -169,4 +169,3 @@ network_error
 ```
 
 Most idle and life events should be handled locally. Call the LLM only when natural language generation or deeper reasoning is needed.
-

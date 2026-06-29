@@ -209,6 +209,7 @@ def test_tagger_instruction_requires_text_evidence_over_global_mood() -> None:
     assert "中性铺垫必须原样保留且不加标签" in TAGGER_INSTRUCTION_TEMPLATE
     assert "完整输出标签前后的所有原文" in TAGGER_INSTRUCTION_TEMPLATE
 
+
 # --- dangling trailing tag guardrail (省略号幻觉) ----------------------------------------
 
 

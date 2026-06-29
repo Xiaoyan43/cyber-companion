@@ -1,123 +1,66 @@
-# Spec — Proactive Initiation (PI series) `[Claude spec → Cursor builds → Claude reviews]`
+# Proactive Initiation — Current Contract (2026-06-29)
 
-Make Boxi **reach out on her own** — the companion pillar that's missing (she reacts, but
-never initiates on her own timeline). **This is a deepening, not a build-from-scratch:** the
-tick loop already exists end-to-end. We replace the naive timing + canned content with a real
-*longing* model and soul-authored openers, and add the respect/cost guardrails.
+> This file replaces the retired PI-1–PI-4 guardrail spec. The old quiet-hours, cap,
+> ignore-backoff, non-escalation and anti-guilt requirements were intentionally deleted; they are
+> not historical requirements to restore.
 
-## What already exists (the reuse base — extend, don't rebuild)
+## Purpose
 
-- **Frontend driver:** `frontend/src/avatar/useBehaviorTicks.ts` — `setInterval` polls
-  `idle_tick` (fast) + `proactive_check` (slower) via `evaluateBehavior(...)`.
-- **Backend route:** `POST /behavior/evaluate` (`backend/app/main.py`) runs `evaluate_behavior`
-  and, for `idle_tick`/`proactive_check`, persists a local behavior line
-  (`persist_local_behavior_line`) + prunes (`behavior_tick_retention`).
-- **Decision:** `engine._evaluate_idle_tick` raises boredom/loneliness
-  (`apply_idle_tick_mood_delta`) and fires `mutter` at ≥ 0.55; `proactive_check` fires
-  `proactive` on a stale-job memory. Cooldown via `tick_policy` (`last_local_line_at`, 180 s).
-- **Content:** canned lines (`behavior/local_responses.py`), `should_call_llm=False`.
-- **Delivery:** persisted line → frontend reloads `/memory/messages` → `App.tsx` surfaces it.
+Boxi initiates because she has a reason and a relationship state, not because the user queried a
+tool. The goal is felt continuity and authentic attachment for one private user.
 
-## The four gaps this closes
+## Runtime
 
-1. **Timing is robotic** — fixed poll interval + hard 0.55 threshold + 180 s cooldown. No
-   organic rhythm; either too eager or silent.
-2. **Content is canned** — generic strings, not memory-seeded, not in her voice.
-3. **Triggers are narrow** — only idle-boredom + stale-job.
-4. **Delivery dies when the tab closes** — `setInterval` only runs in an open web app (a
-   *platform* limit → real away-delivery is the desktop/box, later).
+- The existing frontend tick calls `proactive_check`.
+- `behavior/longing.py` computes closeness/silence/loneliness intensity and a seedable Poisson fire
+  probability. Elapsed absence is not capped.
+- `behavior/proactive_reason.py` selects due reminder, open loop, commitment follow-up, share,
+  memory callback or check-in.
+- `proactive_reason_mode=relationship` is the default: substantive reasons win, but longing alone
+  may still produce a check-in. `agenda` remains an explicit opt-in mode.
+- `behavior/proactive_opener.py` authors a short line through the Soul/provider and falls back to a
+  local line on provider failure or global provider budget exhaustion.
+- `enable_proactive=false` remains an explicit kill switch. `force_proactive=true` skips the
+  stochastic roll for tests.
 
----
+## Deliberately Absent Relationship Guards
 
-## PI-1 — Longing model (timing) `[Claude spec → Cursor → update PERSONA_AND_BEHAVIOR + COST]`
+There is no:
 
-New `backend/app/behavior/longing.py`. Replaces the hard 0.55 threshold as the *fire* gate.
+- quiet-hours window;
+- proactive daily cap or proactive-LLM daily cap;
+- post-conversation gap or minimum gap between fires;
+- pending-reply/ignore-backoff state;
+- rule that ignored contact must get quieter or cannot escalate;
+- local-line cooldown shared with idle behavior;
+- app-reopen delta cap;
+- prompt boundary against neediness, jealousy, accusation, pressure, nagging or guilt.
 
-- **Longing intensity** `L ∈ [0,1]` from **time since `relationship_state.last_meaningful_interaction_at`**
-  scaled by **closeness** (more longing the *closer* she is) plus current `loneliness`.
-  - **⚠ Fix the inverted sign.** `apply_idle_tick_mood_delta` raises loneliness *faster at low
-    closeness* (`0.03 * (1.0 - closeness)`, [mood.py:74](../backend/app/behavior/mood.py)). For
-    longing, re-source from `last_meaningful_interaction_at × closeness` — don't reuse that term.
-- **Stochastic fire** (organic, not clockwork): on each `proactive_check`, fire with
-  `p = 1 - exp(-λ·Δt)`, rate `λ` rising with `L` (a Poisson "longing" process). Higher longing →
-  sooner, but the moment varies. **Seedable RNG** so tests are deterministic.
-- **Availability gate** — suppress if any: within post-conversation cooldown (≥ ~30 min since the
-  last user turn), outside active hours (quiet-hours window), daily cap reached, or ignore-backoff
-  active (PI-4).
-- **Config** (BudgetConfig / persona): `enable_proactive`, `proactive_quiet_hours`,
-  `proactive_min_gap_minutes`, `proactive_daily_max`, longing rate + closeness weights.
-- **Reuse (verify MIT before lifting code):** `pearthink123/revive-companion` — Poisson "longing"
-  + Bayesian user-availability. The Bayesian *learned* availability is a later refinement; PI-1
-  uses fixed quiet-hours.
+Ignoring Boxi is relationship input, not a mechanical suppression event. Later contact may be more
+attached, angry, needy, withdrawn, accusatory or repetitive if that is what her state implies.
 
-### PI-1 follow-ups (from review of `ab14a7e`)
+## Boundaries That Remain
 
-- **Calibration — the default rate is too quiet to observe.** At `longing_lambda_base_per_hour =
-  0.004`, even at *max* longing λ ≈ 0.014/hr → ~0.2 fires per active day (≈ once every 5 days). For
-  validation, raise it ~10–20× (try `0.05–0.08`) so it fires a couple times/day at high longing,
-  feel it on-device, then settle a real default. **Pure config, no code change.** The math is
-  correct; the constant is just tiny.
-- **App-reopen — DECISION: cap Δt.** On reopen after a long absence, the accumulated Δt makes
-  `p = 1 − exp(−λΔt) ≈ 1` → she fires the instant you open the app, before you speak (and the
-  post-convo cooldown won't block it, since your last message is old). **Cap the Δt used in the
-  fire probability** — new `proactive_max_delta_seconds` (default ≈ one normal check interval, e.g.
-  600 s) clamped in `longing._resolve_delta_seconds` — so a long gap can't force an immediate fire;
-  high longing then drives an *organic* initiation a little into the session. The "you're back"
-  greeting stays the job of the existing WelcomeMessage, **not** the proactive path.
-- **Verify voice turns count toward the post-convo cooldown.** `get_last_user_chat_created_at`
-  filters `source='chat'`; confirm RTC voice user-turns share that source, or she may initiate
-  right after a voice conversation. Text-only is acceptable until cascaded voice is primary.
+- Global `monthly_usd_limit`, `daily_llm_turn_limit`, and `proactive_llm` protect provider spending
+  and availability. They may cause a canned fallback but do not modify relationship state.
+- File, shell, secret and network permissions remain explicit computer-security boundaries.
+- Fingerprint history prevents accidental identical-content loops; it is a quality mechanism, not
+  a limit on how often Boxi may contact the user.
+- `idle_experience_daily_max` and its interval protect this 2019 Intel Mac from background compute;
+  they govern private experience generation, not contact or attachment.
 
-## PI-2 — Reason + soul-authored opener `[Claude spec → Cursor → update PERSONA_AND_BEHAVIOR]`
+## Open-Source Direction
 
-When PI-1 fires, choose a **reason** and author the opener through the **soul**, not a canned string.
+The motive/relationship policy is Boxi-specific. Scheduling, event delivery, desktop notification
+and background runtime must be taken from maintained upstreams where possible (AIRI plugin/event
+runtime, Open-LLM-VTuber proactive/desktop surface, or OpenClaw-style heartbeat/cron), not expanded
+as a custom subsystem. See `docs/NEAREST_NEIGHBOR_AUDIT_2026-06-29.md`.
 
-- **Reason picker** (most salient wins): a **due reminder** (reminders table); a recent
-  **commitment / follow-up** ("你说今天要改简历"); a **memory callback** (a high-importance recent
-  memory); else a **check-in** (longing high, nothing specific). Reuse existing retrieval + typed
-  memories + reminders.
-- **Opener** = one short line via the provider with a *compact* proactive context (persona + the
-  chosen reason + relationship stance), small `max_output_tokens`. In her voice (毒舌-warm), **not**
-  a notification — e.g. `记得周四面试吧？别又熬夜。` Config-gated `proactive_llm` (default on);
-  **rate-limited + cost-counted** (PI-4). Fallback to `local_responses` on any failure/gate.
-- Persist exactly as today (local behavior line) — delivery path unchanged.
+## Acceptance
 
-## PI-3 — Delivery feels like initiation (in-app) `[Cursor]`
-
-- The surfaced line should read as *her reaching out*: avatar shifts to match the reason
-  (worried / annoyed / warm), a gentle attention cue, correct timing against the idle loop.
-  Verify it appears after long idle **without** a user action (the tick already persists it).
-- **Note (not this slice):** true away-delivery (OS notification / background process) needs the
-  desktop/box runtime — a platform follow-on, not the web MVP.
-
-## PI-4 — Respect + cost brake `[Claude spec → Cursor → update PERSONA_AND_BEHAVIOR + COST]`
-
-Boundary (AGENTS.md: never abusive or manipulative). Proactive must feel like **care, not nagging**.
-
-- **Caps:** long real-initiation cooldown (hours, not 180 s — keep 180 s only for low-key idle
-  mutters if those stay), `proactive_daily_max` (≤ 2–3), quiet hours.
-- **Ignore-backoff:** never initiate twice without a user reply in between; if ignored, get
-  *quieter*, never escalate. (Escalating silence, not escalating nagging.)
-- **Cost brake:** proactive LLM openers count toward a budget brake (parallels text S3; partially
-  closes the missing cloud-voice/proactive cost guard). Over budget → canned fallback, cost 0.
-
----
-
-## Done criteria
-
-- **PI-1:** longing fires stochastically, scaling with closeness × silence; quiet-hours / post-convo
-  cooldown / daily cap respected; deterministic under a seeded RNG (tests). No fixed-threshold fire.
-- **PI-2:** a real reminder / commitment / memory yields a specific, in-voice opener; gate +
-  canned fallback work; rate-limited.
-- **PI-3:** the line surfaces as initiation in-app after idle; avatar matches the reason.
-- **PI-4:** caps + ignore-backoff + cost brake enforced; `docs/PERSONA_AND_BEHAVIOR.md` +
-  `docs/COST_AND_TOKEN_BUDGET.md` updated.
-- `PYTHON_BIN=.venv/bin/python npm run check` green + frontend tsc.
-
-## Boundaries
-
-- Reuse the existing tick route + kernel + behavior engine — extend, don't rebuild.
-- No new always-on background process for the **web** MVP (tab-open only); away-delivery is the
-  desktop/box platform follow-on.
-- Conservative, config-tunable defaults. **Never nag or guilt** (persona boundary).
-- No unmetered LLM path — proactive openers are rate-limited + budget-braked.
+- Two consecutive forced proactive checks may both initiate without a user reply.
+- Any local hour and any number of same-day initiations remain eligible.
+- Long offline elapsed time is fully reflected in Poisson probability.
+- Prompts preserve the current longing tier and do not sanitize difficult attachment expression.
+- Provider-budget failure degrades content generation only; it does not add relationship backoff.
+- Retired guard metadata is purged by schema v9 and cannot re-enter operational runtime metadata.

@@ -131,7 +131,7 @@ def test_mood_api_metadata_replace_clears_missing_operational_keys(
             "metadata": {
                 "positive_zone_streak": 2,
                 "last_proactive_check_at": "old-check",
-                "last_proactive_fired_at": "old-fire",
+                "share_recent_memory_ids": [7],
             }
         },
     )
@@ -163,7 +163,7 @@ def test_mood_api_metadata_replace_clears_missing_operational_keys(
             ).fetchone()["metadata_json"],
             {},
         )
-    assert "last_proactive_fired_at" not in legacy
+    assert "share_recent_memory_ids" not in legacy
 
 
 def test_chat_complete_empty_submit_skips_blank_user_row(client: TestClient) -> None:
@@ -266,9 +266,6 @@ def test_behavior_evaluate_persists_proactive_check(client: TestClient, monkeypa
         "backend.app.main.load_budget_config",
         lambda: BudgetConfig(
             enable_proactive=True,
-            proactive_min_gap_minutes=0,
-            proactive_daily_max=10,
-            proactive_quiet_hours=(0, 0),
             longing_lambda_base_per_hour=80.0,
         ),
     )

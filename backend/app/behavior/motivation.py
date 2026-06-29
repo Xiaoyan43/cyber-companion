@@ -17,7 +17,7 @@ from backend.app.memory.budget import BudgetConfig
 if TYPE_CHECKING:
     from backend.app.memory.store import MemoryStore
 
-ProactiveReasonMode = Literal["agenda", "longing_only"]
+ProactiveReasonMode = Literal["agenda", "relationship"]
 
 
 @dataclass(frozen=True)
@@ -39,15 +39,15 @@ def resolve_proactive_motivation(
 ) -> ProactiveMotivation:
     """Resolve proactive *why* from agenda/motivation policy.
 
-    - ``agenda`` (default): due/overdue open loops and other substantive reasons;
+    - ``agenda``: due/overdue open loops and other substantive reasons;
       longing alone does not produce a reason.
-    - ``longing_only`` (rollback): legacy path — always yields a reason via check-in
-      fallback when no agenda item exists.
+    - ``relationship`` (default): always yields a reason via relationship/longing
+      check-in fallback when no agenda item exists.
     - ``force_proactive``: dev/smoke escape hatch — uses check-in when agenda is empty.
     """
     mode = budget.proactive_reason_mode
 
-    if mode == "longing_only":
+    if mode == "relationship":
         reason = pick_proactive_reason(
             store,
             longing_intensity=longing.intensity,

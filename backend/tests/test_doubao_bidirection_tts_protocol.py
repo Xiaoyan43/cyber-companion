@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import struct
 
-import pytest
 
 from backend.realtime.doubao_bidirection_tts_protocol import (
     EVENT_CONNECTION_STARTED,
@@ -18,7 +17,6 @@ from backend.realtime.doubao_bidirection_tts_protocol import (
     EVENT_START_SESSION,
     EVENT_TASK_REQUEST,
     EVENT_TTS_RESPONSE,
-    DoubaoTTSFrame,
     build_connection_frame,
     build_finish_session,
     build_start_session,

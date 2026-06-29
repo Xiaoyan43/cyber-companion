@@ -19,7 +19,7 @@ from backend.app.memory.context_builder import (
     _relative_time,
     build_provider_context,
 )
-from backend.app.memory.database import ExistentialStateRecord, MoodStateRecord
+from backend.app.memory.database import ExistentialStateRecord
 from backend.app.memory.holidays import get_holiday_window
 from backend.app.memory.persona import OUTPUT_PROTOCOL, load_persona_system_prompt
 from backend.app.memory.retrieval import rank_memories, score_memory

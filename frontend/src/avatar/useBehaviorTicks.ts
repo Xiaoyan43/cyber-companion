@@ -3,7 +3,6 @@ import { evaluateBehavior, type BehaviorDecision } from "../api/behavior";
 
 const IDLE_TICK_MS = 90_000;
 const PROACTIVE_CHECK_MS = 300_000;
-const USER_QUIET_MS = 120_000;
 
 type UseBehaviorTicksOptions = {
   enabled: boolean;
@@ -18,7 +17,6 @@ export function useBehaviorTicks({
   onDecision,
   onError,
 }: UseBehaviorTicksOptions) {
-  const lastUserActivityRef = useRef(Date.now());
   const onDecisionRef = useRef(onDecision);
   const onErrorRef = useRef(onError);
 
@@ -60,10 +58,6 @@ export function useBehaviorTicks({
         return;
       }
 
-      if (Date.now() - lastUserActivityRef.current < USER_QUIET_MS) {
-        return;
-      }
-
       try {
         const decision = await evaluateBehavior("proactive_check");
         if (!cancelled) {
@@ -92,9 +86,4 @@ export function useBehaviorTicks({
     };
   }, [enabled, paused]);
 
-  const markUserActivity = () => {
-    lastUserActivityRef.current = Date.now();
-  };
-
-  return { markUserActivity };
 }

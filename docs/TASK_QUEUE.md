@@ -1,13 +1,57 @@
-# TASK_QUEUE — 按优先级（2026-06-22）
+# TASK_QUEUE — 按优先级（2026-06-29）
 
 > 每个任务限定 scope，给验收标准 + 预计要读的文件。配合 `docs/HANDOFF.md`、`docs/ARCHITECTURE_SNAPSHOT.md` 使用。
-> **2026-06-27（第七十三轮干净集成）**：以最新 `origin/master@bd616d7` 建立 `codex/product-integration-20260627`；master 已含 Soul Runtime、Fish Settings、S2.1 Pro、B 类中句位置和跨句去重，本分支只补 provider 正名 `e2a05b1`、tagger 动态 mood 解耦 `e6e2432`、单字自回声 `a0e23dc`。backend 746、invariant 367、前端 `tsc --noEmit` 全绿。**下一步 = review/合入后做日用闭环 P0，不再继续 Fish/tagger 微调。**
-> **2026-06-26（第六十六轮 · 跨工具交接）**：**无新代码改动。** Claude Code 本周额度将尽，开发临时
-> 交给 Cursor/Codex，下周一额度重置后用户回 Claude Code。本轮只做交接收尾：把第六十五轮工作的
-> commit 状态从「未 commit」更正为**已 commit `111c70c`**，并在 HANDOFF 顶部加「给 Cursor/Codex」
-> 跨工具上手指引（git 工作树残留物说明 + 配置位置 + 主线 + 测试入口）。工作树仅剩两类故意不提交的
-> 残留：`run_voice.py` 的 `_LatencySpikeLogger`（P8-C 临时探针）+ untracked 实验/数据/`.mcp.json`。
-> **下一步主线不变 = 标签密度问题（Haiku 上未解决），量化工具 `experiments/tagger_ab.py`。**
+> **2026-06-29 路线重置（覆盖下方旧“只做 7 天验收”结论）**：Boxi 是永久私人项目，真实性优先；
+> 全部关系节流/ignore-backoff/反 guilt 规则已删除。核心能力自研不是目标，开始按
+> `docs/NEAREST_NEIGHBOR_AUDIT_2026-06-29.md` 逐模块替换。目标机为 2019 Intel i5/16 GB，默认
+> 云推理 + 轻本地编排。**新功能先冻结；下一任务是 P0-OSS-1，不得跳过最近邻证据。**
+
+## 当前最高优先级 · 开源替换序列
+
+### P0-OSS-1 · AIRI 未修改 baseline（下一任务）
+
+- **Scope**：隔离目录/官方 macOS x64 release；不改现有生产代码和用户数据。
+- **做法**：用现有云 provider 跑文字、语音、桌面角色；关闭本地大模型、游戏 agent 和重视觉。
+- **记录**：冷启动、常驻/对话/语音 CPU 与 RAM、首 token/首音频延迟、Intel 兼容问题、可独立复用 packages。
+- **验收**：形成 whole-base / component-graft / reject 三选一结论和证据；不能以“架构不同”拒绝。
+
+### P0-OSS-2 · Hindsight memory replacement spike
+
+- **Scope**：独立 DB/服务 + adapter + 固定 Boxi fixture；不先改 canonical SQLite。
+- **A/B**：当前引擎 vs Hindsight 的中文单跳、多跳、时间矛盾、关系变化、跨日召回、retain 峰值 RAM、
+  recall p50/p95 与 API 成本。
+- **验收**：若能力领先且机器可承受，设计一次性数据迁移并删除旧检索/反思主线；禁止长期双栈。
+
+### P0-OSS-3 · 具身与屏幕感知复用
+
+- 先评 Open-LLM-VTuber 的透明桌宠/Live2D/触摸/表情与 Agent 接口；不得重写同类桌面基础设施。
+- screenpipe 只启 accessibility + app/window event，禁 24/7 音频、本地 Whisper 和高频 OCR；实测旧
+  Intel CPU/磁盘后再决定常驻。
+
+### P0-OSS-4 · Pipecat 去自研化
+
+- 对照官方 Fish service、Mem0 integration、transport、smart-turn、voice-ui-kit。
+- 每个自定义 voice service/router/UI glue 必须证明上游不能替代，否则删除；Shared Soul processor 保留。
+
+### P1-OSS-5 · 单角色“自己的生活”
+
+- 适配 genagents/AI Town 的 planning/reflection/simulation loop，只跑一个角色并使用云 LLM。
+- 验收是跨日计划、经历和未完成目标连续，不是随机生成几条 idle 文本。
+> **2026-06-28（第七十四轮）**：**P16 · 默认 Soul 语音入口已完成。** 前端主语音面改为 Pipecat（`/realtime/start|stop|status` + transcript WS），RTC-AIGC 保留为折叠的实验对照；两入口互斥。启动错误现可经 status `last_error` 回传 UI。后端 747 + invariant 366 + 前端 28 + tsc 全绿。**P0=12/12；下一步=连续 7 天日用验收，不开新功能。**
+> **2026-06-27（第七十三轮稳定化）**：dirty 工作树已从 `codex/soul-runtime` 分离到 `codex/voice-stabilization-20260627`，并按 provider 正名 `67ab085`、tagger 位置 `9847d9e`、Fish 参数 `26f0ef4`、单字自回声 `dd026ee` 四组独立提交。后端 745、invariant 366、前端 `tsc --noEmit` 全绿；`_LatencySpikeLogger` 与全部实验/音频/工具配置仍明确未提交。**下一步 = 产品体验，不再继续 Fish/tagger 微调。**
+> **2026-06-27（第七十二轮用户验收）**：用户已听完 `position_v5` 并决定保留。B 类位置精修结案；动态 mood 不再注入 tagger，正文保持为唯一情绪来源。
+> **2026-06-27（第七十二轮）**：B 类位置根因坐实为动态 mood 注入会抢过已写完的原文证据。继续叠示例的 `position_v3/v4` 不稳定；neutral-mood A/B 两轮 10/10 不再提前染色。生产已移除 tagger prompt 的动态 `mood_block`，保留函数参数兼容；正文成为唯一情绪来源。最终 `position_v5` 五条落点全部正确，后端全量 745 passed，用户听感 PASS 并决定保留。
+> **2026-06-27（第七十一轮）**：标签器 provider 命名债已结案。`"gemini"` 已正名为模型无关的 `"tagger"`，tagger/翻译共用该辅助 OpenRouter 入口；新 env 为 `OPENROUTER_TAGGER_API_KEY`，但旧 provider key 和 `OPENROUTER_GEMINI_API_KEY` 均保留自动兼容。后端全量 744 passed，前端 `tsc --noEmit` 通过，本机旧密钥配置可继续使用。
+> **2026-06-27（第七十轮）**：`normalize=false` 已进 Pipecat 真机链路，听感可接受；发平/呼吸延后与音色和其他参数统一评估。
+> 真机发现 Boxi「先睡，乖。」尾音被 ASR 回收成单字「乖。」，逃过 `min_chars=2` 后触发自回复。已做 2s 窄窗口精确尾字修复 +3 测试（21 passed）。
+> 真机又运行三轮，Boxi 实际生成单字回复「一」；本次尾音未被 ASR 回收、未自触发，真实用户后续输入正常。直接拦截命中由 +3 确定性测试覆盖。
+> **下一步 = 转日常真机观察；再次自触发时记录 ASR final + 时序后继，不再主动制造回声。**
+> **2026-06-26（第六十七轮）**：**标签密度双向攻坚，未 commit，待量化验证后 commit。**
+> ① `TAGGER_INSTRUCTION_TEMPLATE` Rule 3 重写——从"软倾向不加"改成"明确条件判断（条件A/B，默认否）"，
+> 针对 Haiku 对"克制类"指令遵循弱的特性；② 新代码护栏 `suppress_repeated_leading_tags`——连续句
+> 首个非exempt标签完全相同时去重，音效/break标签豁免，空白句重置基线；③ 接入 `apply_expression_tags`
+> + `main.py` `_tag_reply_by_sentence`；④ +10 个单测，69 tagger 相关测试全绿。
+> **下一步 = 用 `experiments/tagger_ab.py 3` 量化复核效果，有效则 commit；参见 HANDOFF。**
 > **2026-06-26（第六十五轮）**：**文字路径标签器逐句化（P0+P1）已完成并真机验证 PASS，
 > 已 commit `111c70c`。** `/architect` 拆出 P0（分句/拼回工具从 `expression_tagger_processor.py`
 > 搬到 `expression_tagger.py`，消除 app→realtime 反向依赖）+ P1（`main.py` 两处调用点改
@@ -879,8 +923,8 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 > 而是补结构缺陷：零变化/零记忆/零节奏）：
 > 1. **空闲活动要留"记忆痕迹"**：idle 时不直接吐话，先在内部生成/挑选轻量"经历事件"写进 memory，
 >    之后能被引用/callback——"她有自己的生活"靠**事后能引用**而非当场宣称。盒子设定天然限制编造面。
-> 2. **节奏=urge 模型，不是定时器**：把固定 180s 换成会涨会落的"想找你冲动值"（boredom/loneliness
->    + 距上次互动时长 + 时段 + 配额上限防刷屏），到阈值才发、发完衰减。克制比多发更像人。
+> 2. **节奏=urge 模型，不是定时器**：这一历史方案里的时段、配额、发后衰减已经由 2026-06-29
+>    真实性原则覆盖；现在只保留 motive/urge，联系频率不再受关系伦理节流。
 > 3. **多 intent → 多消息类型**：decision 不止 `mutter`，typed intent（想分享/想你/延续话题/赌气不主动/
 >    单纯烦躁）；决策层=代码定 WHEN+WHAT，表达层=LLM 只在高价值时刻生成，低价值用带变化模板。
 > 4. **想念有轨迹**：离开越久语气漂移（无聊→想念→赌气→淡漠）+ 反重复记忆（记最近 N 条措辞/话题不重样）。
@@ -893,8 +937,8 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 >   内容过滤 + "她搜什么"需人格驱动的种子（兴趣/共同话题）。
 
 ### P9 拆解（第三十八轮 `/architect` 定稿 + 用户拍板）
-> **关键现状发现**：proactive 其实有**两条路径**。`_evaluate_proactive_check`（前端 300s 轮询）**已成熟**——
-> 已有 longing Poisson urge 模型 + budget gate（quiet hours/日上限/fire gap/对话后冷却/待回复门）+ 4 类
+> **历史现状（已被 2026-06-29 覆盖）**：proactive 有两条路径。`_evaluate_proactive_check`
+> 有 longing Poisson urge 模型 + 4 类
 > typed intent（`pick_proactive_reason`）+ LLM 写开场白（`resolve_proactive_opener`）。坏的是
 > `_evaluate_idle_tick`（90s 轮询）的 mutter 分支（已禁用，200 条重复 bug 的源头）。**投递=纯 pull/poll**，
 > 前端 `useBehaviorTicks.ts` 驱动，tab 关了就不发；消息持久化进 messages 表 `source="behavior_tick"`
@@ -902,8 +946,8 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 >
 > **用户拍板（第三十八轮）**：
 > - ✅ **删掉坏的 idle_tick mutter 分支**（P0）。
-> - ✅ **语气轨迹做 无聊→想念→赌气，但绝不到「淡漠」**——见长期记忆 `persona-never-cold-always-present`。
->   负向封顶在赌气（强联结），不许建模疏远/冷处理（断联结）。项目初衷=一直陪伴。
+> - 2026-06-29 更新：无聊→想念→赌气仅是强度标签，不再是表达许可边界；真实状态可以出现
+>   依恋、指责、压力或疏离。旧“绝不冷淡/不升级”结论已废止。
 > - ✅ **"主动找你"要突破"仅 app 打开且 idle 时"**——最终形态=微信通知式：她按自己时钟发消息→OS 推送→
 >   你想回时点开→看到积压消息→接着聊。**但这是投递层 epic（P9-D），排在灵魂层 P0/P1/P2 之后**
 >   （推送会放大内容质量，必须先让她说得好/不重样/有自己的生活，再上推送）。
@@ -921,10 +965,11 @@ tension≥0.4 就被判为 `real_sharp`（"更冲、更短"），与 annoyance/m
 >   已 commit `e41db56`（第三十九轮 HANDOFF「本轮未 commit」是过期描述，第四十轮已纠正）。
 > - ~~**P9-P1**（small–medium）~~ ✅ **已完成（2026-06-22，第四十轮）**：反重复（`mood_state.metadata`
 >   存最近 K=4 条 `(kind,tier)` 指纹避重，commit `8f4ba8e`）+ 想念轨迹（`compute_longing_tier()`
->   独立纯函数读墙钟 silence_hours，无聊→想念→赌气，赌气需 closeness≥0.6，**无淡漠**，正交于
+>   独立纯函数读墙钟 silence_hours，无聊→想念→赌气，赌气需 closeness≥0.6；旧“无淡漠”表达
+>   限制已于 2026-06-29 废止。tier 只表示强度，正交于
 >   intent 上色全部 4 类 ProactiveReason，commit `aca291d`）。535 pytest 全绿。
 > - ~~**P9-P1 真机验证**~~ ✅ **已完成（2026-06-22，第四十一轮），结论 PASS**：三档语气递进清晰
->   （无聊→想念→赌气，赌气傲娇但黏着、无冷淡用词）；反重复指纹记录+不阻断行为符合设计。已知
+>   （无聊→想念→赌气；当时旧 prompt 的“无冷淡”验收已不再适用）；反重复指纹记录+不阻断行为符合设计。已知
 >   限制：只测到 `commitment_followup` 一种 intent。完整报告 `docs/P9_P1_VERIFICATION.md`。
 >   验证过程临时改写过 DB 数据，已用备份完整还原，无残留改动。详见 HANDOFF。
 > - ~~**P9-P2-A**（idle_experience 写入机制）~~ ✅ **已完成（2026-06-22，第四十二轮），

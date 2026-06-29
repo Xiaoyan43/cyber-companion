@@ -20,7 +20,6 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from backend.app.behavior.parser import SIGNALS_SENTINEL
 from backend.app.memory.store import get_memory_store
 from backend.realtime.companion_brain import CompanionBrain, VoiceTurnOutcome
 from backend.realtime.voice_config import load_voice_max_tokens

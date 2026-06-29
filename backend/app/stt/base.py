@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from abc import ABC, abstractmethod
 
 from backend.app.stt.types import STTProviderStatus, TranscriptionRequest, TranscriptionResult

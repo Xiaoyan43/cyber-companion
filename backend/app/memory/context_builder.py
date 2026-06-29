@@ -13,12 +13,11 @@ from backend.app.memory.database import (
     ConversationSummaryRecord,
     ExistentialStateRecord,
     MemoryRecord,
-    MessageRecord,
     MoodStateRecord,
     RelationshipStateRecord,
 )
 from backend.app.memory.persona import OUTPUT_PROTOCOL, load_persona, load_persona_system_prompt
-from backend.app.memory.retrieval import is_expired, rank_memories, tokenize
+from backend.app.memory.retrieval import is_expired, rank_memories
 from backend.app.memory.store import MemoryStore
 from backend.app.providers.cost import estimate_token_count
 from backend.app.providers.types import ChatMessage

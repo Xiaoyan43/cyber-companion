@@ -1,6 +1,5 @@
 import asyncio
 
-import pytest
 
 from backend.app.behavior.parser import SIGNALS_SENTINEL
 from backend.app.memory.store import get_memory_store, reset_memory_store

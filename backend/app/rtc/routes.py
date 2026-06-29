@@ -34,7 +34,7 @@ from backend.app.rtc.viking_memory import (
     merge_subtitle_turns,
     search_user_memories,
 )
-from backend.app.rtc.voice_chat import OUTPUT_MODE_HYBRID, OUTPUT_MODE_PURE, mode_meta
+from backend.app.rtc.voice_chat import mode_meta
 from backend.app.reflection.turn_analyzer import analyze_turn
 from backend.app.schemas import (
     RtcAgentStartRequest,

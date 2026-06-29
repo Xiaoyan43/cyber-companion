@@ -6,15 +6,13 @@ from datetime import datetime
 from backend.app.behavior.local_responses import local_response_for_decision
 from backend.app.behavior.longing import (
     check_proactive_availability,
-    clear_proactive_pending,
     compute_longing_tier,
     mark_proactive_check,
-    mark_proactive_fired,
     should_fire_longing,
     snapshot_longing,
 )
 from backend.app.behavior.motivation import resolve_proactive_motivation
-from backend.app.behavior.proactive_reason import LongingTier, fallback_line_for_reason
+from backend.app.behavior.proactive_reason import fallback_line_for_reason
 from backend.app.behavior.mood import (
     apply_idle_tick_mood_delta,
     apply_user_message_mood_delta,
@@ -26,7 +24,6 @@ from backend.app.behavior.tone import (
     next_positive_streak,
     project_tone,
 )
-from backend.app.behavior.tick_policy import mark_local_line_spoken, recently_spoke_locally
 from backend.app.behavior.rules import (
     is_empty_input,
     is_low_value_input,
@@ -75,10 +72,6 @@ def evaluate_behavior(
 def _evaluate_user_message(store: MemoryStore, user_input: str) -> BehaviorDecision:
     mood = store.get_mood_state()
     relationship = store.get_relationship_state()
-    cleared_metadata = clear_proactive_pending(mood.metadata)
-    if cleared_metadata is not mood.metadata:
-        store.patch_behavior_runtime_metadata(remove=("proactive_pending_since",))
-        mood = store.get_mood_state()
     empty = is_empty_input(user_input)
     low_value = is_low_value_input(user_input)
     rambling = is_rambling(user_input)
@@ -209,22 +202,7 @@ def _evaluate_proactive_check(
     mood = store.get_mood_state()
     relationship = store.get_relationship_state()
 
-    if not force_proactive and recently_spoke_locally(mood):
-        return BehaviorDecision(
-            decision="observe",
-            avatar_state="idle",
-            should_call_llm=False,
-            reason="local_line_cooldown",
-        )
-
-    gate = check_proactive_availability(
-        budget=config,
-        mood=mood,
-        relationship=relationship,
-        last_user_message_at=store.get_last_user_chat_created_at(),
-        now=now,
-        skip_timing_gates=force_proactive,
-    )
+    gate = check_proactive_availability(budget=config)
     if gate.blocked:
         return BehaviorDecision(
             decision="observe",
@@ -280,22 +258,6 @@ def _evaluate_proactive_check(
             reason="longing_poisson_miss",
         )
 
-    fired_metadata = mark_proactive_fired(check_metadata, now=aware_now)
-    fired_metadata = mark_local_line_spoken(fired_metadata)
-    store.patch_behavior_runtime_metadata(
-        updates={
-            key: fired_metadata[key]
-            for key in (
-                "last_proactive_check_at",
-                "last_proactive_fired_at",
-                "proactive_pending_since",
-                "proactive_daily_date",
-                "proactive_daily_count",
-                "last_local_line_at",
-            )
-        }
-    )
-
     proactive_reason = motivation.reason
     return BehaviorDecision(
         decision="proactive",
@@ -318,14 +280,6 @@ def _evaluate_idle_tick(store: MemoryStore) -> BehaviorDecision:
         boredom=updated_mood.boredom,
         loneliness=updated_mood.loneliness,
     )
-
-    if recently_spoke_locally(updated_mood):
-        return BehaviorDecision(
-            decision="observe",
-            avatar_state=updated_mood.mood if updated_mood.mood in {"sleepy", "annoyed"} else "idle",
-            should_call_llm=False,
-            reason="local_line_cooldown",
-        )
 
     if updated_mood.boredom >= 0.4 or updated_mood.energy <= 0.35:
         return BehaviorDecision(
