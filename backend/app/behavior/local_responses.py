@@ -1,4 +1,4 @@
-from backend.app.behavior.types import BehaviorDecision, ToneMode
+from backend.app.behavior.types import ToneMode
 
 
 def local_response_for_decision(

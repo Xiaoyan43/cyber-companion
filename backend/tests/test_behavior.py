@@ -79,9 +79,6 @@ def test_stale_job_progress_triggers_proactive(store: MemoryStore) -> None:
 def _hot_proactive_budget() -> BudgetConfig:
     return BudgetConfig(
         enable_proactive=True,
-        proactive_min_gap_minutes=0,
-        proactive_daily_max=10,
-        proactive_quiet_hours=(0, 0),
         longing_lambda_base_per_hour=80.0,
     )
 
@@ -94,7 +91,7 @@ def test_proactive_check_returns_observe_without_agenda_reason(store: MemoryStor
         BehaviorEvent(event_type="proactive_check"),
         budget=BudgetConfig(
             longing_lambda_base_per_hour=80.0,
-            proactive_quiet_hours=(0, 0),
+            proactive_reason_mode="agenda",
         ),
         rng=__import__("random").Random(0),
         now=datetime(2026, 6, 13, 12, 0, tzinfo=timezone.utc),
@@ -150,7 +147,7 @@ def test_idle_tick_observe_when_calm(store: MemoryStore) -> None:
     assert decision.reason == "idle_tick"
 
 
-def test_proactive_check_respects_local_line_cooldown(store: MemoryStore) -> None:
+def test_repeated_proactive_checks_are_not_relationship_throttled(store: MemoryStore) -> None:
     from datetime import datetime, timedelta, timezone
 
     now = datetime(2026, 6, 13, 12, 0, tzinfo=timezone.utc)
@@ -171,7 +168,7 @@ def test_proactive_check_respects_local_line_cooldown(store: MemoryStore) -> Non
 
     first = evaluate_behavior(
         store,
-        BehaviorEvent(event_type="proactive_check"),
+        BehaviorEvent(event_type="proactive_check", metadata={"force_proactive": True}),
         budget=_hot_proactive_budget(),
         now=now,
     )
@@ -179,12 +176,11 @@ def test_proactive_check_respects_local_line_cooldown(store: MemoryStore) -> Non
 
     second = evaluate_behavior(
         store,
-        BehaviorEvent(event_type="proactive_check"),
+        BehaviorEvent(event_type="proactive_check", metadata={"force_proactive": True}),
         budget=_hot_proactive_budget(),
         now=now + timedelta(seconds=5),
     )
-    assert second.decision == "observe"
-    assert second.reason == "local_line_cooldown"
+    assert second.decision == "proactive"
 
 
 def test_overwhelmed_input_uses_comfort_tone(store: MemoryStore) -> None:

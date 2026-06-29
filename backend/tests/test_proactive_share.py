@@ -104,13 +104,14 @@ def test_resolve_proactive_opener_records_share_fingerprint_on_success(store: Me
         memory_id=memory.id,
     )
     router = ProviderRouter.from_config()
-    budget = BudgetConfig(proactive_llm=True, proactive_llm_daily_max=5)
+    budget = BudgetConfig(proactive_llm=True)
 
     resolved = resolve_proactive_opener(
         store,
         _decision(reason),
         budget=budget,
         router=router,
+        provider_name="mock",
         now=_now(),
     )
     assert resolved.proactive_llm_used is True

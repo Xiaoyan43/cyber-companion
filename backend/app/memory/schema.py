@@ -1,8 +1,7 @@
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
-OPERATIONAL_MOOD_METADATA_KEYS = frozenset(
+RETIRED_RELATIONSHIP_GUARD_METADATA_KEYS = frozenset(
     {
-        "last_proactive_check_at",
         "last_proactive_fired_at",
         "proactive_pending_since",
         "proactive_daily_date",
@@ -10,6 +9,12 @@ OPERATIONAL_MOOD_METADATA_KEYS = frozenset(
         "last_local_line_at",
         "proactive_llm_daily_date",
         "proactive_llm_daily_count",
+    }
+)
+
+OPERATIONAL_MOOD_METADATA_KEYS = frozenset(
+    {
+        "last_proactive_check_at",
         "idle_experience_last_at",
         "idle_experience_daily_date",
         "idle_experience_daily_count",

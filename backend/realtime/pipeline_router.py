@@ -2,7 +2,7 @@
 
 POST /realtime/start      — launch pipeline (LocalAudioTransport, mic+speaker)
 POST /realtime/stop       — cancel the running pipeline
-GET  /realtime/status     — {"status": "running"|"stopped"}
+GET  /realtime/status     — status plus the most recent startup error, if any
 WS   /realtime/transcript — push {"role": "user"|"boxi", "text": str, "ts": float} per finalized turn
 
 One pipeline per server process; starting again while running is a no-op.
@@ -18,13 +18,15 @@ from loguru import logger
 router = APIRouter()
 
 _pipeline_task: asyncio.Task | None = None
+_pipeline_last_error: str | None = None
 
 
 @router.post("/realtime/start")
 async def start_pipeline() -> dict:
-    global _pipeline_task
+    global _pipeline_last_error, _pipeline_task
     if _pipeline_task and not _pipeline_task.done():
         return {"status": "already_running"}
+    _pipeline_last_error = None
     _pipeline_task = asyncio.create_task(_run_pipeline())
     logger.info("[P7] Pipecat pipeline task created")
     return {"status": "started"}
@@ -43,7 +45,10 @@ async def stop_pipeline() -> dict:
 @router.get("/realtime/status")
 async def pipeline_status() -> dict:
     running = _pipeline_task is not None and not _pipeline_task.done()
-    return {"status": "running" if running else "stopped"}
+    return {
+        "status": "running" if running else "stopped",
+        "last_error": _pipeline_last_error,
+    }
 
 
 @router.websocket("/realtime/transcript")
@@ -64,6 +69,8 @@ async def transcript_ws(websocket: WebSocket) -> None:
 
 
 async def _run_pipeline() -> None:
+    global _pipeline_last_error
+
     from backend.realtime.run_voice import _main_pipeline
 
     try:
@@ -71,4 +78,5 @@ async def _run_pipeline() -> None:
     except asyncio.CancelledError:
         logger.info("[P7] Pipecat pipeline stopped by user")
     except Exception as exc:
+        _pipeline_last_error = str(exc)
         logger.exception(f"[P7] Pipecat pipeline error: {exc}")

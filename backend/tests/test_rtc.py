@@ -12,7 +12,6 @@ from fastapi.testclient import TestClient
 
 from backend.app.rtc.config import RtcConfig, mode_ready, resolve_rtc_user_id
 from backend.app.rtc.routes import router as rtc_router
-from backend.app.rtc.signer import sign_rtc_openapi_request
 from backend.app.rtc.token import AccessToken, mint_rtc_token
 from backend.app.memory.persona import (
     load_rtc_character_manifest,
@@ -22,7 +21,6 @@ from backend.app.memory.persona import (
 from backend.app.rtc.client import update_voice_chat
 from backend.app.rtc.voice_chat import (
     build_memory_config,
-    build_stop_voice_chat_body,
     build_update_voice_chat_body,
     build_voice_chat_body,
 )

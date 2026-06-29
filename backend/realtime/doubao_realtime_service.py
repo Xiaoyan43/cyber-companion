@@ -10,7 +10,6 @@ Auth: ``DOUBAO_RT_APP_ID`` + ``DOUBAO_RT_ACCESS_TOKEN`` (env only).
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import struct
 import time

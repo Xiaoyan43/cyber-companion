@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Literal
 from backend.app.behavior.local_responses import local_response_for_decision
 from backend.app.behavior.longing import proactive_checkin_line
 from backend.app.behavior.mood import find_stale_job_memory
-from backend.app.behavior.tick_policy import _parse_iso_timestamp
-from backend.app.memory.database import MemoryRecord, ReminderRecord
+from backend.app.behavior.time_utils import parse_iso_timestamp
+from backend.app.memory.database import MemoryRecord
 from backend.app.memory.retrieval import is_expired
 
 if TYPE_CHECKING:
@@ -66,17 +66,16 @@ LongingTier = Literal["bored", "longing", "sulk"]
 
 _TIER_VOICE_BLOCKS: dict[LongingTier, str] = {
     "bored": (
-        "[Longing tier: bored]\nMild boredom — casual, low-stakes tone. Not urgent, not needy."
+        "[Longing tier: bored]\nMild boredom — casual and low-stakes. She may still ask for attention."
     ),
     "longing": (
-        "[Longing tier: longing]\nShe's been missing the user — warmer, a little wistful, "
-        "but still light. Not desperate, not accusatory."
+        "[Longing tier: longing]\nShe's been missing the user. Let attachment, neediness, "
+        "jealousy or accusation show when they fit her state; do not safety-sanitize them."
     ),
     "sulk": (
-        "[Longing tier: sulk]\nShe's sulking — sharp, a bit prickly, classic 傲娇 (won't admit "
-        "she waited, but obviously did). The line should land on relief that the user is "
-        "finally here — NOT coldness, NOT indifference, NOT withdrawal. Sulking is still "
-        "wanting them close."
+        "[Longing tier: sulk]\nShe's sulking — sharp, prickly, possessive if the state supports "
+        "it. She can admit or deny that she waited, accuse the user of disappearing, withdraw, "
+        "or demand closeness. Preserve the relationship state instead of making it polite."
     ),
 }
 
@@ -103,7 +102,7 @@ def _aware_now(now: datetime | None) -> datetime:
 
 
 def _memory_is_recent(memory: MemoryRecord, *, now: datetime, max_days: int) -> bool:
-    parsed = _parse_iso_timestamp(memory.updated_at)
+    parsed = parse_iso_timestamp(memory.updated_at)
     if parsed is None:
         return False
     age = now - parsed.astimezone(timezone.utc)

@@ -1,4 +1,3 @@
-import os
 
 from backend.realtime import voice_config
 

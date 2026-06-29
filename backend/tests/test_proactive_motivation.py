@@ -27,10 +27,6 @@ def _now() -> datetime:
 def _hot_budget(**overrides: object) -> BudgetConfig:
     base = {
         "enable_proactive": True,
-        "proactive_min_gap_minutes": 0,
-        "proactive_min_fire_gap_hours": 0.0,
-        "proactive_daily_max": 10,
-        "proactive_quiet_hours": (0, 0),
         "longing_silence_hours_scale": 24.0,
         "longing_closeness_weight": 0.6,
         "longing_loneliness_weight": 0.4,
@@ -66,7 +62,7 @@ def _longing_snapshot(store: MemoryStore, budget: BudgetConfig, now: datetime):
     )
 
 
-def test_agenda_mode_blocks_longing_only_check_in(store: MemoryStore) -> None:
+def test_agenda_mode_blocks_relationship_only_check_in(store: MemoryStore) -> None:
     now = _now()
     _prime_longing(store, now)
     budget = _hot_budget()
@@ -136,10 +132,10 @@ def test_agenda_mode_poisson_miss_with_due_loop(store: MemoryStore) -> None:
     assert decision.reason == "longing_poisson_miss"
 
 
-def test_longing_only_mode_restores_check_in_fallback(store: MemoryStore) -> None:
+def test_relationship_mode_restores_check_in_fallback(store: MemoryStore) -> None:
     now = _now()
     _prime_longing(store, now)
-    budget = _hot_budget(proactive_reason_mode="longing_only")
+    budget = _hot_budget(proactive_reason_mode="relationship")
 
     motivation = resolve_proactive_motivation(
         store,

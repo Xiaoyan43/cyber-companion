@@ -27,10 +27,8 @@ from pipecat.utils.tracing.service_decorators import traced_tts
 from backend.app.tts.doubao import resolve_resource_id
 from backend.app.tts.text_cleanup import clean_text_for_tts
 from backend.realtime.doubao_bidirection_tts_protocol import (
-    EVENT_CONNECTION_STARTED,
     EVENT_FINISH_CONNECTION,
     EVENT_SESSION_FAILED,
-    EVENT_SESSION_STARTED,
     EVENT_START_CONNECTION,
     EVENT_TTS_RESPONSE,
     build_connection_frame,

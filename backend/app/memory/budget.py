@@ -29,30 +29,26 @@ class BudgetConfig:
     monthly_usd_limit: float = 10.0
     daily_llm_turn_limit: int = 200
     allow_reasoning_model: bool = False
-    # Proactive initiation (PI-1 longing model). Defaults are conservative / quiet.
-    # ``agenda``: substantive open-loop/reminder/memory reasons only (Phase 6 default).
-    # ``longing_only``: rollback — longing check-in may fire without agenda item.
-    proactive_reason_mode: Literal["agenda", "longing_only"] = "agenda"
+    # Proactive initiation (PI-1 longing model). Relationship-expression throttles
+    # are intentionally absent: this private companion prioritizes continuity and
+    # authenticity over engagement-safety policy.
+    # ``relationship``: substantive reasons first, then a relationship/longing check-in.
+    # ``agenda``: substantive open-loop/reminder/memory reasons only.
+    proactive_reason_mode: Literal["agenda", "relationship"] = "relationship"
     enable_proactive: bool = True
-    proactive_quiet_hours: tuple[int, ...] = (23, 8)
-    proactive_min_gap_minutes: int = 30
-    proactive_min_fire_gap_hours: float = 6.0
-    proactive_daily_max: int = 2
     longing_silence_hours_scale: float = 48.0
     longing_closeness_weight: float = 0.55
     longing_loneliness_weight: float = 0.45
     longing_lambda_base_per_hour: float = 0.004
     longing_lambda_longing_gain: float = 2.5
-    # Longing trajectory tiers (bored -> longing -> sulk; never "cold").
+    # Longing intensity labels (bored -> longing -> sulk); prompts decide expression.
     longing_tier_bored_hours: float = 24.0
     longing_tier_longing_hours: float = 48.0
     longing_tier_sulk_hours: float = 72.0
     longing_tier_sulk_closeness_min: float = 0.6
     proactive_fingerprint_history_size: int = 4
-    proactive_max_delta_seconds: int = 600
     proactive_llm: bool = True
     proactive_max_output_tokens: int = 80
-    proactive_llm_daily_max: int = 5
     # Idle experience writes (P9-P2-A): low-frequency, no message sent, just memory.
     idle_experience_enabled: bool = True
     idle_experience_min_gap_hours: float = 6.0
@@ -102,10 +98,6 @@ def load_budget_config(config_dir: Path | None = None) -> BudgetConfig:
         allow_reasoning_model=bool(payload.get("allow_reasoning_model", False)),
         proactive_reason_mode=_parse_proactive_reason_mode(payload.get("proactive_reason_mode")),
         enable_proactive=bool(payload.get("enable_proactive", True)),
-        proactive_quiet_hours=_parse_quiet_hours(payload.get("proactive_quiet_hours")),
-        proactive_min_gap_minutes=int(payload.get("proactive_min_gap_minutes", 30)),
-        proactive_min_fire_gap_hours=float(payload.get("proactive_min_fire_gap_hours", 6.0)),
-        proactive_daily_max=int(payload.get("proactive_daily_max", 2)),
         longing_silence_hours_scale=float(payload.get("longing_silence_hours_scale", 48.0)),
         longing_closeness_weight=float(payload.get("longing_closeness_weight", 0.55)),
         longing_loneliness_weight=float(payload.get("longing_loneliness_weight", 0.45)),
@@ -116,10 +108,8 @@ def load_budget_config(config_dir: Path | None = None) -> BudgetConfig:
         longing_tier_sulk_hours=float(payload.get("longing_tier_sulk_hours", 72.0)),
         longing_tier_sulk_closeness_min=float(payload.get("longing_tier_sulk_closeness_min", 0.6)),
         proactive_fingerprint_history_size=int(payload.get("proactive_fingerprint_history_size", 4)),
-        proactive_max_delta_seconds=int(payload.get("proactive_max_delta_seconds", 600)),
         proactive_llm=bool(payload.get("proactive_llm", True)),
         proactive_max_output_tokens=int(payload.get("proactive_max_output_tokens", 80)),
-        proactive_llm_daily_max=int(payload.get("proactive_llm_daily_max", 5)),
         idle_experience_enabled=bool(payload.get("idle_experience_enabled", True)),
         idle_experience_min_gap_hours=float(payload.get("idle_experience_min_gap_hours", 6.0)),
         idle_experience_daily_max=int(payload.get("idle_experience_daily_max", 4)),
@@ -131,16 +121,8 @@ def load_budget_config(config_dir: Path | None = None) -> BudgetConfig:
     )
 
 
-def _parse_proactive_reason_mode(raw: object) -> Literal["agenda", "longing_only"]:
-    if raw == "longing_only":
-        return "longing_only"
-    return "agenda"
-
-
-def _parse_quiet_hours(raw: object) -> tuple[int, ...]:
-    if not isinstance(raw, list) or len(raw) < 2:
-        return (23, 8)
-    try:
-        return (int(raw[0]), int(raw[1]))
-    except (TypeError, ValueError):
-        return (23, 8)
+def _parse_proactive_reason_mode(raw: object) -> Literal["agenda", "relationship"]:
+    if raw == "agenda":
+        return "agenda"
+    # Backward-compatible read of the pre-2026-06-29 name.
+    return "relationship"
