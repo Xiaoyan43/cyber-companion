@@ -9,9 +9,11 @@
 >    736 backend + tsc 绿。`run_voice.py` 探针 + experiments/data/工具配置按约定仍保持本地未提交。
 > 2. **完整剩余任务地图 = `docs/ROADMAP.md`（向前看的唯一权威）**——含依赖图 + Track A–E，已切到
 >    Sonnet 可执行粒度。**新 session 务必读它**（`/resume-lite` 默认不读，需手动加）。
-> 3. **下一步 = A1 分支收敛**（先做，需用户拍板分支处置 + 是一次 93 文件需人工解冲突的前向 merge 进
->    public master，**不交盲跑 Sonnet**，由 Opus 做/设计）→ A2 本地物归位 → **B1 AIRI baseline**（首个 spike）。
->    分支处置表见 ROADMAP Track A / 本轮对话结论：soul-runtime 是 voice 分支祖先(可删)；多条 voice/* 已并入 master(可删)。
+> 3. **A1 分支收敛已完成**：路线重置经确定性合并(`-s ours`+overlay)进 master(`f086eb0`)，
+>    736+tsc 绿，**已 push origin/master**；本地/远端只剩 master 单分支单 worktree；冗余分支全删，
+>    保底标签 `backup/master-pre-a1`/`backup/voice-pre-a1`/`archive/*`。**所有后续以 origin/master 为准。**
+> 4. **下一步 = A2 本地物归位**（gitignore experiments/data/工具配置 + 处理 run_voice.py 探针，small diff）
+>    → **B1 AIRI baseline**（首个开源替换 spike，可交 Sonnet）。细则见 `docs/ROADMAP.md` Track A/B。
 > 4. **冻结新自研**：B 序列期间不加自研功能，只做开源替换 spike + 7 天日用验收(Track C, 并行)。
 
 ## ⚠️ 给新 session 的最小上手指引

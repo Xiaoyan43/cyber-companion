@@ -71,7 +71,10 @@ graph TD
 
 ## Track A · 仓库治理（最先做，解锁一切）
 
-### A1 · 分支收敛到 master
+### A1 · 分支收敛到 master　✅ 已完成（2026-06-29，merge `f086eb0`，已 push origin/master）
+> 确定性合并(`-s ours`+overlay voice 树+保留 2 soul 文档+删 tick_policy)；736+tsc 绿；
+> 本地/远端只剩 master；保底标签 `backup/master-pre-a1`/`backup/voice-pre-a1`/`archive/*`。下方为原始 scope 存档。
+
 - **背景**：master 与 `codex/voice-stabilization-20260627` 已分叉（master +50 / 本分支 +37），
   且本地有 `codex/soul-runtime` `codex/product-integration-20260627` `codex/chief-engineer-workflow`
   等并存。本轮 4 个路线重置 commit（`2dacd28`/`e36847d`/`1016af8`/`ef6944a`）落在 voice 分支，未进 master。
