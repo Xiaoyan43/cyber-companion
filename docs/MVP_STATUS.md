@@ -44,10 +44,10 @@
 - [ ] 云失败不破坏本地数据
 
 ## D. 下一步（每个 session 开头读这一行就够）
-> **当前下一步**：先执行 2026-06-29 开源路线重置：停止扩建自研模块，依次做 AIRI 原版 x64
-> whole-product baseline 与 Hindsight memory replacement spike；细则见
-> `docs/NEAREST_NEIGHBOR_AUDIT_2026-06-29.md` 和 `docs/TASK_QUEUE.md` 顶部。7 天日用验收保留，
-> 但不再作为阻止上游替换审计的闸门。
+> **完整剩余任务地图 = `docs/ROADMAP.md`（向前看的唯一权威，已切到 Sonnet 可执行粒度）。**
+> **当前下一步**：Track A（A1 分支收敛→master + A2 本地物归位）→ 然后 B1（AIRI 原版 x64 baseline）→
+> B2（Hindsight memory A/B）。停止扩建自研模块；7 天日用验收（Track C）与 spike 并行，但不作为闸门。
+> 细则见 `docs/ROADMAP.md`，证据见 `docs/NEAREST_NEIGHBOR_AUDIT_2026-06-29.md`。
 > ~~止血：重构 `memory/store.py`~~ **已完成 2026-06-28（C0.35→A89.9，745 绿）**。
 
 ## 如何判断「在正确路线上」（给非技术作者）
