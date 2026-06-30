@@ -4,39 +4,154 @@
 > **2026-06-29 路线重置（覆盖下方旧“只做 7 天验收”结论）**：Boxi 是永久私人项目，真实性优先；
 > 全部关系节流/ignore-backoff/反 guilt 规则已删除。核心能力自研不是目标，开始按
 > `docs/NEAREST_NEIGHBOR_AUDIT_2026-06-29.md` 逐模块替换。目标机为 2019 Intel i5/16 GB，默认
-> 云推理 + 轻本地编排。**新功能先冻结；下一任务是 P0-OSS-1，不得跳过最近邻证据。**
+> 云推理 + 轻本地编排。**新功能先冻结。P0-OSS-1（AIRI）已结案 reject（2026-06-29，画风不符，详见
+`docs/AIRI_BASELINE_SPIKE.md`）；P0-OSS-2（Hindsight）已结案 reject-for-now（2026-06-29，详见
+`docs/HINDSIGHT_MEMORY_SPIKE.md`）；下一任务是 P0-OSS-3（具身/屏幕感知），不得跳过最近邻证据。**
+
+> **环境提醒（2026-06-30）**：新建 worktree 后若 `npm run check`/`tsc` 报莫名其妙的类型错误（如
+> `Property 'on' does not exist on type 'IRTCEngine'`），先 `npm ci` 而不是改代码——大概率是
+> `node_modules` 没装全，不是真回归。已验证一次：[useRtcVoice.ts](../frontend/src/rtc/useRtcVoice.ts) 在干净
+> `npm ci` 后 tsc 全绿，未改任何源码。
 
 ## 当前最高优先级 · 开源替换序列
 
-### P0-OSS-1 · AIRI 未修改 baseline（下一任务）
+### ~~P0-OSS-1 · AIRI 未修改 baseline~~ ✅ 已结案（2026-06-29，结论：reject）
 
-- **Scope**：隔离目录/官方 macOS x64 release；不改现有生产代码和用户数据。
-- **做法**：用现有云 provider 跑文字、语音、桌面角色；关闭本地大模型、游戏 agent 和重视觉。
-- **记录**：冷启动、常驻/对话/语音 CPU 与 RAM、首 token/首音频延迟、Intel 兼容问题、可独立复用 packages。
-- **验收**：形成 whole-base / component-graft / reject 三选一结论和证据；不能以“架构不同”拒绝。
+隔离目录 `~/airi-spike/`（已删除）跑通 `apps/stage-tamagotchi`（用 `pnpm install --filter` 跳过
+`services/minecraft` 的 `isolated-vm` 编译阻塞）。**Reject 主因 = 画风不符**：AIRI 整套展示层是
+Live2D/二次元虚拟主播形象，与 Boxi 视觉方向不匹配，用户明确不走二次元路线。次要支撑证据：开发
+模式空闲态单进程持续 ~96-97% CPU + 总 RSS ~2.4GB，对这台 2019 Intel i5 是显著负担（未测打包版
+真实数字，画风结论已足够，不需要再精确测）。架构验证：展示层（`stage-ui`/`stage-ui-live2d`/
+`stage-tamagotchi`）与对话/记忆层（`core-agent`/`memory-pgvector`）确认是独立 package，依赖管理
+层面可分开装。详见 `docs/AIRI_BASELINE_SPIKE.md`。**画风预警**：P0-OSS-3 候选 Open-LLM-VTuber
+同样是 Live2D/透明桌宠路线，评估前应先确认是否有非二次元展示选项，否则可直接判定不匹配、跳过
+完整 spike。
 
-### P0-OSS-2 · Hindsight memory replacement spike
+### ~~P0-OSS-2 · Hindsight memory replacement spike~~ ✅ 已结案（2026-06-29，结论：reject-for-now）
 
-- **Scope**：独立 DB/服务 + adapter + 固定 Boxi fixture；不先改 canonical SQLite。
-- **A/B**：当前引擎 vs Hindsight 的中文单跳、多跳、时间矛盾、关系变化、跨日召回、retain 峰值 RAM、
-  recall p50/p95 与 API 成本。
-- **验收**：若能力领先且机器可承受，设计一次性数据迁移并删除旧检索/反思主线；禁止长期双栈。
+真实自托管 Hindsight（Docker 容器 + DeepSeek 做 LLM provider）跑了 5 个固定中文 fixture（单跳/
+多跳/时间矛盾/关系变化/跨日召回）vs canonical SQLite。**结果不支持迁移**：canonical 5/5 命中，
+Hindsight 4/5（唯一 miss 恰好是它该最强的 recency 推理场景）；常驻 Docker 容器吃 ~900MB+ RAM，
+跟硬件"轻本地编排"原则冲突；真实 SDK 没有按 id 删除单条记忆的接口、同步写入拿不到可用 id，比
+canonical 功能倒退；写入内容会被 LLM 改写而非存原文；延迟慢 200-700 倍。详见
+`docs/HINDSIGHT_MEMORY_SPIKE.md`。**非永久否决**——样本量小，若未来重测需更大样本 + 覆盖反思/
+巩固场景对单条记忆更新删除的诉求，不能直接复用这次结论。Docker 容器已停止移除；Docker Desktop
+本身按用户要求暂时保留，**项目后续若确认用不上，提醒用户卸载**。
 
-### P0-OSS-3 · 具身与屏幕感知复用
+### ~~P0-OSS-3 · 具身与屏幕感知复用~~ ✅ 已结案（2026-06-29，结论：两项均 reject）
 
-- 先评 Open-LLM-VTuber 的透明桌宠/Live2D/触摸/表情与 Agent 接口；不得重写同类桌面基础设施。
-- screenpipe 只启 accessibility + app/window event，禁 24/7 音频、本地 Whisper 和高频 OCR；实测旧
-  Intel CPU/磁盘后再决定常驻。
+- **Open-LLM-VTuber → reject**：只读官方 README/文档核实，未跑 spike。展示层只有网页版/桌面客户端
+  窗口/桌面宠物浮窗三种模式，三种都基于 Live2D 渲染；"可定制"仅指换 Live2D 模型外观，不提供无头/
+  静态图片/非二次元风格/可替换渲染层选项。与 AIRI（P0-OSS-1）reject 理由同构——画风直接冲突，
+  Boxi 明确不走 Live2D/二次元路线，省下完整资源占用 spike 的成本。
+- **screenpipe → reject**：只读官方文档/issue 核实，未本地安装。官方建议最低 8GB RAM（这台机器
+  总共 16GB，screenpipe 一家吃掉一半推荐值）；真实 GitHub issue（#183）报告过 CPU>100%+RAM>10GB
+  的故障案例；accessibility-only 配置下，accessibility 数据不可用时仍会自动 fallback 到 OCR，
+  可能绕不开"禁高频 OCR"的硬性要求。资源画像跟硬件"轻本地编排"原则冲突，理由与 Hindsight reject
+  同类（量级更夸张，8GB vs ~900MB）。
+- **结论**：具身/桌宠/屏幕感知这条开源复用路径目前没有候选了——这不代表真实感缺口（"看到用户在
+  做什么"）消失，只是现成方案在这台硬件上不可行。需要找更轻量的替代方案，或暂时接受这块空缺，
+  留给以后硬件升级或新候选出现时重新评估。
 
-### P0-OSS-4 · Pipecat 去自研化
+### P0-OSS-4 · Pipecat 去自研化（进行中,2026-06-30 第八十三轮 · transport 三阶段全部完成）
 
 - 对照官方 Fish service、Mem0 integration、transport、smart-turn、voice-ui-kit。
 - 每个自定义 voice service/router/UI glue 必须证明上游不能替代，否则删除；Shared Soul processor 保留。
+
+**清单审计已完成**（`backend/realtime/` 19 文件 + `frontend/src/voice/` 全部）：
+- ✅ 合规/无需动：生产 TTS 已用官方 `FishAudioTTSService`；Mem0 对照无对应物（语音记忆复用文字
+  聊天共用 SQLite 主线）。
+- 🗑️ 疑似死代码,待核实引用后删除：`doubao_streaming_tts_service.py`、
+  `doubao_bidirection_tts_protocol.py`、`doubao_tts_service.py`（生产已走 Fish,这三个豆包 TTS
+  文件未见被实际调用）、`mac_say_tts.py`。
+- ⚠️ 不在本任务范围（独立决策项）：`doubao_realtime_service.py`/`doubao_realtime_protocol.py`/
+  `soul_llm_server.py` 只在非默认 `CYBER_COMPANION_VOICE_MODE=realtime` 分支用,是否继续维护这条
+  legacy E2E 分支是另一个问题。
+
+**追加候选 · Transport 换血 + smart-turn 接入**（已 `/architect` 拆三阶段：spike验证→生产迁移→
+smart-turn接入）：
+- 动机：`LocalAudioTransport`（后端直连本机麦克风/扬声器,前端只是远程控制面板,从不收发音频）换成
+  `SmallWebRTCTransport` 可能同时解决三件事——浏览器原生 AEC（白送,`voice-bargein-needs-aec`
+  memory 早就指出的真解法,届时可删 `half_duplex_mute_processor.py`+`self_echo_filter.py` 两个
+  hack）、解锁 `voice-ui-kit` 组件、真正的打断/barge-in。
+- **smart-turn 现在挂不上的根因跟 transport 无关**：管线没有标准 `LLMUserAggregator`
+  （`CompanionBrainProcessor` 绕开了它），换 transport 不会自动解锁 smart-turn,需要单独restructure。
+- **P0 spike 验证（phase 1，loopback）：已完成,结论 Accept**（2026-06-30,详见
+  `docs/TRANSPORT_SPIKE_RESULTS.md`）——loopback 管线数据通道 RTT n=89 avg=2.8ms,主观听感延迟
+  正常、回声压制（`echoCancellation:true`）有效,无重复/嗡鸣。`SmallWebRTCTransport` 端到端可用。
+- **phase 2（真实多轮管线 transport 切换）：已完成真机验证**（2026-06-30,详见
+  `docs/TRANSPORT_SPIKE_RESULTS.md` 「第二阶段」节,throwaway 脚本
+  `backend/realtime/spike_webrtc_pipeline.py`,未改生产代码）——①两个 hack 默认开启时行为与
+  生产一致,无回归；②关闭两个 hack 纯靠浏览器原生 AEC,真实多轮场景全程无回声,**可删 hack 有
+  真机证据支持**；③**打断/barge-in 不能靠换 transport 解决**——日志坐实 STT 在 bot 说话期间
+  持续正常识别,但管线没有"打断→取消 TTS"信号链,根因与 smart-turn 挂不上同源
+  （`CompanionBrainProcessor` 绕开标准 `LLMUserAggregator`）,跟 transport 选型正交,不要算作
+  换 transport 顺带解决的收益。
+- **phase 3（生产 transport 迁移）：已完成并真机验证 PASS**（2026-06-30，第八十三轮，详见
+  `docs/HANDOFF.md`，Claude Code 本轮例外直接实施）——`run_voice.py`/`pipeline_router.py`
+  生产代码已切到 `SmallWebRTCTransport`（CLI 直跑路径仍保留 `LocalAudioTransport` 不变）；
+  `/realtime/start` 改造成 WebRTC 信令入口（接收 SDP offer、返回 answer）。真机验证踩坑：
+  这台机器 WiFi 路由器 AP/客户端隔离导致局域网 IP 自连丢包，已用代码层修补
+  `webrtc_loopback_candidate.py`（让 aioice 额外提供 `127.0.0.1` 候选）彻底解决，不依赖
+  网络环境。**两个回声 hack 本轮未删**（保持默认开启，逻辑不变，删除决策见下方「下一步」②）。
+  743 backend passed，真机一轮对话 STT/brain/tagger/TTS 全链路确认正常出声。
+- **phase 3 配套 · 前端 WebRTC 客户端接入：✅ 已完成并真机验证 PASS（2026-06-30，第八十四/
+  八十五轮）**——`frontend/src/voice/pipecatApi.ts` 的 `startPipecat()` 已改成真正发 SDP offer /
+  收 answer；新增 `frontend/src/voice/useWebRtcVoiceConnection.ts` 封装 `getUserMedia` +
+  `RTCPeerConnection` 完整生命周期（参考 `backend/realtime/spike_webrtc_client.html` 握手逻辑，
+  远端音轨走程序化 `new Audio()`，未改 `PipecatVoicePanel.tsx`/`App.tsx`）；`usePipecatVoice.ts`
+  已接入。`tsc --noEmit` 全绿、前端 vitest 34 passed。**第八十五轮用户真机验证 PASS**——用户在
+  `http://127.0.0.1:5173` 点"开始 Soul 语音"测试，反馈"一切正常"；Claude Code 通过后端进程的
+  重定向日志文件（非用户终端，进程是此前某 session 后台启动、stdout/stderr 已落盘）交叉核实，
+  确认 STT（豆包流式 partial→final）→`Boxi decision=reply called_llm=True`→tagger 逐句标签
+  （含一次 wording-altered 安全降级，行为符合设计）全链路三轮对话均正常，断开时
+  `WebRTC client disconnected`→`Pipecat pipeline task cancelled`→`/realtime/stop 200 OK` 释放
+  干净，全程无 ERROR/Traceback。**P0-OSS-4 phase 1/2/3/前端配套全部完成并验证 PASS，无遗留阻塞。**
+- **P2 · 两个回声 hack 删除：✅ 已完成（2026-06-30，第八十六轮，Claude Code 直接实施——用户已
+  明确把"主要实现者"角色交给 Claude Code，不再是例外）**——`half_duplex_mute_processor.py` +
+  `self_echo_filter.py` 及其专属测试已删除，`run_voice.py`/`voice_config.py` 相关装配/env var
+  已清理。决策依据：①第八十二轮 throwaway spike + ②本轮在生产 `SmallWebRTCTransport` 路径上用
+  `CYBER_COMPANION_VOICE_HALF_DUPLEX=0` 跑 6 轮真实对话（输出设备=用户日常笔记本喇叭，用户确认
+  无外接音箱）两次独立证据，均显示浏览器原生 AEC 可完全顶替这两个 hack。`backend/tests` 全量
+  726 passed（743−17，差额=被删测试用例数，无回归）。**真机验证缺口已补齐**：用户在删除后的
+  干净代码上做了 4 轮真实语音对话，日志确认逐轮 STT final→`Boxi decision=reply` 清晰映射、无
+  回声、断开流程干净、全程无 ERROR。
+
+### ✅ P0-OSS-4（Pipecat 去自研化）核心三项全部结案（transport 迁移 + 前端接入 + 回声 hack 删除）
+
+**无遗留阻塞**。下一步候选（均未开工，无优先级排序，需跟用户讨论选哪个）：①打断/barge-in 独立
+管线重构任务（管线仍无"用户开始说话→取消 TTS"信号链，这轮回声 hack 删除没有顺带解决打断能力）；
+②voice-ui-kit 接入范围 + 远程场景 TURN/STUN（P2，跟已解决的"同机自连"网络坑是两回事）；
+③P1-OSS-5 单角色"自己的生活"；④候选名单（长期记忆/情绪性格/主动联系/身份层，13 个未核实项目名，
+见下方「候选名单」节）。
+
+**原则提醒**（2026-06-29 新增 feedback）：diff 大/需要架构改动**不是**降级或拒绝候选的理由,只有
+硬件资源/画风/实测指标冲突才是——见 memory `feedback-diff-size-not-reject-reason`。
 
 ### P1-OSS-5 · 单角色“自己的生活”
 
 - 适配 genagents/AI Town 的 planning/reflection/simulation loop，只跑一个角色并使用云 LLM。
 - 验收是跨日计划、经历和未完成目标连续，不是随机生成几条 idle 文本。
+
+### 候选名单（未排期，未核实，2026-06-29 用户提供）
+
+> 以下项目**未做任何调研**（不确认是否存在/活跃/license/是否名称准确），只是按用户给的描述
+> 粗略归类到现有模块，留给以后排期任务时先核实再决定是否值得 spike。**不是正式队列任务**，
+> 不要直接当作可信结论引用。
+
+- **长期记忆候选**：`eros-engine`（Rust，六维亲和力模型+双层记忆）、`kiwi-mem`（模拟遗忘/记忆
+  加深/睡眠整合）、`MemoryConstellations`（自组织记忆，自动提取事实/归类话题/编织叙事）、
+  `Mimir's Memory Hub`（持久记忆+多角色聊天，模拟遗忘/强化/梦境/情绪权重）、`AI-memory`、
+  `Afterglow`、`Palimpsest`、`Formative Memory`、`sostenuto`（仅有名字，未核实具体内容）。
+- **情绪/性格候选**：`MATE`（确定性情感+涌现性格，基于 20+ 心理学理论，纯数学函数驱动情感）。
+- **主动联系候选**：`revive-companion`（主动关怀决策引擎，泊松过程+贝叶斯推断——与当前 Boxi
+  主动联系系统用的 Poisson 调度直接同类，值得优先核实是否有可借鉴的改进点）。
+- **身份/灵魂层候选**：`digital-companion-core`（有状态个性+记忆+情绪，提供"Soul"抽象，含身份/
+  记忆/情绪）、`OpenSoul`（跨平台任务连续性，单 agent 可在 30+ 渠道保持任务状态）、OGMA 项目
+  "跨版本身份继承"（强调 AI 人格在不同会话/模型/后台间保持一致——这一层是 Boxi 不可被上游覆盖的
+  边界，借鉴机制思路即可，不应直接迁移整个身份层）。
+- **下一步（非现在做）**：排到对应模块任务（长期记忆/情绪关系层/主动联系）时，先各花极小成本
+  核实这些项目是否真实存在、是否活跃、license 是否兼容，再决定值不值得列入正式 spike 候选。
 > **2026-06-28（第七十四轮）**：**P16 · 默认 Soul 语音入口已完成。** 前端主语音面改为 Pipecat（`/realtime/start|stop|status` + transcript WS），RTC-AIGC 保留为折叠的实验对照；两入口互斥。启动错误现可经 status `last_error` 回传 UI。后端 747 + invariant 366 + 前端 28 + tsc 全绿。**P0=12/12；下一步=连续 7 天日用验收，不开新功能。**
 > **2026-06-27（第七十三轮稳定化）**：dirty 工作树已从 `codex/soul-runtime` 分离到 `codex/voice-stabilization-20260627`，并按 provider 正名 `67ab085`、tagger 位置 `9847d9e`、Fish 参数 `26f0ef4`、单字自回声 `dd026ee` 四组独立提交。后端 745、invariant 366、前端 `tsc --noEmit` 全绿；`_LatencySpikeLogger` 与全部实验/音频/工具配置仍明确未提交。**下一步 = 产品体验，不再继续 Fish/tagger 微调。**
 > **2026-06-27（第七十二轮用户验收）**：用户已听完 `position_v5` 并决定保留。B 类位置精修结案；动态 mood 不再注入 tagger，正文保持为唯一情绪来源。
