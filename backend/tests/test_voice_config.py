@@ -11,6 +11,8 @@ def test_voice_config_defaults(monkeypatch) -> None:
     monkeypatch.delenv(voice_config.ENV_FISH_TOP_P, raising=False)
     monkeypatch.delenv(voice_config.ENV_FISH_PROSODY_SPEED, raising=False)
     monkeypatch.delenv(voice_config.ENV_FISH_PROSODY_VOLUME, raising=False)
+    monkeypatch.delenv(voice_config.ENV_BARGE_IN_ENABLED, raising=False)
+    monkeypatch.delenv(voice_config.ENV_BARGE_IN_MIN_SECS, raising=False)
 
     assert voice_config.load_vad_stop_secs() == 0.4
     assert voice_config.load_asr_end_window_ms() == 800
@@ -20,6 +22,8 @@ def test_voice_config_defaults(monkeypatch) -> None:
     assert voice_config.load_fish_top_p() is None
     assert voice_config.load_fish_prosody_speed() is None
     assert voice_config.load_fish_prosody_volume() is None
+    assert voice_config.load_barge_in_enabled() is True
+    assert voice_config.load_barge_in_min_secs() == 0.3
 
 
 def test_voice_config_env_overrides(monkeypatch) -> None:
@@ -31,6 +35,8 @@ def test_voice_config_env_overrides(monkeypatch) -> None:
     monkeypatch.setenv(voice_config.ENV_FISH_TOP_P, "0.72")
     monkeypatch.setenv(voice_config.ENV_FISH_PROSODY_SPEED, "0.94")
     monkeypatch.setenv(voice_config.ENV_FISH_PROSODY_VOLUME, "-1")
+    monkeypatch.setenv(voice_config.ENV_BARGE_IN_ENABLED, "off")
+    monkeypatch.setenv(voice_config.ENV_BARGE_IN_MIN_SECS, "0.5")
 
     assert voice_config.load_vad_stop_secs() == 0.55
     assert voice_config.load_asr_end_window_ms() == 450
@@ -40,6 +46,8 @@ def test_voice_config_env_overrides(monkeypatch) -> None:
     assert voice_config.load_fish_top_p() == 0.72
     assert voice_config.load_fish_prosody_speed() == 0.94
     assert voice_config.load_fish_prosody_volume() == -1
+    assert voice_config.load_barge_in_enabled() is False
+    assert voice_config.load_barge_in_min_secs() == 0.5
 
 
 def test_voice_mode_defaults(monkeypatch) -> None:

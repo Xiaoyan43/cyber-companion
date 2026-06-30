@@ -1,8 +1,75 @@
-# HANDOFF — 上下文交接（2026-06-30，第八十六轮 · P2 两个回声 hack 已删除，已真机验证）
+# HANDOFF — 上下文交接（2026-06-30，第八十七轮 · 打断/barge-in P0+P1 已实现，真机验证 PASS）
 
 > 本文件每次「瘦身交接」/「工作流交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
 
-> **🟢 2026-06-30 第八十六轮（最新，P2 · 两个回声 hack 删除已实施，Claude Code 直接实施）**：
+> **🟢 2026-06-30 第八十七轮（最新，打断/barge-in：P0 spike + P1 最小实现，Claude Code 直接实施，729→731 测试，已真机验证 PASS）**：
+> 1. **背景**：第八十六轮删除两个回声 hack 后，HANDOFF 把"打断/barge-in 独立管线重构"列为下一步候选
+>    之一——管线此前完全没有"用户开始说话→取消 Boxi 当前 TTS 播放"的信号链，用户用 `/architect`
+>    选中这个任务开工。
+> 2. **P0（Pipecat 中断信号契约 spike，纯读源码，无生产改动）已完成**：对照本机已装的 Pipecat 1.3.0
+>    实际源码（`.venv` 符号链接指向的 `~/.venvs/cyber-companion`），确认：
+>    - `FrameProcessor.broadcast_interruption()`（`processors/frame_processor.py:718`）是触发打断的官方
+>      公开 API——内部调用 `broadcast_frame(InterruptionFrame)`，自动往 upstream + downstream 各推一份
+>      `InterruptionFrame`，调用方不需要手写双向 push。
+>    - `InterruptionFrame` 是 `SystemFrame`，在 `FrameProcessorQueue` 里**优先级最高**，插队处理。
+>    - 下游组件已经"自带"正确反应，不需要新写：`TTSService._handle_interruption()`
+>      （`services/tts_service.py:902,1620`）收到后停止合成；`BaseOutputTransport`
+>      （`transports/base_output.py:341,365,538`）收到后清空播放缓冲；`LocalAudioOutputTransport`
+>      （CLI 路径）和 `SmallWebRTCOutputTransport`（生产 WebRTC 路径）**都**继承自
+>      `BaseOutputTransport`，两条路径的下游反应完全一致，不需要分别处理。
+>    - 本项目自己的 `CompanionBrainProcessor` 此前就已正确处理 `InterruptionFrame`（取消 `_turn_task`），
+>      本轮只是确认它收到的是标准框架广播的同一份帧，链路是通的，未改动该文件。
+>    - "Boxi 是否正在说话"信号源 = `BotStartedSpeakingFrame`/`BotStoppedSpeakingFrame`
+>      （`frames/frames.py:1065-1083`），由 `BaseOutputTransport` 同时往 upstream/downstream 广播——
+>      插在 `vad` 和 `tts`/`transport.output()` 之间任意位置的新 processor，downstream 方向能看到
+>      VAD 的 `VADUserStartedSpeakingFrame`，upstream 方向能看到从 `transport.output()` 传回来的
+>      bot-speaking 信号，两个信号在同一个 processor 里都能拿到。
+> 3. **防抖阈值已做网络调研（不是凭感觉定数）**：
+>    - LiveKit Agents 官方文档 `InterruptionOptions.min_duration` 默认 **0.5 秒**（专门给"判定是否算
+>      真打断"用的参数，跟"确认用户开始说话"的 VAD 参数分开设计，并配 `false_interruption_timeout=2.0s`
+>      + `resume_false_interruption=True` 二层兜底）。
+>    - futureagi.com 2026 生产级语音 agent 指南：minimum-duration guard 推荐 **200-300ms** + 置信度
+>      >0.7，能把误打断率降 60-80%。
+>    - Pipecat 自己的 VAD 默认值（`VAD_START_SECS=0.2`, `VAD_CONFIDENCE=0.7`）已经落在这个区间——但
+>      这个值目前只服务于"确认用户开始说话"，不是专门给打断判定用的。
+>    - **决策：新增独立阈值，不复用现有 `CYBER_COMPANION_VOICE_VAD_STOP_SECS`**（那是端点判断，跟
+>      打断是两个问题，LiveKit 也是分开设计两个参数）。默认 **300ms**，与 VAD 自身的 0.2s start_secs
+>      debounce 叠加，总用户感知延迟约 0.5s，正好对齐 LiveKit 官方生产默认值。
+> 4. **P1 最小实现已完成（CLI + WebRTC 两条路径都覆盖，按用户拍板）**：
+>    - 新增 `backend/realtime/barge_in_processor.py`（`BargeInProcessor`）：插在 `run_voice.py`
+>      `_main_pipeline()` 的 `pipeline_steps` 里 `vad` 和 `stt` 之间（`[transport.input(), vad,
+>      barge_in, stt, ...]`）。维护 `bot_speaking` 状态（由 `BotStartedSpeakingFrame`/
+>      `BotStoppedSpeakingFrame` 维护）；收到 `VADUserStartedSpeakingFrame` 且 `bot_speaking=True`
+>      时启动一个 `min_speech_secs`（默认 0.3s）防抖任务，到期仍未收到
+>      `VADUserStoppedSpeakingFrame`/`BotStoppedSpeakingFrame` 才真正调用
+>      `self.broadcast_interruption()`；提前收到停止信号则取消防抖任务，不打断。
+>    - `backend/realtime/voice_config.py` 新增 `ENV_BARGE_IN_ENABLED`
+>      （`CYBER_COMPANION_VOICE_BARGE_IN`，默认 on，kill-switch）+ `ENV_BARGE_IN_MIN_SECS`
+>      （`CYBER_COMPANION_VOICE_BARGE_IN_MIN_SECS`，默认 0.3）+ 对应 `load_*` 函数，沿用项目既有
+>      env-override 惯例（参照 `ENV_EXPRESSION_TAGGER`/`ENV_VAD_STOP_SECS` 的写法）。
+>    - `backend/realtime/run_voice.py` `_main_pipeline()` 装配 `BargeInProcessor`，新增一行启动日志
+>      打印 `CYBER_COMPANION_VOICE_BARGE_IN`/`_MIN_SECS` 当前值。CLI（`LocalAudioTransport`）和生产
+>      WebRTC（`SmallWebRTCTransport`）两条路径共用同一份 `pipeline_steps` 组装代码，天然两条路径都
+>      覆盖，没有额外分叉。
+> 5. **测试**：新增 `backend/tests/test_barge_in_processor.py`（5 个用例，用 Pipecat 官方
+>    `pipecat.tests.utils.run_test` 测试 harness 驱动真实 `Pipeline`/`PipelineWorker`，不是简单
+>    monkeypatch——覆盖"Boxi 沉默时不打断"/"Boxi 说话中满足防抖后打断（双向 `InterruptionFrame` 都
+>    收到）"/"用户提前停止取消打断"/"Boxi 自己先说完取消打断"/"kill-switch 关闭后永不打断"五种分支）+
+>    `test_voice_config.py` 补充两个新配置项的默认值/env override 断言。**`backend/tests` 全量
+>    731 passed（726+5，无回归）**。`run_voice.py` 语法 + 新模块 import 已做 sanity check。
+> 6. **✅ 真机验证已完成，结论 PASS**：用户实测可以在 Boxi 说话途中开口打断她，**立即停声**；
+>    **暂时没有观察到误打断**（咳嗽/呼吸声/杂音未触发）。默认配置（300ms 防抖 + 0.2s VAD
+>    start_secs）在真实场景下表现符合预期，未调参。**这是首轮真机使用观察，不是穷举测试**——
+>    后续日常使用中如果出现误打断或打断不够灵敏，再回来调
+>    `CYBER_COMPANION_VOICE_BARGE_IN_MIN_SECS`，不需要现在主动加测试用例。
+> 7. **本轮未触碰**：STT/TTS/tagger 业务逻辑本身、transport 选型、`pipeline_router.py`、
+>    `companion_brain_processor.py`（确认其 `InterruptionFrame` 处理逻辑已经正确，未改动）。
+> 8. **结论：打断/barge-in 任务（P0 spike + P1 最小实现 + 真机验证）全部完成，结案，无遗留阻塞。**
+>    下一步候选（无优先级排序，需跟用户讨论选哪个）：①voice-ui-kit 接入范围 + 远程场景 TURN/STUN
+>    （P2，跟已解决的"同机自连"网络坑是两回事）；②P1-OSS-5 单角色"自己的生活"；③候选名单（长期
+>    记忆/情绪性格/主动联系/身份层，13 个未核实项目名）。
+
+> **🟢 2026-06-30 第八十六轮（P2 · 两个回声 hack 删除已实施，Claude Code 直接实施）**：
 > 1. **用户明确纠正了项目运作方式**：`CLAUDE.md` 里"Claude Code 不是主要实现者"那条规则已过时，
 >    用户确认 Claude Code Sonnet 4.6 是项目主力实现者，默认应直接写代码，不需要先申请"例外"。
 >    只有任务规模大/复杂、或 Sonnet 反复失败时，Claude Code 才需要主动提醒用户切到 Opus 4.8

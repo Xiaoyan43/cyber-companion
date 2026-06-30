@@ -119,14 +119,36 @@ smart-turn接入）：
 
 ### ✅ P0-OSS-4（Pipecat 去自研化）核心三项全部结案（transport 迁移 + 前端接入 + 回声 hack 删除）
 
-**无遗留阻塞**。下一步候选（均未开工，无优先级排序，需跟用户讨论选哪个）：①打断/barge-in 独立
-管线重构任务（管线仍无"用户开始说话→取消 TTS"信号链，这轮回声 hack 删除没有顺带解决打断能力）；
-②voice-ui-kit 接入范围 + 远程场景 TURN/STUN（P2，跟已解决的"同机自连"网络坑是两回事）；
-③P1-OSS-5 单角色"自己的生活"；④候选名单（长期记忆/情绪性格/主动联系/身份层，13 个未核实项目名，
-见下方「候选名单」节）。
+**无遗留阻塞**。
 
 **原则提醒**（2026-06-29 新增 feedback）：diff 大/需要架构改动**不是**降级或拒绝候选的理由,只有
 硬件资源/画风/实测指标冲突才是——见 memory `feedback-diff-size-not-reject-reason`。
+
+### ✅ 打断/barge-in 独立管线重构（已结案，2026-06-30 第八十七轮 · P0+P1+真机验证全部完成）
+
+- 动机：管线此前无"用户开始说话→取消 Boxi 当前 TTS 播放"的信号链，P0-OSS-4 回声 hack 删除没有
+  顺带解决这个问题（详见 HANDOFF 第八十二/八十三轮）。
+- **P0（Pipecat 中断信号契约 spike）：已完成**——对照 Pipecat 1.3.0 实际源码确认
+  `FrameProcessor.broadcast_interruption()` 是触发打断的官方 API（自动双向广播
+  `InterruptionFrame`）；TTS service / 两个 output transport（`LocalAudioOutputTransport` 和
+  `SmallWebRTCOutputTransport`，均继承 `BaseOutputTransport`）已经自带正确的中断反应，不需要新写；
+  `CompanionBrainProcessor` 也早已正确处理 `InterruptionFrame`。唯一缺的是"什么时候该调用
+  `broadcast_interruption()`"这个决策逻辑。详见 HANDOFF 第八十七轮。
+- **防抖阈值已做网络调研**：LiveKit Agents 官方 `InterruptionOptions.min_duration` 默认 0.5s；
+  futureagi.com 生产指南推荐 200-300ms + 置信度>0.7。决定：新增独立阈值（不复用现有
+  `CYBER_COMPANION_VOICE_VAD_STOP_SECS`），默认 300ms，叠加 VAD 自身 0.2s start_secs，总感知延迟
+  ≈0.5s，对齐 LiveKit 官方默认。
+- **P1（最小实现，CLI+WebRTC 两条路径都覆盖）：已完成**——新增 `backend/realtime/barge_in_processor.py`
+  （`BargeInProcessor`），插在 `vad`/`stt` 之间；新增 env var `CYBER_COMPANION_VOICE_BARGE_IN`
+  （kill-switch，默认 on）+ `CYBER_COMPANION_VOICE_BARGE_IN_MIN_SECS`（默认 0.3）。新增 5 个单测
+  （用 Pipecat 官方 `run_test` harness），`backend/tests` 全量 731 passed（726+5，无回归）。
+- **✅ 真机验证已完成，结论 PASS**：用户实测可以在 Boxi 说话途中打断她，立即停声，暂时没有观察到
+  误打断。默认配置（300ms 防抖 + VAD 0.2s start_secs）未调参即可用，首轮观察非穷举测试，后续日常
+  使用如发现误打断/不够灵敏再调 `CYBER_COMPANION_VOICE_BARGE_IN_MIN_SECS`。**无遗留阻塞，结案。**
+
+**下一步候选（无优先级排序，需跟用户讨论选哪个）**：①voice-ui-kit 接入范围 + 远程场景 TURN/STUN
+（P2，跟已解决的"同机自连"网络坑是两回事）；②P1-OSS-5 单角色"自己的生活"；③候选名单（长期记忆/
+情绪性格/主动联系/身份层，13 个未核实项目名，见下方「候选名单」节）。
 
 ### P1-OSS-5 · 单角色“自己的生活”
 

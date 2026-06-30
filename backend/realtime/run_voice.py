@@ -253,6 +253,7 @@ async def _main_pipeline(webrtc_connection: "SmallWebRTCConnection | None" = Non
     from backend.app.memory.retrieval import tokenize
     from backend.app.memory.store import get_memory_store
     from backend.app.providers.router import get_provider_router
+    from backend.realtime.barge_in_processor import BargeInProcessor
     from backend.realtime.companion_brain import CompanionBrain
     from backend.realtime.companion_brain_processor import CompanionBrainProcessor
     from backend.realtime.expression_tagger_processor import ExpressionTaggerProcessor
@@ -264,10 +265,14 @@ async def _main_pipeline(webrtc_connection: "SmallWebRTCConnection | None" = Non
     from backend.realtime.vad_processor import SileroVADProcessor
     from backend.realtime.voice_config import (
         ENV_ASR_END_WINDOW_MS,
+        ENV_BARGE_IN_ENABLED,
+        ENV_BARGE_IN_MIN_SECS,
         ENV_EXPRESSION_TAGGER,
         ENV_MAX_TOKENS,
         ENV_VAD_STOP_SECS,
         load_asr_end_window_ms,
+        load_barge_in_enabled,
+        load_barge_in_min_secs,
         load_expression_tagger_enabled,
         load_vad_stop_secs,
         load_voice_max_tokens,
@@ -343,13 +348,16 @@ async def _main_pipeline(webrtc_connection: "SmallWebRTCConnection | None" = Non
     vad_stop_secs = load_vad_stop_secs()
     asr_end_window_ms = load_asr_end_window_ms()
     expression_tagger_enabled = load_expression_tagger_enabled()
+    barge_in_enabled = load_barge_in_enabled()
+    barge_in_min_secs = load_barge_in_min_secs()
 
     store = get_memory_store()
     brain = CompanionBrain(store, max_output_tokens=voice_max_tokens)
     vad = SileroVADProcessor(stop_secs=vad_stop_secs)
+    barge_in = BargeInProcessor(enabled=barge_in_enabled, min_speech_secs=barge_in_min_secs)
     brain_processor = CompanionBrainProcessor(brain)
 
-    pipeline_steps: list[object] = [transport.input(), vad, stt]
+    pipeline_steps: list[object] = [transport.input(), vad, barge_in, stt]
 
     transcript_broadcaster = get_transcript_broadcaster()
     pipeline_steps.extend(
@@ -385,7 +393,9 @@ async def _main_pipeline(webrtc_connection: "SmallWebRTCConnection | None" = Non
         f"{ENV_VAD_STOP_SECS}={vad_stop_secs}, "
         f"{ENV_ASR_END_WINDOW_MS}={asr_end_window_ms}, "
         f"{ENV_MAX_TOKENS}={voice_max_tokens}, "
-        f"{ENV_EXPRESSION_TAGGER}={'on' if expression_tagger_enabled else 'off'}; "
+        f"{ENV_EXPRESSION_TAGGER}={'on' if expression_tagger_enabled else 'off'}, "
+        f"{ENV_BARGE_IN_ENABLED}={'on' if barge_in_enabled else 'off'}, "
+        f"{ENV_BARGE_IN_MIN_SECS}={barge_in_min_secs}; "
         "smart_turn=off (no LLMUserAggregator in pipeline — VAD-only endpointing)"
     )
 

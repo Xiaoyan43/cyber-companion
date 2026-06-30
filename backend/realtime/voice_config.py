@@ -53,10 +53,20 @@ ENV_FISH_TEMPERATURE = "CYBER_COMPANION_VOICE_FISH_TEMPERATURE"
 ENV_FISH_TOP_P = "CYBER_COMPANION_VOICE_FISH_TOP_P"
 ENV_FISH_PROSODY_SPEED = "CYBER_COMPANION_VOICE_FISH_PROSODY_SPEED"
 ENV_FISH_PROSODY_VOLUME = "CYBER_COMPANION_VOICE_FISH_PROSODY_VOLUME"
+# Kill-switch for barge-in (set to 0/off to fall back to no-interruption behavior).
+ENV_BARGE_IN_ENABLED = "CYBER_COMPANION_VOICE_BARGE_IN"
+# Minimum sustained user speech, on top of the VAD's own ~0.2s start_secs debounce already
+# baked into VADUserStartedSpeakingFrame, before a barge-in is committed — filters out
+# coughs/breaths/mic noise while Boxi is talking. Stacked with VAD start_secs this lands
+# total user-perceived barge-in latency around 0.5s, matching LiveKit Agents'
+# InterruptionOptions.min_duration production default (2026-06-30 web research, see HANDOFF).
+ENV_BARGE_IN_MIN_SECS = "CYBER_COMPANION_VOICE_BARGE_IN_MIN_SECS"
 
 DEFAULT_VOICE_MODE = "pipeline"
 DEFAULT_VOICE_OUTPUT_MODE = 0
 DEFAULT_EXPRESSION_TAGGER = True
+DEFAULT_BARGE_IN_ENABLED = True
+DEFAULT_BARGE_IN_MIN_SECS = 0.3
 
 
 def load_vad_stop_secs() -> float:
@@ -84,6 +94,14 @@ def _env_bool(name: str, default: bool) -> bool:
 
 def load_expression_tagger_enabled() -> bool:
     return _env_bool(ENV_EXPRESSION_TAGGER, DEFAULT_EXPRESSION_TAGGER)
+
+
+def load_barge_in_enabled() -> bool:
+    return _env_bool(ENV_BARGE_IN_ENABLED, DEFAULT_BARGE_IN_ENABLED)
+
+
+def load_barge_in_min_secs() -> float:
+    return _env_float(ENV_BARGE_IN_MIN_SECS, DEFAULT_BARGE_IN_MIN_SECS)
 
 
 def load_fish_normalize() -> bool | None:
