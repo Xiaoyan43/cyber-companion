@@ -12,6 +12,10 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
 
 # Intel-mac OpenBLAS can SIGFPE inside its multithreaded GEMM when numpy's LAPACK
 # (pulled in transitively by faster-whisper / VAD / audio resampling, and run from
@@ -219,7 +223,17 @@ async def _main_realtime() -> None:
     await runner.run()
 
 
-async def _main_pipeline() -> None:
+async def _main_pipeline(webrtc_connection: "SmallWebRTCConnection | None" = None) -> None:
+    """Assemble and run the STT->brain->tagger->TTS pipeline.
+
+    ``webrtc_connection=None`` (CLI dev path, ``python -m backend.realtime.run_voice``)
+    keeps the original ``LocalAudioTransport`` (backend talks to this machine's mic/
+    speaker directly). When ``pipeline_router.py`` calls this with a real
+    ``SmallWebRTCConnection`` (P0-OSS-4 phase 3 production path), the transport is
+    ``SmallWebRTCTransport`` instead — the browser captures/plays audio over WebRTC.
+    Everything from STT through TTS is unchanged between the two paths; only the
+    transport and the runner harness differ.
+    """
     _require_env("DEEPSEEK_API_KEY")
 
     stt_backend = _voice_backend(
@@ -235,12 +249,6 @@ async def _main_pipeline() -> None:
 
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.worker import PipelineParams, PipelineWorker
-    from pipecat.transports.local.audio import (
-        LocalAudioOutputTransport,
-        LocalAudioTransport,
-        LocalAudioTransportParams,
-    )
-    from pipecat.workers.runner import WorkerRunner
 
     from backend.app.memory.retrieval import tokenize
     from backend.app.memory.store import get_memory_store
@@ -248,12 +256,6 @@ async def _main_pipeline() -> None:
     from backend.realtime.companion_brain import CompanionBrain
     from backend.realtime.companion_brain_processor import CompanionBrainProcessor
     from backend.realtime.expression_tagger_processor import ExpressionTaggerProcessor
-    from backend.realtime.half_duplex_mute_processor import HalfDuplexMuteGate, HalfDuplexMuteProcessor
-    from backend.realtime.self_echo_filter import (
-        SelfEchoCaptureProcessor,
-        SelfEchoFilterProcessor,
-        SelfEchoGate,
-    )
     from backend.realtime.transcript_broadcaster import (
         boxi_transcript_tap,
         get_transcript_broadcaster,
@@ -263,95 +265,91 @@ async def _main_pipeline() -> None:
     from backend.realtime.voice_config import (
         ENV_ASR_END_WINDOW_MS,
         ENV_EXPRESSION_TAGGER,
-        ENV_HALF_DUPLEX,
         ENV_MAX_TOKENS,
         ENV_VAD_STOP_SECS,
         load_asr_end_window_ms,
         load_expression_tagger_enabled,
-        load_half_duplex_enabled,
-        load_self_echo_enabled,
-        load_self_echo_window_ms,
         load_vad_stop_secs,
         load_voice_max_tokens,
     )
 
     tokenize("预热")
 
-    # P0 audio-underrun fix: pipecat's LocalAudioOutputTransport opens its PyAudio output
-    # stream with NO explicit frames_per_buffer (transports/local/audio.py:155), so PortAudio's
-    # small default buffer underruns whenever the event loop stalls (VAD onnx / jieba / network)
-    # longer than that buffer — heard as crackle ("耳机没插好") on this low-spec Mac. The output
-    # write is blocking and depends on the loop feeding frames in time, so a generous ~200ms
-    # output buffer gives headroom against those stalls. Only the output leg is overridden.
-    class _BufferedLocalAudioOutputTransport(LocalAudioOutputTransport):
-        async def start(self, frame) -> None:  # type: ignore[override]
-            # Skip LocalAudioOutputTransport.start (it opens an unbuffered stream); run the
-            # grandparent BaseOutputTransport.start, then open our own buffered stream.
-            await super(LocalAudioOutputTransport, self).start(frame)
-            if self._out_stream:
-                return
-            self._sample_rate = self._params.audio_out_sample_rate or frame.audio_out_sample_rate
-            frames_per_buffer = int(self._sample_rate * 0.2)  # ~200ms output buffer
-            self._out_stream = self._py_audio.open(
-                format=self._py_audio.get_format_from_width(2),
-                channels=self._params.audio_out_channels,
-                rate=self._sample_rate,
-                output=True,
-                output_device_index=self._params.output_device_index,
-                frames_per_buffer=frames_per_buffer,
-            )
-            self._out_stream.start_stream()
-            await self.set_transport_ready(frame)
-
-    class _BufferedLocalAudioTransport(LocalAudioTransport):
-        def output(self):  # type: ignore[override]
-            if not self._output:
-                self._output = _BufferedLocalAudioOutputTransport(self._pyaudio, self._params)
-            return self._output
-
-    transport = _BufferedLocalAudioTransport(
-        LocalAudioTransportParams(
-            audio_in_enabled=True,
-            audio_out_enabled=True,
-        )
-    )
-
     stt = _build_stt(stt_backend)
     tts, output_sample_rate = _build_tts(tts_backend)
+
+    if webrtc_connection is not None:
+        from pipecat.transports.base_transport import TransportParams
+        from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
+
+        transport = SmallWebRTCTransport(
+            webrtc_connection=webrtc_connection,
+            params=TransportParams(
+                audio_in_enabled=True,
+                audio_out_enabled=True,
+                audio_in_sample_rate=INPUT_SAMPLE_RATE,
+                audio_out_sample_rate=output_sample_rate,
+            ),
+        )
+    else:
+        from pipecat.transports.local.audio import (
+            LocalAudioOutputTransport,
+            LocalAudioTransport,
+            LocalAudioTransportParams,
+        )
+
+        # P0 audio-underrun fix: pipecat's LocalAudioOutputTransport opens its PyAudio output
+        # stream with NO explicit frames_per_buffer (transports/local/audio.py:155), so
+        # PortAudio's small default buffer underruns whenever the event loop stalls (VAD onnx /
+        # jieba / network) longer than that buffer — heard as crackle ("耳机没插好") on this
+        # low-spec Mac. The output write is blocking and depends on the loop feeding frames in
+        # time, so a generous ~200ms output buffer gives headroom against those stalls. Only the
+        # output leg is overridden. WebRTC playback doesn't go through PyAudio, so this fix is
+        # local-transport-only.
+        class _BufferedLocalAudioOutputTransport(LocalAudioOutputTransport):
+            async def start(self, frame) -> None:  # type: ignore[override]
+                # Skip LocalAudioOutputTransport.start (it opens an unbuffered stream); run the
+                # grandparent BaseOutputTransport.start, then open our own buffered stream.
+                await super(LocalAudioOutputTransport, self).start(frame)
+                if self._out_stream:
+                    return
+                self._sample_rate = self._params.audio_out_sample_rate or frame.audio_out_sample_rate
+                frames_per_buffer = int(self._sample_rate * 0.2)  # ~200ms output buffer
+                self._out_stream = self._py_audio.open(
+                    format=self._py_audio.get_format_from_width(2),
+                    channels=self._params.audio_out_channels,
+                    rate=self._sample_rate,
+                    output=True,
+                    output_device_index=self._params.output_device_index,
+                    frames_per_buffer=frames_per_buffer,
+                )
+                self._out_stream.start_stream()
+                await self.set_transport_ready(frame)
+
+        class _BufferedLocalAudioTransport(LocalAudioTransport):
+            def output(self):  # type: ignore[override]
+                if not self._output:
+                    self._output = _BufferedLocalAudioOutputTransport(self._pyaudio, self._params)
+                return self._output
+
+        transport = _BufferedLocalAudioTransport(
+            LocalAudioTransportParams(
+                audio_in_enabled=True,
+                audio_out_enabled=True,
+            )
+        )
 
     voice_max_tokens = load_voice_max_tokens()
     vad_stop_secs = load_vad_stop_secs()
     asr_end_window_ms = load_asr_end_window_ms()
-    half_duplex = load_half_duplex_enabled()
     expression_tagger_enabled = load_expression_tagger_enabled()
-    # Self-echo backstop only makes sense alongside half-duplex (it patches the half-duplex
-    # resume-guard leak); skip it entirely in barge-in mode where AEC/headphones is the answer.
-    self_echo_enabled = half_duplex and load_self_echo_enabled()
-    echo_gate = SelfEchoGate(window_ms=load_self_echo_window_ms()) if self_echo_enabled else None
 
     store = get_memory_store()
     brain = CompanionBrain(store, max_output_tokens=voice_max_tokens)
     vad = SileroVADProcessor(stop_secs=vad_stop_secs)
     brain_processor = CompanionBrainProcessor(brain)
 
-    pipeline_steps: list[object] = [transport.input()]
-    if half_duplex:
-        mute_gate = HalfDuplexMuteGate(resume_guard_ms=asr_end_window_ms)
-        pipeline_steps.extend(
-            [
-                HalfDuplexMuteProcessor(mute_gate, role="input"),
-                vad,
-                stt,
-                HalfDuplexMuteProcessor(mute_gate, role="stt_out"),
-            ]
-        )
-    else:
-        pipeline_steps.extend([vad, stt])
-
-    # Self-echo filter sits BEFORE the user tap/brain so a suppressed echo never reaches the
-    # brain (no self-reply) nor the subtitle broadcaster.
-    if echo_gate is not None:
-        pipeline_steps.append(SelfEchoFilterProcessor(echo_gate))
+    pipeline_steps: list[object] = [transport.input(), vad, stt]
 
     transcript_broadcaster = get_transcript_broadcaster()
     pipeline_steps.extend(
@@ -361,10 +359,6 @@ async def _main_pipeline() -> None:
             boxi_transcript_tap(transcript_broadcaster),
         ]
     )
-    # Capture sits AFTER the Boxi tap (plain reply text, no Fish tags yet) and BEFORE the
-    # tagger so it records what Boxi actually says, for the filter above to match against.
-    if echo_gate is not None:
-        pipeline_steps.append(SelfEchoCaptureProcessor(echo_gate))
     # Expression tagger sits AFTER the Boxi transcript tap so subtitles read the plain reply
     # text (no Fish tags) and BEFORE tts so the synthesized audio gets the tags (P14 Phase 4).
     # Gated by CYBER_COMPANION_VOICE_EXPRESSION_TAGGER so we can A/B first-audio latency with the
@@ -382,41 +376,51 @@ async def _main_pipeline() -> None:
 
     pipeline = Pipeline(pipeline_steps)
 
-    worker = PipelineWorker(
-        pipeline,
-        params=PipelineParams(
-            enable_metrics=True,
-            enable_usage_metrics=True,
-            audio_in_sample_rate=INPUT_SAMPLE_RATE,
-            audio_out_sample_rate=output_sample_rate,
-        ),
-    )
-
-    runner = WorkerRunner(handle_sigint=False if sys.platform == "win32" else True)
-
     logger.info(
-        f"Voice pipeline ready (STT={stt_backend}, TTS={tts_backend}, "
-        f"half_duplex={'on' if half_duplex else 'off'}) — speak into the mic; "
-        + (
-            "external speakers OK (no barge-in while Boxi speaks). "
-            if half_duplex
-            else "use headphones to avoid echo / enable barge-in. "
-        )
-        + "Ctrl+C to exit."
+        f"Voice pipeline ready (STT={stt_backend}, TTS={tts_backend}) — speak into the mic; "
+        "browser/device AEC handles speaker echo. Ctrl+C to exit."
     )
     logger.info(
         "Voice tuning: "
         f"{ENV_VAD_STOP_SECS}={vad_stop_secs}, "
         f"{ENV_ASR_END_WINDOW_MS}={asr_end_window_ms}, "
         f"{ENV_MAX_TOKENS}={voice_max_tokens}, "
-        f"{ENV_HALF_DUPLEX}={'on' if half_duplex else 'off'}, "
-        f"{ENV_EXPRESSION_TAGGER}={'on' if expression_tagger_enabled else 'off'}, "
-        f"self_echo={'on' if self_echo_enabled else 'off'}; "
+        f"{ENV_EXPRESSION_TAGGER}={'on' if expression_tagger_enabled else 'off'}; "
         "smart_turn=off (no LLMUserAggregator in pipeline — VAD-only endpointing)"
     )
 
-    await runner.add_workers(worker)
-    await runner.run()
+    if webrtc_connection is not None:
+        # WebRTC connections are per-client; PipelineTask/PipelineRunner (not
+        # PipelineWorker/WorkerRunner) is the pattern pipecat's own SmallWebRTC runner uses, and
+        # the one already verified end-to-end with this exact processor chain in
+        # backend/realtime/spike_webrtc_pipeline.py (P0-OSS-4 phase 2, docs/TRANSPORT_SPIKE_RESULTS.md).
+        from pipecat.pipeline.runner import PipelineRunner
+        from pipecat.pipeline.task import PipelineTask
+
+        task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
+
+        @transport.event_handler("on_client_disconnected")
+        async def _on_client_disconnected(_transport, _client) -> None:
+            logger.info("Voice pipeline: WebRTC client disconnected")
+            await task.cancel()
+
+        runner = PipelineRunner(handle_sigint=False)
+        await runner.run(task)
+    else:
+        from pipecat.workers.runner import WorkerRunner
+
+        worker = PipelineWorker(
+            pipeline,
+            params=PipelineParams(
+                enable_metrics=True,
+                enable_usage_metrics=True,
+                audio_in_sample_rate=INPUT_SAMPLE_RATE,
+                audio_out_sample_rate=output_sample_rate,
+            ),
+        )
+        runner = WorkerRunner(handle_sigint=False if sys.platform == "win32" else True)
+        await runner.add_workers(worker)
+        await runner.run()
 
 
 async def main() -> None:

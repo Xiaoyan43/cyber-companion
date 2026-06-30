@@ -28,36 +28,24 @@ def _env_int(name: str, default: int) -> int:
 
 # Turn-finalize (conservative defaults — dial back via env if endpointing clips).
 DEFAULT_VAD_STOP_SECS = 0.4
-# Doubao BigASR server-side endpointing silence window (also reused as half-duplex
-# resume_guard via run_voice). 300ms cut users off mid-sentence on a normal breath
-# (P14 Phase 3, user-confirmed); 800ms validated real-machine 2026-06-23. Note: pure
-# silence window has a ceiling — a long thinking pause still trips it; semantic
-# endpointing (Doubao AIVAD, on the RTC-AIGC product, not BigASR) is the real fix,
-# deferred to a future ASR-selection decision.
+# Doubao BigASR server-side endpointing silence window. 300ms cut users off mid-sentence
+# on a normal breath (P14 Phase 3, user-confirmed); 800ms validated real-machine
+# 2026-06-23. Note: pure silence window has a ceiling — a long thinking pause still trips
+# it; semantic endpointing (Doubao AIVAD, on the RTC-AIGC product, not BigASR) is the
+# real fix, deferred to a future ASR-selection decision.
 DEFAULT_ASR_END_WINDOW_MS = 800
 
 # Spoken reply cap (room for ~1–2 sentences + signals trailer).
 DEFAULT_VOICE_MAX_TOKENS = 200
 
-# Self-echo backstop: after Boxi stops speaking, her buffered tail can leak past the
-# half-duplex resume guard (output buffer + ASR end window stack beyond it) and get
-# transcribed as a fake user turn. Drop user finals that match the tail of Boxi's last
-# reply within this window after bot-stopped. Generous enough to cover buffer drain +
-# ASR finalization (~800ms), tight enough to not touch a genuine later user turn.
-DEFAULT_SELF_ECHO_WINDOW_MS = 4000
-
 ENV_VAD_STOP_SECS = "CYBER_COMPANION_VOICE_VAD_STOP_SECS"
 ENV_ASR_END_WINDOW_MS = "CYBER_COMPANION_VOICE_ASR_END_WINDOW_MS"
 ENV_MAX_TOKENS = "CYBER_COMPANION_VOICE_MAX_TOKENS"
-ENV_HALF_DUPLEX = "CYBER_COMPANION_VOICE_HALF_DUPLEX"
 ENV_VOICE_MODE = "CYBER_COMPANION_VOICE_MODE"
 ENV_VOICE_OUTPUT_MODE = "CYBER_COMPANION_VOICE_OUTPUT_MODE"
 # Kill-switch for the P14 Phase 4 two-stage expression tagger (set to 0/off to bypass it and
 # send the brain's plain text straight to TTS — used to A/B first-audio latency tagger on vs off).
 ENV_EXPRESSION_TAGGER = "CYBER_COMPANION_VOICE_EXPRESSION_TAGGER"
-# Self-echo backstop (only active alongside half-duplex). Off-switch + window override.
-ENV_SELF_ECHO_FILTER = "CYBER_COMPANION_VOICE_SELF_ECHO_FILTER"
-ENV_SELF_ECHO_WINDOW_MS = "CYBER_COMPANION_VOICE_SELF_ECHO_WINDOW_MS"
 # Fish Audio Pipecat TTS tuning. Empty means "do not pass the setting", preserving the
 # current Pipecat/Fish default for the baseline A/B group.
 ENV_FISH_NORMALIZE = "CYBER_COMPANION_VOICE_FISH_NORMALIZE"
@@ -66,11 +54,9 @@ ENV_FISH_TOP_P = "CYBER_COMPANION_VOICE_FISH_TOP_P"
 ENV_FISH_PROSODY_SPEED = "CYBER_COMPANION_VOICE_FISH_PROSODY_SPEED"
 ENV_FISH_PROSODY_VOLUME = "CYBER_COMPANION_VOICE_FISH_PROSODY_VOLUME"
 
-DEFAULT_HALF_DUPLEX = True
 DEFAULT_VOICE_MODE = "pipeline"
 DEFAULT_VOICE_OUTPUT_MODE = 0
 DEFAULT_EXPRESSION_TAGGER = True
-DEFAULT_SELF_ECHO_FILTER = True
 
 
 def load_vad_stop_secs() -> float:
@@ -96,20 +82,8 @@ def _env_bool(name: str, default: bool) -> bool:
     raise ValueError(f"{name} must be one of: on, off, true, false, 1, 0")
 
 
-def load_half_duplex_enabled() -> bool:
-    return _env_bool(ENV_HALF_DUPLEX, DEFAULT_HALF_DUPLEX)
-
-
 def load_expression_tagger_enabled() -> bool:
     return _env_bool(ENV_EXPRESSION_TAGGER, DEFAULT_EXPRESSION_TAGGER)
-
-
-def load_self_echo_enabled() -> bool:
-    return _env_bool(ENV_SELF_ECHO_FILTER, DEFAULT_SELF_ECHO_FILTER)
-
-
-def load_self_echo_window_ms() -> int:
-    return _env_int(ENV_SELF_ECHO_WINDOW_MS, DEFAULT_SELF_ECHO_WINDOW_MS)
 
 
 def load_fish_normalize() -> bool | None:

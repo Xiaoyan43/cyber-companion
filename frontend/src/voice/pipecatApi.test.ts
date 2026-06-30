@@ -22,23 +22,40 @@ describe("Pipecat voice API", () => {
     });
   });
 
-  it("uses POST for start and stop", async () => {
+  it("posts the SDP offer and resolves the SDP answer", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ status: "started" }),
+      json: async () => ({ sdp: "v=0 answer...", type: "answer", pc_id: "abc123" }),
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await startPipecat();
+    const offer = { sdp: "v=0 offer...", type: "offer" };
+    await expect(startPipecat(offer)).resolves.toEqual({
+      sdp: "v=0 answer...",
+      type: "answer",
+      pc_id: "abc123",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/realtime/start"),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(offer),
+      },
+    );
+  });
+
+  it("uses POST for stop", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: "stopped" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
     await stopPipecat();
 
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
-      expect.stringContaining("/realtime/start"),
-      { method: "POST" },
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
+    expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/realtime/stop"),
       { method: "POST" },
     );
@@ -47,6 +64,8 @@ describe("Pipecat voice API", () => {
   it("rejects non-success responses", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
 
-    await expect(startPipecat()).rejects.toThrow("Soul voice request failed (503)");
+    await expect(startPipecat({ sdp: "v=0", type: "offer" })).rejects.toThrow(
+      "Soul voice request failed (503)",
+    );
   });
 });

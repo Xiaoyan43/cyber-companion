@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchPipecatStatus, startPipecat, stopPipecat } from "./pipecatApi";
+import { fetchPipecatStatus, stopPipecat } from "./pipecatApi";
 import { useVoiceTranscript } from "./useVoiceTranscript";
+import { useWebRtcVoiceConnection } from "./useWebRtcVoiceConnection";
 
 export type PipecatVoicePhase =
   | "checking"
@@ -18,6 +19,7 @@ export function usePipecatVoice() {
   const [error, setError] = useState<string | null>(null);
   const isRunning = phase === "running";
   const transcript = useVoiceTranscript(isRunning, apiBaseUrl);
+  const { connect, disconnect } = useWebRtcVoiceConnection();
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -27,6 +29,9 @@ export function usePipecatVoice() {
         setPhase("running");
         return;
       }
+      // Backend is not running (stopped/errored, possibly without us calling
+      // stop() ourselves, e.g. a pipeline crash) — release the local mic/pc.
+      disconnect();
       if (status.last_error) {
         setError(status.last_error);
         setPhase("error");
@@ -35,10 +40,11 @@ export function usePipecatVoice() {
       setError(null);
       setPhase("stopped");
     } catch (statusError: unknown) {
+      disconnect();
       setError(statusError instanceof Error ? statusError.message : "Soul voice unavailable");
       setPhase("error");
     }
-  }, []);
+  }, [disconnect]);
 
   useEffect(() => {
     void refreshStatus();
@@ -58,17 +64,19 @@ export function usePipecatVoice() {
     setError(null);
     setPhase("starting");
     try {
-      await startPipecat();
+      await connect();
       await refreshStatus();
     } catch (startError: unknown) {
+      disconnect();
       setError(startError instanceof Error ? startError.message : "Soul voice failed to start");
       setPhase("error");
     }
-  }, [refreshStatus]);
+  }, [connect, disconnect, refreshStatus]);
 
   const stop = useCallback(async () => {
     setError(null);
     setPhase("stopping");
+    disconnect();
     try {
       await stopPipecat();
       setPhase("stopped");
@@ -76,7 +84,7 @@ export function usePipecatVoice() {
       setError(stopError instanceof Error ? stopError.message : "Soul voice failed to stop");
       setPhase("error");
     }
-  }, []);
+  }, [disconnect]);
 
   return {
     phase,

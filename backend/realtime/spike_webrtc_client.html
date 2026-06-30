@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<!--
+  P0-OSS-4 transport spike client — standalone, not part of frontend/src/.
+
+  Talks directly to the official pipecat dev runner's /api/offer endpoint
+  (backend/realtime/spike_webrtc_loopback.py, default http://localhost:7860).
+  No build step: open this file directly in a browser (file:// works because
+  the runner's CORS is "allow_origins=*"), or serve it with any static server.
+
+  What it does:
+    1. getUserMedia(audio: {echoCancellation: true}) and offers that track
+       over a real RTCPeerConnection to the spike backend.
+    2. Plays back whatever audio the backend sends, which is the same audio
+       looped straight through pipecat (mic -> SmallWebRTCTransport ->
+       speaker, no STT/brain/TTS) — listen for echo and round-trip feel.
+    3. Runs a ping/pong over the WebRTC data channel every second, timed with
+       performance.now(). That RTT is the precise, automatic, end-to-end
+       number — read it directly off this page, no guessing needed.
+-->
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>P0-OSS-4 WebRTC loopback spike</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+  button { font-size: 16px; padding: 8px 16px; margin-right: 8px; }
+  #status { font-weight: bold; }
+  #rtt { font-size: 32px; margin: 16px 0; }
+  #rtt-stats { color: #555; }
+  .warn { color: #b00; }
+</style>
+</head>
+<body>
+  <h1>P0-OSS-4 Transport Spike — mic → SmallWebRTCTransport → speaker</h1>
+  <p>后端默认 <code>http://localhost:7860</code>，先启动 <code>spike_webrtc_loopback.py</code> 再点 Connect。</p>
+  <button id="connectBtn">Connect</button>
+  <button id="disconnectBtn" disabled>Disconnect</button>
+  <p>状态：<span id="status">未连接</span></p>
+  <p>数据通道往返延迟（精细量化层，自动测量，每秒一次）：</p>
+  <div id="rtt">— ms</div>
+  <div id="rtt-stats">n=0</div>
+  <p>听感测试（人工判断层）：对着麦克风说话/拍手，听外接音箱回放——感觉延迟大不大？回声有没有被压住？</p>
+  <audio id="remoteAudio" autoplay></audio>
+  <p class="warn" id="error"></p>
+
+<script>
+const BACKEND_URL = "http://localhost:7860/api/offer";
+
+let pc = null;
+let dataChannel = null;
+let localStream = null;
+const rttSamples = [];
+
+const statusEl = document.getElementById("status");
+const rttEl = document.getElementById("rtt");
+const rttStatsEl = document.getElementById("rtt-stats");
+const errorEl = document.getElementById("error");
+const connectBtn = document.getElementById("connectBtn");
+const disconnectBtn = document.getElementById("disconnectBtn");
+const remoteAudio = document.getElementById("remoteAudio");
+
+function setStatus(text) {
+  statusEl.textContent = text;
+}
+
+function reportRtt(rttMs) {
+  rttSamples.push(rttMs);
+  if (rttSamples.length > 200) rttSamples.shift();
+  const avg = rttSamples.reduce((a, b) => a + b, 0) / rttSamples.length;
+  const min = Math.min(...rttSamples);
+  const max = Math.max(...rttSamples);
+  rttEl.textContent = `${rttMs.toFixed(1)} ms`;
+  rttStatsEl.textContent = `n=${rttSamples.length} avg=${avg.toFixed(1)}ms min=${min.toFixed(1)}ms max=${max.toFixed(1)}ms`;
+}
+
+let pingTimer = null;
+
+function startPinging() {
+  pingTimer = setInterval(() => {
+    if (dataChannel && dataChannel.readyState === "open") {
+      dataChannel.send(JSON.stringify({ type: "ping", t0: performance.now() }));
+    }
+  }, 1000);
+}
+
+function stopPinging() {
+  if (pingTimer) {
+    clearInterval(pingTimer);
+    pingTimer = null;
+  }
+}
+
+async function connect() {
+  errorEl.textContent = "";
+  setStatus("请求麦克风权限...");
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: false },
+    });
+  } catch (err) {
+    errorEl.textContent = `getUserMedia 失败: ${err}`;
+    setStatus("未连接");
+    return;
+  }
+
+  pc = new RTCPeerConnection();
+  localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+
+  dataChannel = pc.createDataChannel("spike");
+  dataChannel.onopen = () => {
+    setStatus("已连接（数据通道已开）");
+    startPinging();
+  };
+  dataChannel.onmessage = (event) => {
+    let msg;
+    try {
+      msg = JSON.parse(event.data);
+    } catch {
+      return;
+    }
+    if (msg.type === "pong" && typeof msg.t0 === "number") {
+      reportRtt(performance.now() - msg.t0);
+    }
+  };
+
+  pc.ontrack = (event) => {
+    remoteAudio.srcObject = event.streams[0];
+  };
+
+  pc.onconnectionstatechange = () => {
+    setStatus(`连接状态: ${pc.connectionState}`);
+    if (pc.connectionState === "failed" || pc.connectionState === "closed") {
+      cleanup();
+    }
+  };
+
+  setStatus("建立连接中...");
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  // Non-trickle: wait for ICE gathering to finish so localDescription.sdp
+  // actually contains candidates before we hand it to the backend.
+  if (pc.iceGatheringState !== "complete") {
+    await new Promise((resolve) => {
+      pc.addEventListener("icegatheringstatechange", () => {
+        if (pc.iceGatheringState === "complete") resolve();
+      });
+    });
+  }
+
+  let response;
+  try {
+    response = await fetch(BACKEND_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sdp: pc.localDescription.sdp, type: pc.localDescription.type }),
+    });
+  } catch (err) {
+    errorEl.textContent = `POST /api/offer 失败（后端没启动？）: ${err}`;
+    setStatus("未连接");
+    cleanup();
+    return;
+  }
+
+  if (!response.ok) {
+    errorEl.textContent = `后端返回 ${response.status}`;
+    setStatus("未连接");
+    cleanup();
+    return;
+  }
+
+  const answer = await response.json();
+  await pc.setRemoteDescription({ sdp: answer.sdp, type: answer.type });
+
+  connectBtn.disabled = true;
+  disconnectBtn.disabled = false;
+}
+
+function cleanup() {
+  stopPinging();
+  if (localStream) {
+    localStream.getTracks().forEach((t) => t.stop());
+    localStream = null;
+  }
+  if (pc) {
+    pc.close();
+    pc = null;
+  }
+  dataChannel = null;
+  connectBtn.disabled = false;
+  disconnectBtn.disabled = true;
+  setStatus("未连接");
+}
+
+connectBtn.addEventListener("click", connect);
+disconnectBtn.addEventListener("click", cleanup);
+</script>
+</body>
+</html>
