@@ -93,7 +93,29 @@ class CompanionBrain:
         """Realtime-only terseness lever — does not touch soul persona."""
         return [*messages, ChatMessage(role="system", content=VOICE_MODE_INSTRUCTION)]
 
-    async def stream_turn(self, user_text: str) -> AsyncIterator[BrainStreamEvent]:
+    @staticmethod
+    def append_interruption_hint(
+        messages: list[ChatMessage], interrupted_partial: str
+    ) -> list[ChatMessage]:
+        """Weak hint only — Boxi decides freely whether/how to acknowledge being cut off.
+
+        ``interrupted_partial`` is whatever text had actually streamed out (visible, post
+        signal-filter) before the barge-in landed — not a claim about exact TTS playback
+        position, just "this is roughly what you were saying."
+        """
+        capped = interrupted_partial.strip()
+        if len(capped) > 400:
+            capped = capped[:400] + "…"
+        hint = (
+            "提示（仅供参考，不强制体现）：你上一句被用户打断，当时正在说："
+            f"「{capped}」。要不要在这次回复里提一下、怎么提，由你自己看当下心情和关系状态决定——"
+            "可以接着说完，可以完全不提，也可以随口吐槽一句，不要每次都刻意强调。"
+        )
+        return [*messages, ChatMessage(role="system", content=hint)]
+
+    async def stream_turn(
+        self, user_text: str, *, interrupted_partial: str | None = None
+    ) -> AsyncIterator[BrainStreamEvent]:
         """One finalized utterance — mirrors ``/chat/complete`` + streaming deltas."""
         decision = self.decide(user_text)
         final_decision = decision.decision
@@ -144,6 +166,10 @@ class CompanionBrain:
                     behavior=decision,
                 )
                 voice_messages = self.append_voice_mode_instruction(built.messages)
+                if interrupted_partial:
+                    voice_messages = self.append_interruption_hint(
+                        voice_messages, interrupted_partial
+                    )
                 max_tokens = (
                     self._max_output_tokens
                     if self._max_output_tokens is not None

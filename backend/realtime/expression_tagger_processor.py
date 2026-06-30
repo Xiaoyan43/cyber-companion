@@ -95,6 +95,10 @@ class ExpressionTaggerProcessor(FrameProcessor):
         self._queue: asyncio.Queue | None = None
         self._drain_task: asyncio.Task | None = None
         self._inflight: list[asyncio.Task] = []
+        # Diagnostics: how many sentences this turn already pushed downstream (reset every
+        # turn) — logged on interruption so a real-machine run can tell how much of a reply
+        # had already left this processor before the barge-in landed.
+        self._pushed_count = 0
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
@@ -146,6 +150,7 @@ class ExpressionTaggerProcessor(FrameProcessor):
         self._collecting = True
         self._first_content_emitted = False
         self._inflight = []
+        self._pushed_count = 0
         self._queue = asyncio.Queue()
         self._drain_task = asyncio.create_task(self._drain(self._queue))
         try:
@@ -225,33 +230,63 @@ class ExpressionTaggerProcessor(FrameProcessor):
             text_frame = AggregatedTextFrame(tagged, AggregationType.SENTENCE, raw_text=sentence)
             text_frame.includes_inter_frame_spaces = True
             await self.push_frame(text_frame)
+            self._pushed_count += 1
 
     async def _finish_turn(self) -> None:
-        """Signal end-of-turn and wait for the drainer to flush every queued sentence."""
+        """Signal end-of-turn and wait for the drainer to flush every queued sentence.
+
+        Pipecat's own framework reacts to an InterruptionFrame by force-cancelling whatever
+        non-system frame is "in flight" — i.e. this exact coroutine — with a 1s grace
+        period; if that times out, this coroutine can still be unwinding (inside the
+        ``except CancelledError`` below) *after* a brand new turn has already started via
+        ``_begin_turn()``. Without the identity check, its cleanup would null out the new
+        turn's queue/drain_task, silently dropping every sentence scheduled for that new
+        turn. Capturing the objects up front and only clearing ``self.*`` if nothing
+        replaced them since closes that race.
+        """
         if self._queue is None or self._drain_task is None:
             return
-        self._queue.put_nowait(_DRAIN_SENTINEL)
+        queue, drain_task = self._queue, self._drain_task
+        queue.put_nowait(_DRAIN_SENTINEL)
         try:
-            await self._drain_task
+            await drain_task
         except asyncio.CancelledError:  # pragma: no cover - only if aborted concurrently
             pass
-        self._queue = None
-        self._drain_task = None
-        self._inflight = []
+        if self._queue is queue:
+            self._queue = None
+        if self._drain_task is drain_task:
+            self._drain_task = None
+            self._inflight = []
 
     async def _abort_turn(self) -> None:
-        """Cancel the drainer + all in-flight tagger Tasks and drop any partial sentence."""
+        """Cancel the drainer + all in-flight tagger Tasks and drop any partial sentence.
+
+        ``self._collecting`` is NOT the right gate for "was there anything to abort" — it
+        flips False the instant ``LLMFullResponseEndFrame`` arrives, before ``_finish_turn``
+        even starts draining the queued tail. Checking ``self._queue is not None`` instead
+        correctly covers both "still streaming in" and "still flushing the queued tail".
+        """
+        if self._queue is not None:
+            logger.info(
+                f"✋ interrupted mid-turn — {self._pushed_count} sentence(s) already pushed "
+                f"downstream before this barge-in landed"
+            )
         self._turn_id += 1  # bump first so any push in flight sees the stale turn_id and drops
         self._buffer = ""
         self._collecting = False
         for task in self._inflight:
             task.cancel()
-        if self._drain_task is not None:
-            self._drain_task.cancel()
+        queue, drain_task = self._queue, self._drain_task
+        if drain_task is not None:
+            drain_task.cancel()
             try:
-                await self._drain_task
+                await drain_task
             except asyncio.CancelledError:
                 pass
-        self._queue = None
-        self._drain_task = None
-        self._inflight = []
+        # Same race as _finish_turn: only clear if a newer turn hasn't already replaced
+        # this state while we were awaiting the cancelled drain task above.
+        if self._queue is queue:
+            self._queue = None
+        if self._drain_task is drain_task:
+            self._drain_task = None
+            self._inflight = []

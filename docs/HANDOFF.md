@@ -1,8 +1,28 @@
-# HANDOFF — 上下文交接（2026-06-30，第八十七轮 · 打断/barge-in P0+P1 已实现，真机验证 PASS）
+# HANDOFF — 上下文交接（2026-07-01，第八十八轮 · 打断自知性已完成；"打断有时不生效"根因已查明但修复方案已撤销，待重新设计）
 
 > 本文件每次「瘦身交接」/「工作流交接」时整体覆盖更新。新 session 先读这一份，不要回放旧 SESSION_LOG。
 
-> **🟢 2026-06-30 第八十七轮（最新，打断/barge-in：P0 spike + P1 最小实现，Claude Code 直接实施，729→731 测试，已真机验证 PASS）**：
+> **🟢 2026-07-01 第八十八轮（最新，打断自知性 P0 完成 + 真机验证 PASS；打断/被打断"真实感"两件事均已开工，Claude Code 直接实施）**：
+> 1. **背景**：用户在第八十七轮（barge-in 机械层）基础上，进一步要求"打断要有真人对话的真实感"——拆成两块：①Boxi 被打断后要"自知"（弱提示，人设自己选择性提起，不强制每次抱怨）；②Boxi 主动打断用户（用户啰嗦/吵架/闹脾气等场景，目的同样是真实感，不限定具体触发条件）。`/architect` 拆解后用户拍板：①直接做，②留到新 session 单独设计（涉及受限层 `behavior/`，且需要接入现有情绪内核 `tone.py`/`mood_state`/`relationship_state` 而不是新写一套判断逻辑）。
+> 2. **打断自知性（P0）已完成，已真机验证 PASS**：
+>    - `backend/realtime/companion_brain_processor.py` 新增 `_last_reply_text`（每轮持续更新，不管这轮是正常说完还是被打断）+ `_pending_interruption_text`（只在真正收到 `InterruptionFrame` 时被赋值，下一轮消费一次后清空）。
+>    - `backend/realtime/companion_brain.py` 新增 `CompanionBrain.append_interruption_hint` 静态方法 + `stream_turn(..., interrupted_partial=...)` 可选参数——弱提示文案明确写"仅供参考不强制体现，可以完全不提"，超长自动截断（400 字符）。
+>    - **设计要点**：不追求 TTS 真实播放位置的字级精度，`interrupted_partial` 只是"已经流出来的可见文本"的近似——这个近似度跟项目"句子粒度够用"的既有判断一致。
+>    - 新增 `backend/tests/test_companion_brain_processor.py`（2 个用例，Pipecat 官方 `run_test` harness）+ `test_companion_brain.py` 补充 4 个用例。
+>    - **真机验证 PASS**：用户连续打断 Boxi 多次，日志确认她至少一次很自然地提到"结果就被你一句'姐妹'打断了"——证明弱提示机制确实生效；其余多数轮次她选择不提，符合"弱提示、不强制"的设计目标。
+> 3. **副产物：发现并诊断清楚了"打断有时不生效"的真实架构根因，但今晚的修复方案已撤销，问题本身未解决**——详细过程：
+>    - 真机测试中用户报告"Boxi 偶尔会无视打断，把当前生成的完整内容说完才回应"。用确定性复现脚本（真实 `ExpressionTaggerProcessor` + 可控延迟的假标签器，不需要真实麦克风）坐实根因：`_drain()` 并发预贴标 + 顺序释放的设计完全没有"播放节奏"控制——标签一旦打完就立刻全部 `push_frame` 给下游 TTS，3 句话的回复在标签打完后几毫秒内全部冲进 TTS 队列，远早于打断信号能到达的时间点，`InterruptionFrame` 到达时已经没有东西可拦。
+>    - **第一次修复尝试（已撤销）**：给 `_drain()` 加了"按文本长度估算朗读时长、到点才推下一句"的节流（`backend/realtime/voice_config.py` 新增 `ENV_TAGGER_PACE_*`）。复现脚本验证有效（打断时只有该播的第 1 句已下游，不再是全部 3 句）。
+>    - **真机测试暴露这个修复方案本身有更严重的副作用**：节流人为制造的句间静默缺口，撞上了 Pipecat 输出 transport 的 `BOT_VAD_STOP_FALLBACK_SECS=3`（源码确认，3 秒没收到新音频帧就判定"bot 说完了"）——`BargeInProcessor` 因此在缺口期间误判 `bot_speaking=False`，导致打断检测彻底失灵（用户开口说话不被识别为打断，原句继续按节流计划播完，跟没发生过打断一样），且伴随 ASR 录音不完整。用户原话："这次的故障很严重"。**结论：靠估算时间睡眠做节流，在"估太短→泄漏（原 bug）"和"估太长→静默缺口→打断检测失灵（新 bug，更隐蔽更严重）"之间没有安全中间值，因为这一层根本拿不到"音频真的播完了"这个真实信号。**
+>    - **已撤销节流方案**，`voice_config.py`/`run_voice.py`/`test_voice_config.py` 已恢复到改动前的逐字节状态（git diff 为零）。**保留了两个独立、正确、无副作用的小修复**（不依赖节流）：①`ExpressionTaggerProcessor._abort_turn` 诊断日志条件 bug 修复（原条件 `self._collecting` 在该报警的场景下恒为 False，改成 `self._queue is not None`）；②`_finish_turn`/`_abort_turn` 的状态竞态防护（身份比对，防止上一轮没收尾干净的清理代码误清空新一轮的 `_queue`/`_drain_task`，否则新一轮所有句子会被 `_schedule()` 静默丢弃）——这个竞态是节流改动放大出来的窗口，但防护本身是通用正确性修复，不依赖节流，已用专门构造的时序回归测试坐实（`test_finish_turn_does_not_clobber_a_newer_turn_started_during_its_own_unwind`/`test_abort_turn_does_not_clobber_a_newer_turn_started_during_its_own_unwind`）。
+>    - **回退后用复现脚本确认**：行为与撤销前完全一致（3 句话仍会抢跑下游），**没有比节流修复之前更糟**，原始 bug 回归但不是新故障。
+> 4. **"打断有时不生效"这个原始 bug 仍未解决，下一步需要的方向**：不能再用估算时间睡眠这条路——需要让输出层/TTS 真正回传"这句话播完了"的信号（真实信号，不是估算），这需要跨层加新的信号链路，diff 会比这次大，需要专门 `/architect` 一轮，不要在不熟悉这层时再仓促打补丁。
+> 5. **smart-turn 调研（本轮讨论，未开工）**：用户问"为什么现在没有 smart-turn，装上变化大不大"。结论：①smart-turn 解决的是"用户说完了没"（端点检测），跟打断/被打断是不同维度的问题；②现有架构没装的原因是 `CompanionBrainProcessor` 绕开了 Pipecat 标准 `LLMUserAggregator`，而 smart-turn 设计上要挂在这个标准组件上；③模型本身轻量（8MB，CPU 上 10-100ms），硬件不是瓶颈，**集成工作量才是成本**——要么把 `CompanionBrainProcessor` 改造接标准 aggregator（动核心管线的大手术），要么绕开标准接口自己搭信号桥接（工作量小一些但仍是新架构）。**建议：值得做，但应该单独立项专门评估，不要顺手装**（今晚已经体会到这一层改动多容易引发连锁副作用）。
+> 6. **P1（Boxi 主动打断用户）仍未开工**，留给新 session 单独 `/architect`——已确认方向：触发判断接入现有情绪内核（`tone.py`/`mood_state`/`relationship_state`），不单独新写一套判断逻辑；触发场景不限于"啰嗦"，可以是吵架/闹脾气/任何情绪驱动的场景。
+> 7. **验证**：`PYTHON_BIN=.venv/bin/python npm run check` 全程保持绿——P0 完成时 **737 passed**（731+6），节流修复时一度到 **741 passed**，撤销节流后回落到 **739 passed**（保留了 2 个状态竞态回归测试）。最终状态 tsc 全绿。
+> 8. **本轮改动文件**（最终状态，git diff）：`backend/realtime/companion_brain.py`、`backend/realtime/companion_brain_processor.py`、`backend/realtime/expression_tagger_processor.py`（改）+ `backend/tests/test_companion_brain.py`、`backend/tests/test_expression_tagger_processor.py`（改）+ `backend/tests/test_companion_brain_processor.py`（新增）。`voice_config.py`/`run_voice.py`/`test_voice_config.py` 改了又撤，最终零 diff。**用户尚未对这批改动做 git commit，下一 session 开工前先确认是否需要先 commit 这批（P0 自知性 + 两个小修复）。**
+
+> **🟢 2026-06-30 第八十七轮（打断/barge-in：P0 spike + P1 最小实现，Claude Code 直接实施，729→731 测试，已真机验证 PASS）**：
 > 1. **背景**：第八十六轮删除两个回声 hack 后，HANDOFF 把"打断/barge-in 独立管线重构"列为下一步候选
 >    之一——管线此前完全没有"用户开始说话→取消 Boxi 当前 TTS 播放"的信号链，用户用 `/architect`
 >    选中这个任务开工。

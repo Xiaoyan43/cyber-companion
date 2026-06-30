@@ -30,6 +30,11 @@ class CompanionBrainProcessor(FrameProcessor):
         super().__init__()
         self._brain = brain
         self._turn_task: asyncio.Task | None = None
+        # Whatever Boxi most recently said/was saying — overwritten every turn, regardless
+        # of whether that turn finished naturally or got cut off. Only promoted to
+        # `_pending_interruption_text` when a barge-in actually lands.
+        self._last_reply_text = ""
+        self._pending_interruption_text: str | None = None
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
@@ -38,6 +43,8 @@ class CompanionBrainProcessor(FrameProcessor):
             if self._turn_task:
                 await self.cancel_task(self._turn_task)
                 self._turn_task = None
+            if self._last_reply_text.strip():
+                self._pending_interruption_text = self._last_reply_text
             await self.push_frame(frame, direction)
             return
 
@@ -61,21 +68,31 @@ class CompanionBrainProcessor(FrameProcessor):
         turn_started = time.monotonic()
         first_delta_at: float | None = None
         truncated = False
+        spoken_chunks: list[str] = []
+        interrupted_partial = self._pending_interruption_text
+        self._pending_interruption_text = None
+        if interrupted_partial:
+            logger.info(f"🔪 interruption hint carried into this turn: {interrupted_partial!r}")
         await self.push_frame(LLMFullResponseStartFrame())
         try:
-            async for event in self._brain.stream_turn(user_text):
+            async for event in self._brain.stream_turn(
+                user_text, interrupted_partial=interrupted_partial
+            ):
                 if event[0] == "delta":
                     chunk = event[1]
                     if not chunk:
                         continue
                     if first_delta_at is None:
                         first_delta_at = time.monotonic()
+                    spoken_chunks.append(chunk)
+                    self._last_reply_text = "".join(spoken_chunks)
                     text_frame = LLMTextFrame(chunk)
                     text_frame.includes_inter_frame_spaces = True
                     await self.push_frame(text_frame)
                 else:
                     outcome = event[1]
                     truncated = outcome.truncated
+                    self._last_reply_text = outcome.raw_reply
                     self._log_turn_latency(
                         user_text=user_text,
                         outcome=outcome,

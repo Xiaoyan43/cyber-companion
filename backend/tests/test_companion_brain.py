@@ -143,3 +143,74 @@ def test_stream_turn_not_truncated_when_under_token_cap() -> None:
     outcome = _run_turn_with_usage(output_tokens=4, max_output_tokens=5)
     assert outcome.called_llm is True
     assert outcome.truncated is False
+
+
+def test_append_interruption_hint_is_weak_and_optional() -> None:
+    from backend.app.providers.types import ChatMessage
+
+    messages = [ChatMessage(role="user", content="你好")]
+    augmented = CompanionBrain.append_interruption_hint(messages, "先睡，乖")
+
+    assert augmented[-1].role == "system"
+    assert "先睡，乖" in augmented[-1].content
+    # Weak hint per product decision: never a forced "you must acknowledge" instruction.
+    assert "不强制" in augmented[-1].content
+    assert "可以完全不提" in augmented[-1].content
+
+
+def test_append_interruption_hint_caps_overlong_partial() -> None:
+    from backend.app.providers.types import ChatMessage
+
+    augmented = CompanionBrain.append_interruption_hint([], "啊" * 1000)
+
+    assert len(augmented[-1].content) < 1000
+
+
+def _run_turn_capturing_messages(user_text: str, **stream_kwargs):
+    reset_memory_store()
+    reset_provider_router()
+    store = get_memory_store()
+    brain = CompanionBrain(store)
+
+    captured_requests: list = []
+
+    class _EchoProvider:
+        def status(self):
+            from backend.app.providers.types import ProviderStatus
+
+            return ProviderStatus(
+                name="mock",
+                model="mock-boxi",
+                enabled=True,
+                configured=True,
+                api_key_present=False,
+            )
+
+        def complete_stream(self, request, provider_name=None):
+            from backend.app.providers.types import TokenUsage
+
+            captured_requests.append(request)
+            yield ("delta", "嗯。")
+            yield ("usage", TokenUsage(input_tokens=10, output_tokens=2, total_tokens=12))
+
+    brain._router.providers["mock"] = _EchoProvider()  # type: ignore[assignment]
+    brain._provider_name = "mock"
+
+    asyncio.run(_collect_turn_events_kwargs(brain, user_text, **stream_kwargs))
+    return captured_requests[-1]
+
+
+async def _collect_turn_events_kwargs(brain: CompanionBrain, user_text: str, **kwargs):
+    return [event async for event in brain.stream_turn(user_text, **kwargs)]
+
+
+def test_stream_turn_without_interruption_omits_hint() -> None:
+    request = _run_turn_capturing_messages("继续")
+    contents = [m.content for m in request.messages]
+    assert not any("被用户打断" in c for c in contents)
+
+
+def test_stream_turn_with_interrupted_partial_injects_hint() -> None:
+    request = _run_turn_capturing_messages("继续", interrupted_partial="先睡，乖")
+    contents = [m.content for m in request.messages]
+    assert any("被用户打断" in c and "先睡，乖" in c for c in contents)

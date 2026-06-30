@@ -292,3 +292,98 @@ def test_abort_turn_drops_inflight_sentences() -> None:
         monkey.undo()
 
     assert pushed == []
+
+
+# --- stale-cleanup race (2026-07-01 fix) -------------------------------------------------
+#
+# If a tagger call is slow enough, _finish_turn()/_abort_turn() can stay suspended for a
+# while. Pipecat's framework reacts to an InterruptionFrame by force-cancelling whatever
+# non-system frame is "in flight" with only a 1s grace period (observed timing out on real
+# hardware under a since-reverted drain-pacing experiment, see HANDOFF). If that stale
+# coroutine finally unwinds *after* a new turn has already started, its cleanup must not
+# null out the new turn's queue/drain_task — otherwise every sentence scheduled for the new
+# turn would be silently dropped (_schedule() no-ops when self._queue is None).
+
+
+def test_finish_turn_does_not_clobber_a_newer_turn_started_during_its_own_unwind() -> None:
+    def slow_tagger(sentence, mood, *, prior_context, router, provider_name):  # noqa: ANN001, ANN202
+        time.sleep(0.05)
+        return f"[t] {sentence}"
+
+    async def run() -> tuple[object, object, object, object]:
+        processor = ExpressionTaggerProcessor(
+            store=_FakeStore(), router=object(), tag_first_sentence=True
+        )
+
+        async def no_op_push(frame, direction=None):  # noqa: ANN001, ANN202
+            return None
+
+        processor.push_frame = no_op_push  # type: ignore[assignment]
+
+        processor._begin_turn()
+        processor._schedule("会拖一会儿的句子。")
+        await asyncio.sleep(0)  # let the tagging Task start
+
+        # Old turn's _finish_turn() is still suspended awaiting its drain task...
+        finish_task = asyncio.create_task(processor._finish_turn())
+        await asyncio.sleep(0)
+
+        # ...when a new turn starts (mirrors the framework's cancellation of the stale
+        # process-frame task arriving late, after a fresh LLMFullResponseStartFrame).
+        processor._begin_turn()
+        new_queue, new_drain_task = processor._queue, processor._drain_task
+
+        await finish_task  # let the stale _finish_turn() finally unwind
+
+        return new_queue, new_drain_task, processor._queue, processor._drain_task
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(proc_mod, "apply_expression_tags_to_sentence", slow_tagger)
+    try:
+        new_queue, new_drain_task, queue_after, drain_task_after = asyncio.run(run())
+    finally:
+        monkey.undo()
+
+    # The stale _finish_turn()'s cleanup must not have nulled out the new turn's state.
+    assert queue_after is new_queue
+    assert drain_task_after is new_drain_task
+
+
+def test_abort_turn_does_not_clobber_a_newer_turn_started_during_its_own_unwind() -> None:
+    def slow_tagger(sentence, mood, *, prior_context, router, provider_name):  # noqa: ANN001, ANN202
+        time.sleep(0.05)
+        return f"[t] {sentence}"
+
+    async def run() -> tuple[object, object, object, object]:
+        processor = ExpressionTaggerProcessor(
+            store=_FakeStore(), router=object(), tag_first_sentence=True
+        )
+
+        async def no_op_push(frame, direction=None):  # noqa: ANN001, ANN202
+            return None
+
+        processor.push_frame = no_op_push  # type: ignore[assignment]
+
+        processor._begin_turn()
+        processor._schedule("会被打断的句子。")
+        await asyncio.sleep(0)
+
+        abort_task = asyncio.create_task(processor._abort_turn())
+        await asyncio.sleep(0)
+
+        processor._begin_turn()
+        new_queue, new_drain_task = processor._queue, processor._drain_task
+
+        await abort_task
+
+        return new_queue, new_drain_task, processor._queue, processor._drain_task
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(proc_mod, "apply_expression_tags_to_sentence", slow_tagger)
+    try:
+        new_queue, new_drain_task, queue_after, drain_task_after = asyncio.run(run())
+    finally:
+        monkey.undo()
+
+    assert queue_after is new_queue
+    assert drain_task_after is new_drain_task
