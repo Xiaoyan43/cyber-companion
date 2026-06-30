@@ -39,7 +39,19 @@ data/*.sqlite3
 data/runtime/
 data/backups/
 data/pipecat_spike/
+data/fish_model_ab/
+data/fish_rhythm_ab/
+data/ja_voice_audition/
+data/tagger_eval/
+data/tagger_position_listen/
+data/memory_backend_ab/
 logs/
+
+# Local exploration/dev tooling — never publish (one-off A/B spikes, agent/IDE config)
+experiments/
+.agents/
+.cursor/
+.mcp.json
 
 # Generated media
 exports/
