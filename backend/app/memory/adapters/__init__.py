@@ -11,6 +11,7 @@ from backend.app.memory.adapters.contract import (
     UnsupportedCandidateCapability,
     memory_record_to_candidate_dto,
 )
+from backend.app.memory.adapters.hindsight_candidate import HindsightCandidateBackend
 from backend.app.memory.adapters.letta_candidate import LettaCandidateBackend
 from backend.app.memory.adapters.mem0_candidate import Mem0CandidateBackend
 from backend.app.memory.adapters.shadow import ShadowMemoryPort
@@ -19,6 +20,7 @@ __all__ = [
     "CandidateMemoryBackend",
     "CandidateMemoryCapabilities",
     "CandidateMemoryDTO",
+    "HindsightCandidateBackend",
     "LettaCandidateBackend",
     "Mem0CandidateBackend",
     "ShadowMemoryPort",
